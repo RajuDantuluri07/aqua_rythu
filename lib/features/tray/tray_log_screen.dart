@@ -28,12 +28,11 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   }
 
   void _save() {
-    final log = TrayLog(
-      pondId: widget.pondId,
-      time: DateTime.now(),
-      round: widget.round,
-      trays: trayStatuses,
-    );
+  final log = TrayLog(
+  pondId: widget.pondId,
+  time: DateTime.now(),
+  trays: trayStatuses,
+);
 
     ref.read(trayProvider(widget.pondId).notifier).addTrayLog(log);
 

@@ -5,6 +5,7 @@ import 'growth_provider.dart';
 
 class SamplingScreen extends ConsumerStatefulWidget {
   final String pondId;
+
   const SamplingScreen({super.key, required this.pondId});
 
   @override
@@ -12,278 +13,191 @@ class SamplingScreen extends ConsumerStatefulWidget {
 }
 
 class _SamplingScreenState extends ConsumerState<SamplingScreen> {
+  final _weightController = TextEditingController();
+  final _countController = TextEditingController();
 
-  final countController = TextEditingController();
-  final weightController = TextEditingController();
-  final survivalController = TextEditingController();
-
-  double avgWeight = 0;
-  int estimatedCount = 0;
-
-  void _calculate() {
-    final count = int.tryParse(countController.text) ?? 0;
-    final weight = double.tryParse(weightController.text) ?? 0;
-    final survival = double.tryParse(survivalController.text);
-
-    setState(() {
-      if (count > 0 && weight > 0) {
-        avgWeight = weight / count;
-      }
-      if (survival != null && survival > 0) {
-        estimatedCount = (100000 * (survival / 100)).toInt();
-      } else {
-        estimatedCount = ref.read(growthProvider(widget.pondId)).totalCount;
-      }
-    });
+  @override
+  void dispose() {
+    _weightController.dispose();
+    _countController.dispose();
+    super.dispose();
   }
 
   void _save() {
-    if (countController.text.isEmpty || weightController.text.isEmpty) {
+    final weight = double.tryParse(_weightController.text);
+    final count = int.tryParse(_countController.text);
+
+    if (weight == null || count == null || weight <= 0 || count <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter all required fields")),
+        const SnackBar(content: Text("Please enter valid positive numbers")),
       );
       return;
     }
 
-    final currentDoc = ref.read(docProvider(widget.pondId));
+    final doc = ref.read(docProvider(widget.pondId));
 
-    // 🔥 UPDATE GLOBAL STATE
     ref.read(growthProvider(widget.pondId).notifier).updateStats(
-          avgWeight: double.parse(avgWeight.toStringAsFixed(2)),
-          totalCount: estimatedCount > 0 ? estimatedCount : null,
-          doc: currentDoc,
+          avgWeight: weight,
+          totalCount: count,
+          doc: doc,
         );
 
-    // Clear inputs
-    countController.clear();
-    weightController.clear();
-    survivalController.clear();
-    setState(() {
-      avgWeight = 0;
-      estimatedCount = 0;
-    });
+    _weightController.clear();
+    _countController.clear();
+    FocusScope.of(context).unfocus();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Sampling data saved")),
+      const SnackBar(content: Text("Sampling data saved successfully")),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final doc = ref.watch(docProvider(widget.pondId));
+    final growthState = ref.watch(growthProvider(widget.pondId));
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Growth Monitoring"),
+        title: const Text("Sampling"),
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: [
-
-          /// HEADER
-          Text(
-            "${widget.pondId} • DOC $doc",
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 5),
-
-          const Text(
-            "Growth Status: Normal ↗",
-            style: TextStyle(color: Colors.green),
-          ),
-
-          const SizedBox(height: 16),
-
-          /// CURRENT CARD
-          _currentWeightCard(),
-
-          const SizedBox(height: 16),
-
-          /// INPUTS
-          Row(
-            children: [
-              Expanded(
-                child: _inputCard(
-                  label: "Sample Count",
-                  controller: countController,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Info
+            Card(
+              color: Colors.blue.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Current DOC", style: TextStyle(color: Colors.grey)),
+                        Text("$doc days", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text("Last ABW", style: TextStyle(color: Colors.grey)),
+                        Text("${growthState.avgWeight} g", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _inputCard(
-                  label: "Total Weight (g)",
-                  controller: weightController,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _inputCard(
-                  label: "Survival (%)",
-                  controller: survivalController,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          /// CALCULATE BUTTON
-          ElevatedButton(
-            onPressed: _calculate,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey.shade200,
             ),
-            child: const Text("Calculate Avg Weight",
-                style: TextStyle(color: Colors.black)),
-          ),
+            const SizedBox(height: 24),
+            
+            const Text("Enter New Sampling Data",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 10),
 
-          const SizedBox(height: 16),
-
-          /// SUMMARY
-          Row(
-            children: [
-              Expanded(
-                child: _summaryCard(
-                  "Avg Weight",
-                  avgWeight == 0 ? "--" : "${avgWeight.toStringAsFixed(2)} g",
-                  highlight: true,
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _weightController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: "Average Body Weight (ABW)",
+                        hintText: "e.g. 15.5",
+                        suffixText: "g",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _countController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: "Estimated Survival Count",
+                        hintText: "e.g. 95000",
+                        suffixText: "PL",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _save,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: const Color(0xFF1F9D55),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text("Update Growth Stats"),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _summaryCard("Count/Kg",
-                      avgWeight > 0 ? (1000 / avgWeight).toStringAsFixed(0) : "--")),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _summaryCard(
-                      "Biomass",
-                      (avgWeight > 0 && estimatedCount > 0)
-                          ? "${((estimatedCount * avgWeight) / 1000).toStringAsFixed(0)} kg"
-                          : "--")),
-            ],
-          ),
+            ),
 
-          const SizedBox(height: 20),
-
-          /// LEDGER
-          _ledgerCard(),
-
-          const SizedBox(height: 80),
-        ],
-      ),
-
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ElevatedButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.save),
-          label: const Text("SAVE & UPDATE GROWTH"),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            backgroundColor: Colors.green,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// CURRENT CARD
-  Widget _currentWeightCard() {
-  final growth = ref.watch(growthProvider(widget.pondId));
-
-  return Card(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text("CURRENT AVERAGE WEIGHT"),
-              Text("LIVE"),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          Text(
-            "${growth.avgWeight.toStringAsFixed(1)} g",
-            style: const TextStyle(
-                fontSize: 40, fontWeight: FontWeight.bold),
-          ),
-
-          const Divider(),
-
-          Text("Biomass: ${growth.biomass.toStringAsFixed(0)} kg"),
-        ],
-      ),
-    ),
-  );
-}
-
-  /// LEDGER
-  Widget _ledgerCard() {
-    final logs = ref.watch(growthProvider(widget.pondId)).logs;
-    final isEmpty = logs.isEmpty;
-
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: isEmpty
-            ? Column(
-                children: const [
-                  Icon(Icons.inbox, size: 40, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("No sampling history"),
-                ],
-              )
-            : Column(
-                children: [
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(height: 24),
+            
+            const Text("History",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 10),
+            
+            if (growthState.logs.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
                     children: [
-                      Text("SAMPLING LEDGER",
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text("DOWNLOAD",
-                          style: TextStyle(color: Colors.green)),
+                      Icon(Icons.history, size: 48, color: Colors.grey.shade300),
+                      const SizedBox(height: 8),
+                      const Text("No sampling history yet",
+                          style: TextStyle(color: Colors.grey)),
                     ],
                   ),
-                  const Divider(),
-                  ...logs.map((item) => _RowItem(
-                        "${item.date.day}/${item.date.month}",
-                        item.doc.toString(),
-                        "${item.avgWeight}g",
-                        item.count.toString(),
-                      )),
-                ],
-              ),
-      ),
-    );
-  }
-}
-
-/// LEDGER ROW
-class _RowItem extends StatelessWidget {
-  final String date, doc, avg, count;
-
-  const _RowItem(this.date, this.doc, this.avg, this.count);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(date),
-          Text("DOC $doc"),
-          Text(avg),
-          Text(count),
-        ],
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: growthState.logs.length,
+                itemBuilder: (context, index) {
+                  final log = growthState.logs[index];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: Text(
+                        "DOC ${log.doc} • ${log.date.day}/${log.date.month}",
+                        style: const TextStyle(fontWeight: FontWeight.w500)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text("${log.avgWeight} g",
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.blue)),
+                        Text("${log.count} PL",
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  );
+                },
+              )
+          ],
+        ),
       ),
     );
   }

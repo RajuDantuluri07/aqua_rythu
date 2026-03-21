@@ -8,24 +8,12 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
     state = [...state, log];
   }
 
-  /// ✅ GET TODAY LOGS
-  List<TrayLog> getTodayLogs(String pondId) {
-    final today = DateTime.now();
-
-    return state.where((log) =>
-        log.pondId == pondId &&
-        log.time.year == today.year &&
-        log.time.month == today.month &&
-        log.time.day == today.day).toList();
-  }
-
-  /// ✅ CHECK IF TRAY LOGGED TODAY
   bool get hasTrayLoggedToday {
     final today = DateTime.now();
-    return state.any((t) =>
-        t.time.year == today.year &&
-        t.time.month == today.month &&
-        t.time.day == today.day);
+    return state.any((log) =>
+        log.time.year == today.year &&
+        log.time.month == today.month &&
+        log.time.day == today.day);
   }
 }
 

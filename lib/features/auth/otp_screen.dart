@@ -23,6 +23,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   Timer? _timer;
   bool _isLoading = false;
 
+  StreamSubscription<String>? _otpSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -40,10 +42,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     });
   }
 
+  /// ✅ FIXED OTP LISTENER (NO BUGS)
   void _listenForOtp() async {
-    await SmsAutoFill().listenForCode;
+    await SmsAutoFill().listenForCode();
 
-    SmsAutoFill().code.listen((code) {
+    _otpSubscription = SmsAutoFill().code.listen((code) {
       if (code.length == 6) {
         for (int i = 0; i < 6; i++) {
           _controllers[i].text = code[i];
@@ -67,17 +70,17 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (_otp.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: const Text("Enter complete OTP"),
-            backgroundColor: Theme.of(context).colorScheme.error),
+          content: const Text("Enter complete OTP"),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       return;
     }
 
     setState(() => _isLoading = true);
+
     await ref.read(authProvider.notifier).login(_otp);
 
-    // The listener below will handle navigation/errors.
-    // We just need to stop the loading indicator if the widget is still mounted.
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -92,9 +95,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
         maxLength: 1,
-        decoration: const InputDecoration(
-          counterText: "",
-        ),
+        decoration: const InputDecoration(counterText: ""),
         onChanged: (value) => _onOtpChanged(index, value),
       ),
     );
@@ -103,15 +104,23 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _otpSubscription?.cancel();
+    SmsAutoFill().unregisterListener();
+
     for (var c in _controllers) {
       c.dispose();
     }
+
+    for (var f in _focusNodes) {
+      f.dispose();
+    }
+
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Listen to auth state changes for navigation or showing errors.
+    /// ✅ LISTEN TO AUTH STATE
     ref.listen<AuthState>(authProvider, (previous, next) {
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -122,7 +131,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         );
       } else if (next.isAuthenticated) {
         Navigator.pushNamedAndRemoveUntil(
-            context, AppRoutes.dashboard, (route) => false);
+          context,
+          AppRoutes.dashboard,
+          (route) => false,
+        );
       }
     });
 
@@ -134,6 +146,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           children: [
             const SizedBox(height: 30),
 
+            /// OTP BOXES
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(6, _otpBox),
@@ -141,16 +154,25 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
             const SizedBox(height: 20),
 
+            /// TIMER
             Text("00:${_seconds.toString().padLeft(2, '0')}"),
 
             const SizedBox(height: 20),
 
+            /// VERIFY BUTTON
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _verifyOtp,
                 child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text("Verify"),
               ),
             ),

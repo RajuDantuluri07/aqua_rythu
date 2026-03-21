@@ -22,8 +22,13 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
   void addSupplement(Supplement s) {
     state = [...state, s];
   }
+
+  void removeSupplement(Supplement s) {
+    state = state.where((e) => e != s).toList();
+  }
 }
 
 final supplementProvider =
     StateNotifierProvider.family<SupplementNotifier, List<Supplement>, String>(
-        (ref, pondId) => SupplementNotifier());
+  (ref, pondId) => SupplementNotifier(),
+);

@@ -2,11 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// ================= MODEL =================
 class HarvestEntry {
+  final String pondId;
   final int doc;
   final double quantity; // kg
   final String type;     // partial / intermediate / final
 
   HarvestEntry({
+    required this.pondId,
     required this.doc,
     required this.quantity,
     required this.type,
@@ -34,5 +36,5 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
 /// ================= PROVIDER =================
 final harvestProvider =
     StateNotifierProvider.family<HarvestNotifier, List<HarvestEntry>, String>(
-  (ref, pondId) => HarvestNotifier(),
+  (ref, pondId) => HarvestNotifier(), // Notifier doesn't strictly need ID if entry has it
 );

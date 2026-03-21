@@ -6,6 +6,7 @@ class Pond {
   final double area;
   final DateTime stockingDate;
   final int seedCount;
+  final int plSize;
 
   Pond({
     required this.id,
@@ -13,9 +14,9 @@ class Pond {
     required this.area,
     required this.stockingDate,
     this.seedCount = 100000,
+    this.plSize = 10,
   });
 
-  /// Dynamically calculates the Day of Culture.
   int get doc => DateTime.now().difference(stockingDate).inDays + 1;
 }
 
@@ -75,29 +76,13 @@ class FarmNotifier extends StateNotifier<FarmState> {
                   id: 'Pond 1',
                   name: 'Pond 1',
                   area: 2.5,
-                  stockingDate: DateTime.now().subtract(const Duration(days: 21)),
+                  stockingDate:
+                      DateTime.now().subtract(const Duration(days: 21)),
                   seedCount: 100000,
-                ), // DOC: 22
-                Pond(
-                  id: 'Pond 2',
-                  name: 'Pond 2',
-                  area: 3.0,
-                  stockingDate: DateTime.now().subtract(const Duration(days: 41)),
-                ), // DOC: 42
+                  plSize: 10,
+                ),
               ],
             ),
-            Farm(
-              id: '2',
-              name: 'Krishna Farm',
-              location: 'Bhimavaram',
-              ponds: [
-                Pond(
-                  id: 'Pond 3',
-                  name: 'Pond 3',
-                  area: 1.5,
-                  stockingDate: DateTime.now().subtract(const Duration(days: 89)),
-                ), // DOC: 90
-              ]),
           ],
           selectedId: '1',
         ));
@@ -111,15 +96,32 @@ class FarmNotifier extends StateNotifier<FarmState> {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       location: location,
-      ponds: [], // New farms start with no ponds
+      ponds: [],
     );
+
     state = state.copyWith(
       farms: [...state.farms, newFarm],
       selectedId: newFarm.id,
     );
   }
 
-  void addPond(String farmId, String name, double area) {
+  /// ✅ CLEAN VERSION (NO REF)
+  void addPond(
+    String farmId,
+    String name,
+    double area, {
+    int seedCount = 100000,
+    int plSize = 10,
+  }) {
+    final newPond = Pond(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      area: area,
+      stockingDate: DateTime.now(),
+      seedCount: seedCount,
+      plSize: plSize,
+    );
+
     state = state.copyWith(
       farms: state.farms.map((f) {
         if (f.id == farmId) {
@@ -127,16 +129,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
             id: f.id,
             name: f.name,
             location: f.location,
-            ponds: [
-              ...f.ponds,
-              Pond(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: name,
-                area: area,
-                stockingDate: DateTime.now(),
-                seedCount: 100000, // Default seed count
-              )
-            ],
+            ponds: [...f.ponds, newPond],
           );
         }
         return f;
@@ -161,22 +154,20 @@ class FarmNotifier extends StateNotifier<FarmState> {
   }
 }
 
-final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
+final farmProvider =
+    StateNotifierProvider<FarmNotifier, FarmState>((ref) {
   return FarmNotifier();
 });
 
-/// A simple provider to get the DOC for a specific pond.
-/// This avoids repetitive logic in the UI.
 final docProvider = Provider.family<int, String>((ref, pondId) {
   final farmState = ref.watch(farmProvider);
-  // This assumes ponds across all farms have unique IDs for simplicity.
+
   for (var farm in farmState.farms) {
     try {
       final pond = farm.ponds.firstWhere((p) => p.id == pondId);
       return pond.doc;
-    } catch (e) {
-      // Continue searching in the next farm
-    }
+    } catch (_) {}
   }
-  return 1; // Return a default if not found
+
+  return 1;
 });

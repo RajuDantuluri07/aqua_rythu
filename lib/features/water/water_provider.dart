@@ -1,112 +1,59 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// ================= MODEL =================
 class WaterLog {
+  final String id;
+  final String pondId;
   final DateTime date;
   final int doc;
   final double ph;
-  final double oxygen;
+  final double dissolvedOxygen;
   final double temperature;
-  final double ammonia;
+  final double salinity;
+  final double alkalinity;
 
   WaterLog({
+    required this.id,
+    required this.pondId,
     required this.date,
     required this.doc,
     required this.ph,
-    required this.oxygen,
+    required this.dissolvedOxygen,
     required this.temperature,
-    required this.ammonia,
+    required this.salinity,
+    required this.alkalinity,
   });
 }
 
-class WaterState {
-  final double ph;           // pH level
-  final double oxygen;       // Dissolved Oxygen (mg/L)
-  final double temperature;  // °C
-  final List<WaterLog> logs;
+class WaterNotifier extends StateNotifier<List<WaterLog>> {
+  final String pondId;
+  WaterNotifier(this.pondId) : super([]);
 
-  const WaterState({
-    this.ph = 7.5,
-    this.oxygen = 5.0,
-    this.temperature = 28.0,
-    this.logs = const [],
-  });
-
-  WaterState copyWith({
-    double? ph,
-    double? oxygen,
-    double? temperature,
-    List<WaterLog>? logs,
-  }) {
-    return WaterState(
-      ph: ph ?? this.ph,
-      oxygen: oxygen ?? this.oxygen,
-      temperature: temperature ?? this.temperature,
-      logs: logs ?? this.logs,
-    );
-  }
-}
-
-/// ================= NOTIFIER =================
-class WaterNotifier extends StateNotifier<WaterState> {
-  WaterNotifier() : super(const WaterState());
-
-  /// 🔄 UPDATE WATER VALUES
-  void update({
-    double? ph,
-    double? oxygen,
-    double? temperature,
-    double? ammonia,
+  void addLog({
     required int doc,
+    required double ph,
+    required double dissolvedOxygen,
+    required double temperature,
+    required double salinity,
+    required double alkalinity,
   }) {
     final newLog = WaterLog(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      pondId: pondId,
       date: DateTime.now(),
       doc: doc,
-      ph: ph ?? state.ph,
-      oxygen: oxygen ?? state.oxygen,
-      temperature: temperature ?? state.temperature,
-      ammonia: ammonia ?? 0.0,
-    );
-
-    state = state.copyWith(
       ph: ph,
-      oxygen: oxygen,
+      dissolvedOxygen: dissolvedOxygen,
       temperature: temperature,
-      logs: [newLog, ...state.logs],
+      salinity: salinity,
+      alkalinity: alkalinity,
     );
-  }
 
-  /// ================= STATUS LOGIC =================
-
-  /// 🧠 OVERALL WATER STATUS
-  String get status {
-    if (state.oxygen < 3) return "Danger";
-    if (state.ph < 6.5 || state.ph > 8.5) return "Warning";
-    return "Good";
-  }
-
-  /// 🧪 INDIVIDUAL STATUS (optional, useful later)
-  String get phStatus {
-    if (state.ph < 6.5 || state.ph > 8.5) return "Warning";
-    return "Good";
-  }
-
-  String get oxygenStatus {
-    if (state.oxygen < 3) return "Danger";
-    if (state.oxygen < 5) return "Low";
-    return "Good";
-  }
-
-  String get temperatureStatus {
-    if (state.temperature < 20 || state.temperature > 32) {
-      return "Warning";
-    }
-    return "Good";
+    state = [newLog, ...state];
   }
 }
 
-/// ================= PROVIDER =================
 final waterProvider =
-    StateNotifierProvider.family<WaterNotifier, WaterState, String>(
-  (ref, pondId) => WaterNotifier(),
-);
+    StateNotifierProvider.family<WaterNotifier, List<WaterLog>, String>(
+        (ref, pondId) {
+  return WaterNotifier(pondId);
+});

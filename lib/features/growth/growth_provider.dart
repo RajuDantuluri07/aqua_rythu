@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SamplingLog {
+  final String pondId;
   final DateTime date;
   final int doc;
   final double avgWeight;
   final int count;
 
   SamplingLog({
+    required this.pondId,
     required this.date,
     required this.doc,
     required this.avgWeight,
@@ -40,11 +42,13 @@ class GrowthState {
 }
 
 class GrowthNotifier extends StateNotifier<GrowthState> {
-  GrowthNotifier() : super(GrowthState());
+  final String pondId;
+  GrowthNotifier(this.pondId) : super(GrowthState());
 
   /// Update stats from Sampling or Mortality checks
   void updateStats({double? avgWeight, int? totalCount, required int doc}) {
     final newLog = SamplingLog(
+      pondId: pondId,
       date: DateTime.now(),
       doc: doc,
       avgWeight: avgWeight ?? state.avgWeight,
@@ -62,5 +66,5 @@ class GrowthNotifier extends StateNotifier<GrowthState> {
 /// 🌿 GLOBAL GROWTH PROVIDER
 final growthProvider =
     StateNotifierProvider.family<GrowthNotifier, GrowthState, String>((ref, pondId) {
-  return GrowthNotifier();
+  return GrowthNotifier(pondId);
 });
