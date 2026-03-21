@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
       title: 'Aqua Rythu',
 
       theme: AppTheme.lightTheme,
-      initialRoute: AppRoutes.splash,
+      initialRoute: AppRoutes.dashboard,
 
       routes: {
         AppRoutes.splash: (context) => const SplashScreen(),
