@@ -30,8 +30,6 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 
 class _PondDashboardScreenState
     extends ConsumerState<PondDashboardScreen> {
-  int currentRound = 2;
-
   final List<Map<String, dynamic>> feedRoundsData = [
     {"round": 1, "time": "06:00 AM"},
     {"round": 2, "time": "10:00 AM"},
@@ -53,6 +51,15 @@ class _PondDashboardScreenState
     }
   }
 
+  int _getCurrentRound() {
+    final hour = DateTime.now().hour;
+    if (hour < 8) return 1; // Before 8 AM is round 1
+    if (hour < 12) return 2; // Before 12 PM is round 2
+    if (hour < 16) return 3; // Before 4 PM is round 3
+    if (hour < 20) return 4; // Before 8 PM is round 4
+    return 1; // Default to next day's first round
+  }
+
   @override
   Widget build(BuildContext context) {
     final dashboardState = ref.watch(pondDashboardProvider);
@@ -68,7 +75,7 @@ class _PondDashboardScreenState
     /// EMPTY STATE
     if (currentFarm != null && currentFarm.ponds.isEmpty) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF5F7FA),
+        backgroundColor: const Color(0xFFF5F7FA),        
         bottomNavigationBar: const AppBottomBar(currentIndex: 1),
         body: SafeArea(
           child: Center(
@@ -98,15 +105,24 @@ class _PondDashboardScreenState
     final planMap = ref.watch(feedPlanProvider);
     final plan = planMap[selectedPond];
 
+    final currentDoc = ref.watch(docProvider(selectedPond));
+    final dayPlan = plan?.days.firstWhere(
+      (d) => d.doc == currentDoc,
+      orElse: () => FeedDayPlan(doc: 0, r1: 0, r2: 0, r3: 0, r4: 0),
+    );
+
     /// SAFE VALUES
-    final plannedFeed =
-        plan?.days.isNotEmpty == true ? plan!.days.first.total : 0.0;
+    final plannedFeed = dayPlan?.total ?? 0.0;
 
-    final consumedFeed = 0.0; // temp
+    double consumedFeed = 0.0;
+    if (dayPlan != null) {
+      if (dashboardState.feedDone[1] == true) consumedFeed += dayPlan.r1;
+      if (dashboardState.feedDone[2] == true) consumedFeed += dayPlan.r2;
+      if (dashboardState.feedDone[3] == true) consumedFeed += dayPlan.r3;
+      if (dashboardState.feedDone[4] == true) consumedFeed += dayPlan.r4;
+    }
 
-    final phase = null;
-    final feedAdjustment = 0.0;
-    final suggestionText = "Coming soon";
+    final currentRound = _getCurrentRound();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -158,11 +174,32 @@ class _PondDashboardScreenState
                       onLongPress: () {
                         if (hasFeed || hasHarvest) return;
 
-                        if (currentFarm != null) {
-                          ref
-                              .read(farmProvider.notifier)
-                              .deletePond(currentFarm.id, pond.id);
-                        }
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext dialogContext) {
+                            return AlertDialog(
+                              title: const Text("Delete Pond?"),
+                              content: Text(
+                                  "Are you sure you want to delete '${pond.name}'? This action cannot be undone."),
+                              actions: <Widget>[
+                                TextButton(
+                                  child: const Text("Cancel"),
+                                  onPressed: () => Navigator.of(dialogContext).pop(),
+                                ),
+                                TextButton(
+                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                  child: const Text("Delete"),
+                                  onPressed: () {
+                                    if (currentFarm != null) {
+                                      ref.read(farmProvider.notifier).deletePond(currentFarm.id, pond.id);
+                                    }
+                                    Navigator.of(dialogContext).pop();
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        );
                       },
                       child: Container(
                         margin: const EdgeInsets.only(right: 10),

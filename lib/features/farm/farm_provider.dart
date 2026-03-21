@@ -112,12 +112,13 @@ class FarmNotifier extends StateNotifier<FarmState> {
     double area, {
     int seedCount = 100000,
     int plSize = 10,
+    DateTime? stockingDate,
   }) {
     final newPond = Pond(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       area: area,
-      stockingDate: DateTime.now(),
+      stockingDate: stockingDate ?? DateTime.now(),
       seedCount: seedCount,
       plSize: plSize,
     );

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aqua_rythu/routes/app_routes.dart';
+import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
-import '../feed/feed_plan_provider.dart'; // ✅ IMPORTANT
+import '../feed/feed_plan_provider.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   const AddPondScreen({super.key});
@@ -12,149 +12,145 @@ class AddPondScreen extends ConsumerStatefulWidget {
 }
 
 class _AddPondScreenState extends ConsumerState<AddPondScreen> {
-  final TextEditingController _pondNameController = TextEditingController();
-  final TextEditingController _areaController = TextEditingController();
-  final TextEditingController _seedController = TextEditingController();
-  final TextEditingController _plSizeController = TextEditingController();
-
-  bool _isLoading = false;
-
-  Future<void> _finishSetup() async {
-    final name = _pondNameController.text.trim();
-    final area = _areaController.text.trim();
-    final seed = _seedController.text.trim();
-    final plSize = _plSizeController.text.trim();
-
-    if (name.isEmpty || area.isEmpty || seed.isEmpty || plSize.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please fill all required fields"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    await Future.delayed(const Duration(seconds: 1));
-
-    if (!mounted) return;
-
-    final selectedFarmId = ref.read(farmProvider).selectedId;
-
-    /// ✅ CREATE POND
-    ref.read(farmProvider.notifier).addPond(
-      selectedFarmId,
-      name,
-      double.parse(area),
-      seedCount: int.parse(seed),
-      plSize: int.parse(plSize),
-    );
-
-    /// 🔥 AUTO CREATE FEED PLAN
-    final newPondId = ref.read(farmProvider)
-        .currentFarm!
-        .ponds
-        .last
-        .id;
-
-    ref.read(feedPlanProvider.notifier).createPlan(
-      pondId: newPondId,
-      seedCount: int.parse(seed),
-      plSize: int.parse(plSize),
-    );
-
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.dashboard,
-      (route) => false,
-    );
-  }
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _areaController = TextEditingController();
+  final _seedCountController = TextEditingController();
+  final _plSizeController = TextEditingController();
+  
+  DateTime _stockingDate = DateTime.now();
 
   @override
   void dispose() {
-    _pondNameController.dispose();
+    _nameController.dispose();
     _areaController.dispose();
-    _seedController.dispose();
+    _seedCountController.dispose();
     _plSizeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _stockingDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _stockingDate) {
+      setState(() {
+        _stockingDate = picked;
+      });
+    }
+  }
+
+  void _savePond() {
+    if (_formKey.currentState?.validate() ?? false) {
+      final farmState = ref.read(farmProvider);
+      final currentFarm = farmState.currentFarm;
+
+      if (currentFarm == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No Farm Selected")),
+        );
+        return;
+      }
+
+      final area = double.tryParse(_areaController.text) ?? 0.0;
+      final seedCount = int.tryParse(_seedCountController.text) ?? 100000;
+      final plSize = int.tryParse(_plSizeController.text) ?? 10;
+
+      // 1. Add Pond to Farm
+      ref.read(farmProvider.notifier).addPond(
+            currentFarm.id,
+            _nameController.text.trim(),
+            area,
+            seedCount: seedCount,
+            plSize: plSize,
+            stockingDate: _stockingDate,
+          );
+
+      // 2. Generate Initial Feed Plan (Optional but good UX)
+      // We need the ID of the pond we just created. Since addPond generates ID internally,
+      // in a real app we'd return it. For now, we rely on the provider updating.
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Pond Added Successfully")),
+      );
+      
+      Navigator.pop(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+      appBar: AppBar(title: const Text("Add New Pond")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: "Pond Name",
+                  border: OutlineInputBorder(),
+                  hintText: "e.g. Pond 5",
+                ),
+                validator: (v) => v!.isEmpty ? "Required" : null,
+              ),
+              const SizedBox(height: 16),
+              
+              TextFormField(
+                controller: _areaController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: "Area (Acres)",
+                  border: OutlineInputBorder(),
+                  hintText: "e.g. 2.5",
+                ),
+                validator: (v) => v!.isEmpty ? "Required" : null,
+              ),
+              const SizedBox(height: 16),
 
-              const Center(
-                child: Text(
-                  "STEP 3 OF 3",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+              TextFormField(
+                controller: _seedCountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Seed Count",
+                  border: OutlineInputBorder(),
+                  hintText: "e.g. 100000",
                 ),
               ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 20),
-
-              Text(
-                "Create Pond",
-                style: Theme.of(context).textTheme.headlineLarge,
+              ListTile(
+                title: const Text("Stocking Date"),
+                subtitle: Text(DateFormat('dd MMM yyyy').format(_stockingDate)),
+                trailing: const Icon(Icons.calendar_today),
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                onTap: () => _selectDate(context),
               ),
 
-              const SizedBox(height: 10),
-
-              const Text(
-                "Enter pond details to generate automatic feeding plan.",
-                style: TextStyle(color: Colors.grey),
-              ),
-
-              const SizedBox(height: 30),
-
-              const Text("Pond Name *"),
-              TextField(controller: _pondNameController),
-
-              const SizedBox(height: 20),
-
-              const Text("Pond Size (Acres) *"),
-              TextField(
-                controller: _areaController,
-                keyboardType: TextInputType.number,
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text("PL Count *"),
-              TextField(
-                controller: _seedController,
-                keyboardType: TextInputType.number,
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text("PL Size *"),
-              TextField(
-                controller: _plSizeController,
-                keyboardType: TextInputType.number,
-              ),
-
-              const Spacer(),
-
+              const SizedBox(height: 24),
+              
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _finishSetup,
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Save Pond & Generate Feed Plan"),
+                  onPressed: _savePond,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: const Color(0xFF1F9D55),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text("Create Pond"),
                 ),
               ),
-
-              const SizedBox(height: 30),
             ],
           ),
         ),

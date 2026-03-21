@@ -60,11 +60,14 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
       appBar: AppBar(
         title: const Text("Sampling"),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             // Header Info
             Card(
               color: Colors.blue.shade50,
@@ -152,9 +155,14 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
             const Text("History",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 10),
-            
-            if (growthState.logs.isEmpty)
-              Center(
+                ],
+              ),
+            ),
+          ),
+
+          if (growthState.logs.isEmpty)
+            SliverToBoxAdapter(
+              child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
@@ -166,38 +174,43 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                     ],
                   ),
                 ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: growthState.logs.length,
-                itemBuilder: (context, index) {
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
                   final log = growthState.logs[index];
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    title: Text(
-                        "DOC ${log.doc} • ${log.date.day}/${log.date.month}",
-                        style: const TextStyle(fontWeight: FontWeight.w500)),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text("${log.avgWeight} g",
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: Colors.blue)),
-                        Text("${log.count} PL",
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600)),
-                      ],
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      title: Text(
+                          "DOC ${log.doc} • ${log.date.day}/${log.date.month}",
+                          style: const TextStyle(fontWeight: FontWeight.w500)),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text("${log.avgWeight} g",
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.blue)),
+                          Text("${log.count} PL",
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey.shade600)),
+                        ],
+                      ),
                     ),
                   );
                 },
-              )
-          ],
-        ),
+                childCount: growthState.logs.length,
+              ),
+            ),
+          // Bottom Padding
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+        ],
       ),
     );
   }
