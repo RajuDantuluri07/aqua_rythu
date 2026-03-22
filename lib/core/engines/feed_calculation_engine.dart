@@ -1,4 +1,4 @@
-class FeedEngine {
+class FeedCalculationEngine {
   /// MAIN CALCULATION
   static double calculateFeed({
     required int seedCount,

@@ -19,6 +19,8 @@ import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
 import '../growth/growth_provider.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
+
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -431,13 +433,16 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 final round = data['round'];
                 final isDone = dashboardState.feedDone[round] == true;
                 final isCurrent = round == currentRound;
+                final qty = _getFeedQty(dayPlan, round);
 
-                return _timelineCard(
+                return FeedRoundCard(
                   round: round,
                   time: data['time'],
-                  qty: _getFeedQty(dayPlan, round),
+                  feedQty: qty,
                   isDone: isDone,
-                  isCurrent: isCurrent,
+                  currentRound: currentRound,
+                  onOpenTray: openTray,
+                  onMarkDone: () => ref.read(pondDashboardProvider.notifier).markFeedDone(round),
                 );
               }),
 
@@ -519,55 +524,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       default:
         return 0;
     }
-  }
-
-  Widget _timelineCard({
-    required int round,
-    required String time,
-    required double qty,
-    required bool isDone,
-    required bool isCurrent,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isCurrent ? Colors.green : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("ROUND $round • $time",
-                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
-              _statusBadge(isDone, isCurrent),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text("${qty.toStringAsFixed(1)} kg",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          if (isCurrent && !isDone) ...[
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () => openTray(round),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                minimumSize: const Size(double.infinity, 40),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text("MARK AS FED"),
-            )
-          ]
-        ],
-      ),
-    );
   }
   
   Widget _statusBadge(bool isDone, bool isCurrent) {

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'tray_provider.dart';
 import 'tray_model.dart';
-import '../../shared/constants/tray_status.dart';
-
+import '../../core/enums/tray_status.dart';
 class TrayLogScreen extends ConsumerStatefulWidget {
   final String pondId;
   final int round;
@@ -15,7 +14,7 @@ class TrayLogScreen extends ConsumerStatefulWidget {
 
 class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   int numberOfTrays = 4;
-  late List<TrayFill> trayStatuses;
+  late List<TrayStatus> trayStatuses;
 
   @override
   void initState() {
@@ -24,7 +23,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   }
 
   void _resetTrays() {
-    trayStatuses = List.generate(numberOfTrays, (_) => TrayFill.empty);
+    trayStatuses = List.generate(numberOfTrays, (_) => TrayStatus.empty);
   }
 
   void _save() {
@@ -95,10 +94,10 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                           Wrap(
                             spacing: 8,
                             children: [
-                              _statusChip(index, TrayFill.empty, "Empty", Colors.green),
-                              _statusChip(index, TrayFill.mostlyEaten, "Mostly", Colors.lightGreen),
-                              _statusChip(index, TrayFill.halfEaten, "Half", Colors.orange),
-                              _statusChip(index, TrayFill.untouched, "Full", Colors.red),
+                              _statusChip(index, TrayStatus.empty, "Empty", Colors.green),
+                              _statusChip(index, TrayStatus.mostlyEaten, "Mostly", Colors.lightGreen),
+                              _statusChip(index, TrayStatus.halfEaten, "Half", Colors.orange),
+                              _statusChip(index, TrayStatus.untouched, "Full", Colors.red),
                             ],
                           ),
                         ],
@@ -127,7 +126,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     );
   }
 
-  Widget _statusChip(int index, TrayFill status, String label, Color color) {
+  Widget _statusChip(int index, TrayStatus status, String label, Color color) {
     final isSelected = trayStatuses[index] == status;
     return ChoiceChip(
       label: Text(label),

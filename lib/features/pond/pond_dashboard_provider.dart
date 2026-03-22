@@ -67,6 +67,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     state = state.copyWith(
       doc: doc,
       feedDone: {},
+      currentFeed: 15.0, // Default baseline, UI overrides this per round
       trayResults: <int, TrayStatus>{},
     );
   }
@@ -85,6 +86,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     newMap[round] = true;
 
     state = state.copyWith(feedDone: newMap);
+
+    // 🔧 DEBUG LOGS
+    print("✅ Round $round Marked Done");
+    print("DOC: ${state.doc} | Feed Status: $newMap");
   }
 
   // =========================================================
@@ -98,13 +103,16 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     final latest = trayLogs.last;
 
-    /// ✅ Convert tray values → status
+    /// ✅ Convert tray values → status (Map generic enum/string to TrayStatus)
     final trayStatuses = latest.trays.map((fill) {
-      if (fill == 0) return TrayStatus.empty;
-      if (fill == 1) return TrayStatus.smallLeft;
-      if (fill == 2) return TrayStatus.halfLeft;
-      return TrayStatus.fullLeft;
+      final val = fill.toString().toLowerCase();
+      if (val.contains('empty') || val == '0') return TrayStatus.empty;
+      if (val.contains('mostly') || val == '1') return TrayStatus.mostlyEaten;
+      if (val.contains('half') || val == '2') return TrayStatus.halfEaten;
+      return TrayStatus.untouched;
     }).toList();
+
+    if (trayStatuses.isEmpty) return;
 
     /// ✅ Save first tray result
     final newMap = Map<int, TrayStatus>.from(state.trayResults);
@@ -113,6 +121,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     state = state.copyWith(
       trayResults: newMap,
     );
+
+    // 🔧 DEBUG LOGS
+    print("✅ Tray Logged for Round $round: ${newMap[round]}");
+    print("Tray Results: $newMap");
   }
 }
 

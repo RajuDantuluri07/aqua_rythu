@@ -1,6 +1,6 @@
 enum TrayStatus {
   empty,
-  smallLeft,
-  halfLeft,
-  fullLeft,
+  mostlyEaten,
+  halfEaten,
+  untouched,
 }

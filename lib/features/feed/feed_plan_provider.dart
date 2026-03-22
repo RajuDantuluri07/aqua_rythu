@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/engines/feed_engine.dart';
+import 'package:aqua_rythu/core/engines/feed_calculation_engine.dart';
 
 /// =======================
 /// MODELS
@@ -52,12 +52,12 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     final List<FeedDayPlan> days = [];
 
     for (int day = 1; day <= 30; day++) {
-      final totalFeed = FeedEngine.calculateFeed(
+      final totalFeed = FeedCalculationEngine.calculateFeed(
         seedCount: seedCount,
         doc: day,
       );
 
-      final splits = FeedEngine.distributeFeed(totalFeed, 4);
+      final splits = FeedCalculationEngine.distributeFeed(totalFeed, 4);
 
       days.add(
         FeedDayPlan(

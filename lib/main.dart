@@ -11,7 +11,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/profile/profile_screen.dart';
 import 'theme/app_theme.dart';
 
+import 'package:flutter/foundation.dart'; // 👈 IMPORTANT
+import 'package:aqua_rythu/core/engines/feed_state_engine.dart';
+
+void testEngine() {
+  final state = FeedStateEngine.getRoundState(
+    doc: 35,
+    round: 2,
+    totalRounds: 4,
+    feedDone: {1: true},
+    trayDone: {},
+  );
+
+  debugPrint("------ ENGINE TEST ------");
+  debugPrint("isDone: ${state.isDone}");
+  debugPrint("isCurrent: ${state.isCurrent}");
+  debugPrint("isLocked: ${state.isLocked}");
+  debugPrint("showMarkFeed: ${state.showMarkFeed}");
+  debugPrint("showTrayCTA: ${state.showTrayCTA}");
+  debugPrint("-------------------------");
+}
 void main() {
+  testEngine(); // 👈 TEMP TEST
+
   runApp(
     const ProviderScope(
       child: MyApp(),
