@@ -8,22 +8,9 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final farmState = ref.watch(farmProvider);
-    final currentFarm = farmState.currentFarm;
-
-    if (currentFarm == null) {
-      return Scaffold(
-        body: Center(
-          child: ElevatedButton(
-            onPressed: () {},
-            child: const Text("Create Farm"),
-          ),
-        ),
-      );
-    }
+    final currentFarm = ref.watch(farmProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
       bottomNavigationBar: const AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -36,9 +23,11 @@ class DashboardScreen extends ConsumerWidget {
               Row(
                 children: [
                   const Text(
-                    "AquaRythu",
+                    "Dashboard",
                     style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   Column(
@@ -47,10 +36,11 @@ class DashboardScreen extends ConsumerWidget {
                       const Text("FARM",
                           style: TextStyle(fontSize: 10)),
                       Text(
-                        currentFarm.name,
+                        "No Farm",
                         style: const TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold),
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   )
@@ -63,7 +53,9 @@ class DashboardScreen extends ConsumerWidget {
               const Text(
                 "Farm Dashboard",
                 style: TextStyle(
-                    fontSize: 24, fontWeight: FontWeight.bold),
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 4),
@@ -86,25 +78,25 @@ class DashboardScreen extends ConsumerWidget {
                   _StatCard(
                     title: "FEED CONSUMED",
                     value: "1245 kg",
-                    subtitle: "+18% vs last crop",
+                    subtitle: "+18%",
                     positive: true,
                   ),
                   _StatCard(
-                    title: "EST. BIOMASS",
+                    title: "BIOMASS",
                     value: "2180 kg",
-                    subtitle: "Sampling in 3d",
+                    subtitle: "Sampling soon",
                     positive: true,
                   ),
                   _StatCard(
-                    title: "FEED EFFICIENCY",
-                    value: "1.18 FCR",
-                    subtitle: "-0.02 from target",
+                    title: "FCR",
+                    value: "1.18",
+                    subtitle: "Near target",
                     positive: false,
                   ),
                   _StatCard(
-                    title: "AVG GROWTH",
-                    value: "0.28 g/day",
-                    subtitle: "+0.03 vs last week",
+                    title: "GROWTH",
+                    value: "0.28 g",
+                    subtitle: "+0.03",
                     positive: true,
                   ),
                 ],
@@ -121,18 +113,19 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Column(
+                child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text("Nellore, AP",
                         style: TextStyle(color: Colors.white)),
                     SizedBox(height: 10),
                     Text(
                       "32°C",
                       style: TextStyle(
-                          fontSize: 36,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold),
+                        fontSize: 36,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text("Sunny",
                         style: TextStyle(color: Colors.white70)),
@@ -142,30 +135,38 @@ class DashboardScreen extends ConsumerWidget {
 
               const SizedBox(height: 20),
 
-              /// PONDS
+              /// PONDS TITLE
               const Text(
                 "Ponds",
                 style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 10),
 
-              ...currentFarm.ponds.map((pond) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(pond.name),
-                );
-              }).toList(),
+              /// POND LIST
+              _buildPond("Pond A"),
+              _buildPond("Pond B"),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPond(String name) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(name),
     );
   }
 }
@@ -193,8 +194,9 @@ class _StatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 6)
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+          )
         ],
       ),
       child: Column(
@@ -202,11 +204,15 @@ class _StatCard extends StatelessWidget {
         children: [
           Text(title,
               style: const TextStyle(
-                  fontSize: 12, color: Colors.grey)),
+                fontSize: 12,
+                color: Colors.grey,
+              )),
           const Spacer(),
           Text(value,
               style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold)),
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              )),
           Text(
             subtitle,
             style: TextStyle(
