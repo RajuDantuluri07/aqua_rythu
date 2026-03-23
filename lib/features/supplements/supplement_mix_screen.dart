@@ -1,5 +1,3 @@
-// SAME IMPORTS
-// SAME IMPORTS
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
@@ -55,7 +53,8 @@ class SupplementMixScreen extends ConsumerWidget {
                   ...active.map((e) => _SupplementCard(
                         supplement: e, 
                         isActive: true, 
-                        ref: ref
+                        ref: ref,
+                        currentDoc: currentDoc,
                       )),
                 ],
 
@@ -66,7 +65,8 @@ class SupplementMixScreen extends ConsumerWidget {
                   ...upcoming.map((e) => _SupplementCard(
                         supplement: e, 
                         isActive: false, 
-                        ref: ref
+                        ref: ref,
+                        currentDoc: currentDoc,
                       )),
                 ],
 
@@ -77,7 +77,8 @@ class SupplementMixScreen extends ConsumerWidget {
                   ...completed.map((e) => _SupplementCard(
                         supplement: e, 
                         isActive: false, 
-                        ref: ref
+                        ref: ref,
+                        currentDoc: currentDoc,
                       )),
                 ],
               ],
@@ -129,11 +130,13 @@ class _SupplementCard extends StatelessWidget {
   final Supplement supplement;
   final bool isActive;
   final WidgetRef ref;
+  final int currentDoc;
 
   const _SupplementCard({
     required this.supplement,
     required this.isActive,
     required this.ref,
+    required this.currentDoc,
   });
 
   @override
@@ -169,7 +172,7 @@ class _SupplementCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isActive ? "ACTIVE" : s.getStatus(0).name.toUpperCase(), // 0 is dummy doc here
+                  isActive ? "ACTIVE" : s.getStatus(currentDoc).name.toUpperCase(),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,

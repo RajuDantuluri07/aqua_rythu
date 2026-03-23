@@ -13,7 +13,7 @@ class WaterTestScreen extends ConsumerStatefulWidget {
 
 class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
   final _formKey = GlobalKey<FormState>();
-
+  final TextEditingController _ammoniaController = TextEditingController();
   final TextEditingController _phController = TextEditingController();
   final TextEditingController _doController = TextEditingController();
   final TextEditingController _tempController = TextEditingController();
@@ -27,6 +27,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     _tempController.dispose();
     _salinityController.dispose();
     _alkalinityController.dispose();
+    _ammoniaController.dispose();
     super.dispose();
   }
 
@@ -37,7 +38,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
       final temp = double.tryParse(_tempController.text) ?? 0;
       final sal = double.tryParse(_salinityController.text) ?? 0;
       final alk = double.tryParse(_alkalinityController.text) ?? 0;
-
+      final ammonia = double.tryParse(_ammoniaController.text) ?? 0;
       final doc = ref.read(docProvider(widget.pondId));
 
       ref.read(waterProvider(widget.pondId).notifier).addLog(
@@ -47,6 +48,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
         temperature: temp,
         salinity: sal,
         alkalinity: alk,
+        ammonia: ammonia,
+        nitrite: 0,
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -78,6 +81,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
               _buildInput("Temperature (°C)", _tempController),
               _buildInput("Salinity (ppt)", _salinityController),
               _buildInput("Alkalinity (ppm)", _alkalinityController),
+              _buildInput("Ammonia (ppm)", _ammoniaController),
 
               const SizedBox(height: 24),
               ElevatedButton(

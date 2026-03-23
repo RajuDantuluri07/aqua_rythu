@@ -7,6 +7,7 @@ import '../feed/feed_schedule_screen.dart';
 import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
 import '../../features/tray/tray_provider.dart';
+import '../tray/tray_model.dart';
 import '../farm/farm_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../supplements/supplement_mix_screen.dart';
@@ -20,6 +21,7 @@ import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
 import '../growth/growth_provider.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
+import '../../core/engines/feed_state_engine.dart';
 
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
@@ -39,28 +41,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
   ];
 
   void openTray(int round) async {
-    final pondId = ref.read(pondDashboardProvider).selectedPond;
+    final selectedPond = ref.read(pondDashboardProvider).selectedPond;
+    final doc = ref.read(docProvider(selectedPond));
+    
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-          builder: (context) =>
-              TrayLogScreen(pondId: pondId, round: round)),
+        builder: (_) => TrayLogScreen(
+          pondId: selectedPond,
+          doc: doc,
+          round: round,
+        ),
+      ),
     );
 
     if (!mounted) return;
 
-    if (result != null && result is String) {
+    if (result != null) {
       ref.read(pondDashboardProvider.notifier).logTray(round);
     }
-  }
-
-  int _getCurrentRound() {
-    final hour = DateTime.now().hour;
-    if (hour < 8) return 1; // Before 8 AM is round 1
-    if (hour < 12) return 2; // Before 12 PM is round 2
-    if (hour < 16) return 3; // Before 4 PM is round 3
-    if (hour < 20) return 4; // Before 8 PM is round 4
-    return 1; // Default to next day's first round
   }
 
   @override
@@ -74,6 +73,19 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
     /// ✅ GROWTH DATA (Triggers rebuild on update)
     final growthState = ref.watch(growthProvider(selectedPond));
+
+    /// ✅ TRAY DATA
+    final trayLogs = ref.watch(trayProvider(selectedPond));
+    final today = DateTime.now();
+    
+    final Map<int, TrayLog> todayTrayMap = {
+      for (var log in trayLogs)
+        if (log.time.year == today.year &&
+            log.time.month == today.month &&
+            log.time.day == today.day)
+          log.round: log
+    };
+    final Map<int, bool> trayDone = todayTrayMap.map((key, value) => MapEntry(key, true));
 
     /// EMPTY STATE
     if (currentFarm != null && currentFarm.ponds.isEmpty) {
@@ -126,7 +138,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       if (dashboardState.feedDone[4] == true) consumedFeed += dayPlan.r4;
     }
 
-    final currentRound = _getCurrentRound();
+    /// ✅ ENGINE STATE
+    final feedMode = FeedStateEngine.getMode(currentDoc);
+    
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -410,18 +424,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (currentDoc < 15)
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          "Tray Feeding: Not Started (Recommended after DOC 15)",
-                          style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
-                        ),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _getModeColor(feedMode).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: _getModeColor(feedMode)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _getTrayInfoText(feedMode),
+                              style: TextStyle(color: _getModeColor(feedMode), fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -429,24 +450,51 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
               const SizedBox(height: 20),
 
               /// FEED ROUNDS
-              ...feedRoundsData.map((data) {
-                final round = data['round'];
-                final isDone = dashboardState.feedDone[round] == true;
-                final isCurrent = round == currentRound;
-                final qty = _getFeedQty(dayPlan, round);
+              Column(
+                children: feedRoundsData.map((data) {
+                  final round = data['round'] as int;
+                  final time = data['time'] as String;
 
-                return FeedRoundCard(
-                  round: round,
-                  time: data['time'],
-                  feedQty: qty,
-                  isDone: isDone,
-                  currentRound: currentRound,
-                  onOpenTray: openTray,
-                  onMarkDone: () => ref.read(pondDashboardProvider.notifier).markFeedDone(round),
-                );
-              }),
+                  // ✅ STEP 1: base planned quantity
+                  double qty = _getFeedQty(dayPlan, round);
 
-              const SizedBox(height: 24),
+                  // ✅ STEP 2: apply tray adjustment from previous round
+                  if (round > 1) {
+                    final prevLog = todayTrayMap[round - 1];
+                    if (prevLog != null) {
+                      qty = FeedStateEngine.applyTrayAdjustment(
+                        plannedQty: qty,
+                        trayResults: prevLog.trays,
+                      );
+                    }
+                  }
+
+                  // ✅ Use Engine to determine state
+                  final roundState = FeedStateEngine.getRoundState(
+                    doc: currentDoc,
+                    round: round,
+                    totalRounds: 4,
+                    feedDone: dashboardState.feedDone,
+                    trayDone: trayDone,
+                  );
+
+                  return FeedRoundCard(
+                    round: round,
+                    time: time,
+                    feedQty: qty,
+                    isDone: roundState.isDone,
+                    isCurrent: roundState.isCurrent,
+                    isLocked: roundState.isLocked,
+                    showTrayCTA: roundState.showTrayCTA,
+                    onOpenTray: (r) => openTray(r),
+                    onMarkDone: () {
+                      if (!roundState.isLocked) {
+                        ref.read(pondDashboardProvider.notifier).markFeedDone(round);
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
 
               /// TANK OPERATIONS
               const Text("Quick Actions",
@@ -557,6 +605,31 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
   Widget _divider() {
     return Container(width: 1, height: 24, color: Colors.grey.shade300);
+  }
+
+  // Helpers
+  Color _getModeColor(FeedMode mode) {
+    switch (mode) {
+      case FeedMode.beginner: return Colors.blue;
+      case FeedMode.habit: return Colors.orange;
+      case FeedMode.precision: return Colors.purple;
+    }
+  }
+
+  String _getModeLabel(FeedMode mode) {
+    switch (mode) {
+      case FeedMode.beginner: return "BEGINNER MODE";
+      case FeedMode.habit: return "HABIT MODE";
+      case FeedMode.precision: return "PRECISION MODE";
+    }
+  }
+
+  String _getTrayInfoText(FeedMode mode) {
+    switch (mode) {
+      case FeedMode.beginner: return "Tray Feeding: Not Started (Recommended after DOC 15)";
+      case FeedMode.habit: return "Tray Feeding: Optional (Habit Phase)";
+      case FeedMode.precision: return "Tray Feeding: Mandatory (Next Feed Locked)";
+    }
   }
 }
 

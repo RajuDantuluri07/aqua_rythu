@@ -63,6 +63,11 @@ class SupplementCalculator {
 
     // Step 1: Filter valid supplements
     final validSupplements = supplements.where((s) {
+      // This calculator is for feed-based supplements only.
+      if (s.type != SupplementType.feedMix) {
+        return false;
+      }
+
       final inDocRange =
           currentDoc >= s.startDoc && currentDoc <= s.endDoc;
 

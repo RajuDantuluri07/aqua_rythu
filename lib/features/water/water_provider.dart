@@ -9,6 +9,8 @@ class WaterLog {
   final double dissolvedOxygen;
   final double temperature;
   final double salinity;
+  final double ammonia; // As per PRD 4.8
+  final double nitrite; // As per PRD 4.8
   final double alkalinity;
 
   WaterLog({
@@ -20,8 +22,26 @@ class WaterLog {
     required this.dissolvedOxygen,
     required this.temperature,
     required this.salinity,
+    required this.ammonia,
+    required this.nitrite,
     required this.alkalinity,
   });
+
+  // Health Score calculation as per PRD 4.8
+  int get healthScore {
+    int score = 100;
+    if (dissolvedOxygen < 4) score -= 20;
+    else if (dissolvedOxygen < 5) score -= 10;
+
+    if (ph < 7.5 || ph > 8.5) score -= 10;
+
+    if (ammonia > 0.3) score -= 20;
+    else if (ammonia > 0.1) score -= 10;
+
+    if (nitrite > 0.3) score -= 20;
+    else if (nitrite > 0.1) score -= 10;
+    return score;
+  }
 }
 
 class WaterNotifier extends StateNotifier<List<WaterLog>> {
@@ -34,6 +54,8 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
     required double dissolvedOxygen,
     required double temperature,
     required double salinity,
+    required double ammonia,
+    required double nitrite,
     required double alkalinity,
   }) {
     final newLog = WaterLog(
@@ -45,6 +67,8 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
       dissolvedOxygen: dissolvedOxygen,
       temperature: temperature,
       salinity: salinity,
+      ammonia: ammonia,
+      nitrite: nitrite,
       alkalinity: alkalinity,
     );
 

@@ -3,25 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class FeedHistoryLog {
   final DateTime date;
   final int doc;
-  final double r1;
-  final double r2;
-  final double r3;
-  final double r4;
+  final List<double> rounds; // Use a list for flexibility
   final double expected;
   final double cumulative;
 
   FeedHistoryLog({
     required this.date,
     required this.doc,
-    required this.r1,
-    required this.r2,
-    required this.r3,
-    required this.r4,
+    required this.rounds,
     required this.expected,
     required this.cumulative,
   });
 
-  double get total => r1 + r2 + r3 + r4;
+  double get total => rounds.fold(0.0, (sum, item) => sum + item);
   double get delta => total - expected;
   
   // Logic: if delta < -1 => Warning
@@ -50,12 +44,10 @@ class FeedHistoryNotifier extends StateNotifier<List<FeedHistoryLog>> {
       final double baseFeed = doc * 0.8; 
       
       // Add some noise
-      final r1 = (baseFeed * 0.25).roundToDouble();
-      final r2 = (baseFeed * 0.25).roundToDouble();
-      final r3 = (baseFeed * 0.25).roundToDouble();
-      final r4 = (baseFeed * 0.25).roundToDouble();
+      // Mocking 4 rounds for now, but this can be dynamic
+      final mockRounds = List.generate(4, (_) => (baseFeed * 0.25).roundToDouble());
       
-      final total = r1 + r2 + r3 + r4;
+      final total = mockRounds.reduce((a, b) => a + b);
       runningCum += total;
       
       // Mock Expected (Simulate overfeeding/underfeeding occasionally)
@@ -64,10 +56,7 @@ class FeedHistoryNotifier extends StateNotifier<List<FeedHistoryLog>> {
       logs.add(FeedHistoryLog(
         date: date,
         doc: doc,
-        r1: r1,
-        r2: r2,
-        r3: r3,
-        r4: r4,
+        rounds: mockRounds,
         expected: expected,
         cumulative: runningCum,
       ));

@@ -1,3 +1,5 @@
+import '../enums/tray_status.dart';
+
 enum FeedMode {
   beginner,
   habit,
@@ -10,6 +12,7 @@ class FeedRoundState {
   final bool isLocked;
   final bool showMarkFeed;
   final bool showTrayCTA;
+  final bool isTrayLogged;
 
   const FeedRoundState({
     required this.isDone,
@@ -17,6 +20,7 @@ class FeedRoundState {
     required this.isLocked,
     required this.showMarkFeed,
     required this.showTrayCTA,
+    required this.isTrayLogged,
   });
 }
 
@@ -48,13 +52,15 @@ class FeedStateEngine {
       feedDone: feedDone,
       trayDone: trayDone,
     );
+    
+    final isTrayLogged = trayDone[round] ?? false;
 
     final showMarkFeed = isCurrent && !isDone && !isLocked;
 
     // Show Tray CTA if fed, not blind mode, and tray not yet logged
     final showTrayCTA = isDone &&
         mode != FeedMode.beginner &&
-        !(trayDone[round] ?? false);
+        !isTrayLogged;
 
     return FeedRoundState(
       isDone: isDone,
@@ -62,6 +68,7 @@ class FeedStateEngine {
       isLocked: isLocked,
       showMarkFeed: showMarkFeed,
       showTrayCTA: showTrayCTA,
+      isTrayLogged: isTrayLogged,
     );
   }
 
@@ -108,5 +115,47 @@ class FeedStateEngine {
       }
     }
     return totalRounds;
+  }
+
+  // =========================================================
+  // 🧠 TRAY-BASED FEED ADJUSTMENT (PRD 5.4)
+  // =========================================================
+
+  /// Returns the raw multiplier for a single tray status.
+  static double _getTrayMultiplier(TrayStatus status) {
+    switch (status) {
+      case TrayStatus.empty:
+        return 1.08; // +8%
+      case TrayStatus.smallLeft:
+        return 1.03; // +3%
+      case TrayStatus.halfLeft:
+        return 1.00; // 0%
+      case TrayStatus.fullLeft:
+        return 0.92; // -8%
+    }
+  }
+
+  /// Calculates the average multiplier from a list of tray check results.
+  static double calculateAvgMultiplier(List<TrayStatus> trayResults) {
+    if (trayResults.isEmpty) {
+      return 1.0;
+    }
+
+    double totalMultiplier = trayResults
+        .map(_getTrayMultiplier)
+        .reduce((value, element) => value + element);
+
+    return totalMultiplier / trayResults.length;
+  }
+
+  /// Applies the calculated tray adjustment to a planned feed quantity.
+  /// The result is capped between 60% and 125% of the original planned quantity.
+  static double applyTrayAdjustment(
+      {required double plannedQty, required List<TrayStatus> trayResults}) {
+    final avgMultiplier = calculateAvgMultiplier(trayResults);
+    final adjustedQty = plannedQty * avgMultiplier;
+
+    // Per PRD 5.4, cap the adjustment.
+    return adjustedQty.clamp(plannedQty * 0.60, plannedQty * 1.25);
   }
 }

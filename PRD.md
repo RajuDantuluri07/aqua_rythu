@@ -14,7 +14,7 @@
 ### Overview
 | Item | Details |
 | :--- | :--- |
-| **Audience** | CEO · CTO · Lead Developer |
+| **Audience** | CEO · CTO · Lead Developer | Product
 | **Purpose** | Single source of truth for build, launch & revenue decisions |
 | **Stack** | Flutter (Android) · Supabase · Riverpod · Razorpay |
 | **Beta Target** | 1,000 shrimp farmers — Andhra Pradesh & Telangana |
@@ -73,7 +73,7 @@ Indian shrimp farmers lose 20–30% of potential profit every crop because of po
 | Harvest Hub (Partial + Final) | ✅ IN | Revenue tracking. Required for Pro upsell. |
 | Farm Dashboard (KPI + Weather) | ✅ IN | Daily overview. Perceived-value feature for farmers. |
 | Profile + Logout | ✅ IN | Basic account management. |
-| Supplement Mix | ✅ IN | Nice to have. Does not affect feed logging. Deprioritised. |
+| Supplement Mix | ✅ IN | end to end as planned
 | WhatsApp Alerts | ⬜ V2 | Requires WhatsApp Business API approval. Complex. |
 | PDF Export | ⬜ V2 | Not blocking beta. Farmers don't need PDFs to log feed. |
 | Telugu Language UI | ⬜ V2 | Significant i18n effort. English sufficient for beta. |
@@ -87,13 +87,16 @@ Indian shrimp farmers lose 20–30% of potential profit every crop because of po
 ## 3. Core User Flows
 
 ### 3.1 The Primary Flow — Must Work Perfectly
-This 5-step flow is the entire product. Everything else is secondary. If this flow has a single UX bug on launch day — the app fails.
+This 6-step flow is the entire product. Everything else is secondary. If this flow has a single UX bug on launch day — the app fails.
 
-1. **Open App** (Phone on lock screen)
-2. **Select Pond** (Pond tabs — 1 tap)
-3. **See Today Feed** (Round + kg shown)
-4. **MARK AS FED** (Big green button)
-5. **Done** (< 10 seconds total)
+| Step | Action | Screen State | Time |
+| :--- | :--- | :--- | :--- |
+| 1 | **Open App** | Phone from lock screen / notification | 0s |
+| 2 | **Select Pond** | Pond tabs — 1 tap | 2s |
+| 3 | **See Today Feed** | Round card with kg shown + NOW badge | 3s |
+| 4 | **MARK AS FED** | Green button — 1 tap | 8s |
+| 5 | **Done** | Round turns green ✓, progress advances | < 10s |
+| 6 | **Log Tray (DOC 16+)** | Tray Log button enabled → Tap → Input status → Update | 15s |
 
 ### 3.2 New Farmer Onboarding Flow
 Must complete in under 3 minutes. Zero support calls allowed.
@@ -180,9 +183,9 @@ Each screen below is the full implementation spec for the developer. No ambiguit
 | Screen | Required Fields | Key Behaviours |
 | :--- | :--- | :--- |
 | **Step 2/3 — Create Farm** | Farm Name* \| Location (optional) | Progress bar `LinearProgressIndicator(0.67)`; 'Create Farm →' green CTA; INSERT farms row |
-| **Step 3/3 — Create Pond** | Pond Name* \| Acres* \| Stocking Date* \| PL Count* \| Num Trays (choice: 2 or 4, default 4) | Progress bar (1.0); 'Save Pond & Generate Feed Plan →'; writes ponds, stockings, 30× feed_plans in batch |
+| **Step 3/3 — Create Pond** | Pond Name* \| Acres* \| Stocking Date* \| PL Count* \| Num Trays (choice: 2 or 4, or 6 default 4) | Progress bar (1.0); 'Save Pond & Generate Feed Plan →'; writes ponds, stockings, 30× feed_plans in batch |
 
-**Note:** Blind plan generation: 30 rows × (4–6 rounds/DOC) = ~150 feed_plan rows. Use batch insert (chunks of 50). This must succeed before navigating to Tank Page.
+**Note:** Blind plan generation: 30 rows × (4 rounds) = ~150 feed_plan rows. Use batch insert (chunks of 50). This must succeed before navigating to Tank Page.
 
 ### 4.4 Tank Page — The Most Important Screen
 This screen is opened 3–5× per day by every farmer. It must be perfect.

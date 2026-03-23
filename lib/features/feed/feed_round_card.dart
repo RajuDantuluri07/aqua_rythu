@@ -26,7 +26,9 @@ class FeedRoundCard extends ConsumerWidget {
   final String time;
   final double feedQty;
   final bool isDone;
-  final int currentRound;
+  final bool isCurrent;
+  final bool isLocked;
+  final bool showTrayCTA;
   final Function(int) onOpenTray;
   final VoidCallback? onMarkDone;
 
@@ -36,7 +38,9 @@ class FeedRoundCard extends ConsumerWidget {
     required this.time,
     required this.feedQty,
     required this.isDone,
-    required this.currentRound,
+    required this.isCurrent,
+    required this.isLocked,
+    required this.showTrayCTA,
     required this.onOpenTray,
     this.onMarkDone,
   });
@@ -48,7 +52,6 @@ class FeedRoundCard extends ConsumerWidget {
 
     final trayStatus = dashboardState.trayResults[round];
     final tray = trayStatus?.name;
-    final isCurrent = round == currentRound;
 
     /// ✅ FROM PROVIDER
     final currentDoc = dashboardState.doc;
@@ -72,19 +75,27 @@ class FeedRoundCard extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isCurrent ? Colors.green.shade50 : Colors.white,
+        color: isLocked ? Colors.grey.shade100 : (isCurrent ? Colors.green.shade50 : Colors.white),
         borderRadius: BorderRadius.circular(16),
-        border: isCurrent
-            ? Border.all(color: Colors.green, width: 2)
-            : Border.all(color: Colors.grey.shade300),
+        border: isLocked
+            ? Border.all(color: Colors.grey.shade300)
+            : (isCurrent
+                ? Border.all(color: Colors.green, width: 2)
+                : Border.all(color: Colors.grey.shade300)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           /// HEADER
-          Text(
-            "Round $round • $time",
-            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Round $round • $time",
+                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+              ),
+              if (isLocked) const Icon(Icons.lock, size: 16, color: Colors.grey),
+            ],
           ),
 
           const SizedBox(height: 8),
@@ -186,7 +197,7 @@ class FeedRoundCard extends ConsumerWidget {
           const SizedBox(height: 12),
 
           /// BUTTONS
-          if (isCurrent && !isDone)
+          if (isCurrent && !isDone && !isLocked)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -207,13 +218,13 @@ class FeedRoundCard extends ConsumerWidget {
               ],
             ),
 
-          if (!isCurrent || isDone) ...[
+          if (showTrayCTA) ...[
              const SizedBox(height: 8),
              SizedBox(
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => onOpenTray(round),
-                child: const Text("Tray Check"),
+                child: Text(trayStatus != null ? "Update Tray" : "Log Tray Check"),
               ),
             ),
           ],

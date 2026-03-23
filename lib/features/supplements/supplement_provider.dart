@@ -4,6 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum SupplementStatus { upcoming, active, completed }
 
+enum SupplementType {
+  feedMix,
+  waterMix,
+}
+
+enum WaterMixTime {
+  morning,
+  evening,
+  afterFeed,
+}
+
 /// ---------------------------------------------------
 /// 📦 MODEL (Backend Ready)
 /// ---------------------------------------------------
@@ -40,8 +51,16 @@ class Supplement {
   final String name;
   final int startDoc;
   final int endDoc;
-  final double feedQty;
-  final List<String> feedingTimes;
+  final SupplementType type;
+
+  /// FEED MIX ONLY
+  final double feedQty; // default 0 if waterMix
+  final List<String> feedingTimes; // empty if waterMix
+
+  /// WATER MIX ONLY
+  final int? frequencyDays;
+  final WaterMixTime? preferredTime;
+
   final List<SupplementItem> items;
 
   Supplement({
@@ -49,8 +68,11 @@ class Supplement {
     required this.name,
     required this.startDoc,
     required this.endDoc,
-    required this.feedQty,
-    required this.feedingTimes,
+    this.type = SupplementType.feedMix,
+    this.feedQty = 0.0,
+    this.feedingTimes = const [],
+    this.frequencyDays,
+    this.preferredTime,
     required this.items,
   });
 
@@ -66,8 +88,11 @@ class Supplement {
         'name': name,
         'startDoc': startDoc,
         'endDoc': endDoc,
+        'type': type.name,
         'feedQty': feedQty,
         'feedingTimes': feedingTimes,
+        'frequencyDays': frequencyDays,
+        'preferredTime': preferredTime?.name,
         'items': items.map((e) => e.toJson()).toList(),
       };
 
@@ -77,8 +102,15 @@ class Supplement {
       name: json['name'],
       startDoc: json['startDoc'],
       endDoc: json['endDoc'],
-      feedQty: (json['feedQty'] as num?)?.toDouble() ?? 1.0,
-      feedingTimes: List<String>.from(json['feedingTimes']),
+      type: json['type'] != null
+          ? SupplementType.values.byName(json['type'])
+          : SupplementType.feedMix,
+      feedQty: (json['feedQty'] as num?)?.toDouble() ?? 0.0,
+      feedingTimes: List<String>.from(json['feedingTimes'] ?? []),
+      frequencyDays: json['frequencyDays'],
+      preferredTime: json['preferredTime'] != null
+          ? WaterMixTime.values.byName(json['preferredTime'])
+          : null,
       items: (json['items'] as List)
           .map((e) => SupplementItem.fromJson(e))
           .toList(),

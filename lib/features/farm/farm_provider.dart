@@ -7,6 +7,7 @@ class Pond {
   final DateTime stockingDate;
   final int seedCount;
   final int plSize;
+  final int numTrays;
 
   Pond({
     required this.id,
@@ -15,6 +16,7 @@ class Pond {
     required this.stockingDate,
     this.seedCount = 100000,
     this.plSize = 10,
+    this.numTrays = 4,
   });
 
   int get doc => DateTime.now().difference(stockingDate).inDays + 1;
@@ -112,6 +114,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
     double area, {
     int seedCount = 100000,
     int plSize = 10,
+    int numTrays = 4,
     DateTime? stockingDate,
   }) {
     final newPond = Pond(
@@ -121,6 +124,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
       stockingDate: stockingDate ?? DateTime.now(),
       seedCount: seedCount,
       plSize: plSize,
+      numTrays: numTrays,
     );
 
     state = state.copyWith(
