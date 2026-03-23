@@ -7,22 +7,19 @@ class SupplementDoseResult {
   final String supplementName;
   final String itemName;
   final double totalDose;
-  final double dosePerTray;
   final String unit;
 
   const SupplementDoseResult({
     required this.supplementName,
     required this.itemName,
     required this.totalDose,
-    required this.dosePerTray,
     required this.unit,
   });
 
   @override
   String toString() {
     return '$supplementName → $itemName: '
-        '${totalDose.toStringAsFixed(2)} $unit '
-        '(Tray: ${dosePerTray.toStringAsFixed(2)} $unit)';
+        '${totalDose.toStringAsFixed(2)} $unit';
   }
 }
 
@@ -51,10 +48,9 @@ class SupplementCalculator {
     required int currentDoc,
     required String currentFeedingTime,
     required double feedQty,
-    int trayCount = 4,
   }) {
     // 🔒 Safety checks
-    if (supplements.isEmpty || feedQty <= 0 || trayCount <= 0) {
+    if (supplements.isEmpty || feedQty <= 0) {
       return [];
     }
 
@@ -94,14 +90,12 @@ class SupplementCalculator {
             : item.dosePerKg;
 
         final totalDose = rate * feedQty;
-        final dosePerTray = totalDose / trayCount;
 
         itemResults.add(
           SupplementDoseResult(
             supplementName: supplement.name,
             itemName: item.name,
             totalDose: _round(totalDose),
-            dosePerTray: _round(dosePerTray),
             unit: item.unit,
           ),
         );

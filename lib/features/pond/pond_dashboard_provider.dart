@@ -84,14 +84,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // =========================================================
 
   void markFeedDone(int round) {
+    // 🔒 SAFETY: Prevent duplicate actions
+    if (state.feedDone[round] == true) return;
+
     final newMap = Map<int, bool>.from(state.feedDone);
     newMap[round] = true;
 
     state = state.copyWith(feedDone: newMap);
-
-    // 🔧 DEBUG LOGS
-    print("✅ Round $round Marked Done");
-    print("DOC: ${state.doc} | Feed Status: $newMap");
   }
 
   // =========================================================
@@ -115,49 +114,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     state = state.copyWith(
       trayResults: newMap,
     );
-    print("✅ Tray Logged for Round $round: ${newMap[round]}");
-
-    // =========================================================
-    // 🧠 AUTO-ADJUST NEXT ROUND
-    // =========================================================
-    final nextRound = round + 1;
-    if (nextRound <= 4) { // Only adjust if there is a next round today
-      final plans = ref.read(feedPlanProvider);
-      final pondPlan = plans[state.selectedPond];
-      
-      // Safely get today's plan
-      final dayPlan = pondPlan?.days.firstWhere(
-        (d) => d.doc == state.doc,
-        orElse: () => FeedDayPlan(doc: 0, r1: 0, r2: 0, r3: 0, r4: 0),
-      );
-      
-      if (dayPlan != null && dayPlan.doc != 0) {
-        // Get base quantity for the next round
-        double plannedQtyForNextRound = 0;
-        if (nextRound == 1) plannedQtyForNextRound = dayPlan.r1;
-        if (nextRound == 2) plannedQtyForNextRound = dayPlan.r2;
-        if (nextRound == 3) plannedQtyForNextRound = dayPlan.r3;
-        if (nextRound == 4) plannedQtyForNextRound = dayPlan.r4;
-
-        // Calculate new adjusted quantity
-        final adjustedQty = FeedStateEngine.applyTrayAdjustment(
-          plannedQty: plannedQtyForNextRound,
-          trayResults: trayStatuses,
-        );
-
-        // Update the Feed Plan Provider, which will trigger UI rebuilds
-        ref.read(feedPlanProvider.notifier).updateFeed(
-          pondId: state.selectedPond,
-          doc: state.doc,
-          r1: nextRound == 1 ? adjustedQty : null,
-          r2: nextRound == 2 ? adjustedQty : null,
-          r3: nextRound == 3 ? adjustedQty : null,
-          r4: nextRound == 4 ? adjustedQty : null,
-        );
-
-        print("⚖️ Auto-Adjusted Round $nextRound: $plannedQtyForNextRound kg -> ${adjustedQty.toStringAsFixed(2)} kg");
-      }
-    }
   }
 }
 

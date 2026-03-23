@@ -114,48 +114,35 @@ class FeedStateEngine {
         return i;
       }
     }
-    return totalRounds;
+    return totalRounds + 1;
   }
 
   // =========================================================
   // 🧠 TRAY-BASED FEED ADJUSTMENT (PRD 5.4)
   // =========================================================
 
-  /// Returns the raw multiplier for a single tray status.
-  static double _getTrayMultiplier(TrayStatus status) {
-    switch (status) {
-      case TrayStatus.empty:
-        return 1.08; // +8%
-      case TrayStatus.smallLeft:
-        return 1.03; // +3%
-      case TrayStatus.halfLeft:
-        return 1.00; // 0%
-      case TrayStatus.fullLeft:
-        return 0.92; // -8%
+  /// Calculates the adjustment factor based on tray priorities.
+  /// Priority: Full > Half > Small > Empty
+  static double getAdjustmentFactor(List<TrayStatus> trays) {
+    // 🔒 CORE LOGIC (LOCKED)
+    if (trays.contains(TrayStatus.fullLeft)) {
+      return 0.7; // -30%
     }
-  }
-
-  /// Calculates the average multiplier from a list of tray check results.
-  static double calculateAvgMultiplier(List<TrayStatus> trayResults) {
-    if (trayResults.isEmpty) {
-      return 1.0;
+    if (trays.contains(TrayStatus.halfLeft)) {
+      return 0.85; // -15%
     }
-
-    double totalMultiplier = trayResults
-        .map(_getTrayMultiplier)
-        .reduce((value, element) => value + element);
-
-    return totalMultiplier / trayResults.length;
+    if (trays.contains(TrayStatus.smallLeft)) {
+      return 0.95; // -5%
+    }
+    return 1.0; // No change for Empty
   }
 
   /// Applies the calculated tray adjustment to a planned feed quantity.
-  /// The result is capped between 60% and 125% of the original planned quantity.
   static double applyTrayAdjustment(
       {required double plannedQty, required List<TrayStatus> trayResults}) {
-    final avgMultiplier = calculateAvgMultiplier(trayResults);
-    final adjustedQty = plannedQty * avgMultiplier;
-
-    // Per PRD 5.4, cap the adjustment.
-    return adjustedQty.clamp(plannedQty * 0.60, plannedQty * 1.25);
+    final factor = getAdjustmentFactor(trayResults);
+    final adjustedQty = plannedQty * factor;
+    
+    return adjustedQty;
   }
 }
