@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/core/engines/feed_calculation_engine.dart';
+import '../../core/utils/logger.dart';
 
 /// =======================
 /// MODELS
@@ -91,7 +92,9 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     final plan = state[pondId];
     if (plan == null) return;
 
-    final dayPlan = plan.days.firstWhere((d) => d.doc == doc);
+    final dayPlanIndex = plan.days.indexWhere((d) => d.doc == doc);
+    if (dayPlanIndex == -1) return;
+    final dayPlan = plan.days[dayPlanIndex];
 
     if (r1 != null) dayPlan.r1 = r1;
     if (r2 != null) dayPlan.r2 = r2;
@@ -106,8 +109,8 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     final plan = state[pondId];
     if (plan == null) return;
 
-    print("✅ Feed Plan Saved for $pondId");
-    print("Total: ${plan.totalProjected}");
+    AppLogger.info("✅ Feed Plan Saved for $pondId");
+    AppLogger.debug("Total: ${plan.totalProjected}");
   }
 }
 

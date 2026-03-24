@@ -2,135 +2,338 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'feed_plan_provider.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/utils/logger.dart';
 
-class FeedScheduleScreen extends ConsumerStatefulWidget {
+class FeedScheduleScreen extends ConsumerWidget {
   final String pondId;
   const FeedScheduleScreen({super.key, required this.pondId});
 
   @override
-  ConsumerState<FeedScheduleScreen> createState() => _FeedScheduleScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final planMap = ref.watch(feedPlanProvider);
+    final plan = planMap[pondId];
+    final days = plan?.days ?? [];
+
+    final farmState = ref.watch(farmProvider);
+    String pondName = pondId;
+    for (var farm in farmState.farms) {
+      try {
+        final pond = farm.ponds.firstWhere((p) => p.id == pondId);
+        pondName = pond.name;
+        break;
+      } catch (e, stack) {
+        AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
+      }
+    }
+
+    // Assuming DOC 1-25 or similar based on days list
+    final docRange = days.isEmpty ? "" : "DOC ${days.first.doc}-${days.last.doc}";
+
+    return Scaffold(
+      backgroundColor: AppColors.cardBg,
+      appBar: AppBar(
+        backgroundColor: AppColors.cardBg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF475569)),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Feed Schedule",
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              "$pondName • $docRange",
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.orange),
+            onPressed: () {},
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: Colors.grey.shade200, height: 1),
+        ),
+      ),
+      body: days.isEmpty
+          ? const Center(child: Text("No plan generated yet."))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.base),
+              child: Column(
+                children: [
+                  // Main Table Card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: AppRadius.rBase,
+                      border: Border.all(color: AppColors.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // Table Header
+                        _buildTableHeader(),
+                        // Data Rows (Limited to showing first 9 and last 1 for ellipsis effect как в картинке)
+                        if (days.length > 10) ...[
+                          ...days.take(9).map((d) => _FeedRow(pondId: pondId, day: d)),
+                          _buildEllipsisRow(days.length),
+                          _FeedRow(pondId: pondId, day: days.last),
+                        ] else
+                          ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
+                      ],
+                    ),
+                  ),
+                  AppSpacing.hXl,
+
+                  // Total Summary Card
+                  _buildTotalSummaryCard(plan?.totalProjected ?? 0),
+                  AppSpacing.hXxl * 3, // Spacing for bottom button
+                ],
+              ),
+            ),
+      bottomSheet: _buildSaveButton(context, ref),
+    );
+  }
+
+  Widget _buildTableHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8FAFB),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(15),
+          topRight: Radius.circular(15),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 2, child: _HeaderCell("DOC")),
+          Expanded(flex: 3, child: _HeaderCell("R1 (KG)")),
+          Expanded(flex: 3, child: _HeaderCell("R2 (KG)")),
+          Expanded(flex: 3, child: _HeaderCell("R3 (KG)")),
+          Expanded(flex: 3, child: _HeaderCell("R4 (KG)")),
+          Expanded(flex: 2, child: _HeaderCell("TOTAL", align: TextAlign.right)),
+        ],
+      ),
+    );
+  }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+      alignment: Alignment.center,
+      child: const Text(
+        "... Days 10 to X ...", // Note: This could be dynamic based on totalCount
+        style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+      ),
+    );
+
+  Widget _buildTotalSummaryCard(double total) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: AppRadius.rBase,
+        border: Border.all(color: const Color(0xFFFFEED9)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.s),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: AppRadius.rs,
+            ),
+            child: const Icon(Icons.bar_chart, color: Colors.orange, size: 24),
+          ),
+          AppSpacing.wBase,
+          const Text(
+            "Total Projected Feed",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            "${total.toStringAsFixed(1)} kg",
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaveButton(BuildContext context, WidgetRef ref) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.only(left: AppSpacing.base, right: AppSpacing.base, bottom: AppSpacing.xl, top: AppSpacing.m),
+      child: ElevatedButton.icon(
+        onPressed: () {
+          ref.read(feedPlanProvider.notifier).savePlan(pondId);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Feed Schedule Saved Successfully")),
+          );
+        },
+        icon: const Icon(Icons.save, color: Colors.white),
+        label: const Text(
+          "Save Schedule",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF22C55E),
+          minimumSize: const Size(double.infinity, 56),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
+        ),
+      ),
+    );
+  }
 }
 
-class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
-  final ScrollController _scrollController = ScrollController();
+class _HeaderCell extends StatelessWidget {
+  final String label;
+  final TextAlign align;
+  const _HeaderCell(this.label, {this.align = TextAlign.center});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      textAlign: align,
+      style: const TextStyle(
+        color: AppColors.textTertiary,
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+}
+
+class _FeedRow extends ConsumerStatefulWidget {
+  final String pondId;
+  final FeedDayPlan day;
+  const _FeedRow({required this.pondId, required this.day});
+
+  @override
+  ConsumerState<_FeedRow> createState() => _FeedRowState();
+}
+
+class _FeedRowState extends ConsumerState<_FeedRow> {
+  late List<TextEditingController> _controllers;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToToday();
-    });
+    _controllers = [
+      TextEditingController(text: widget.day.r1.toStringAsFixed(1)),
+      TextEditingController(text: widget.day.r2.toStringAsFixed(1)),
+      TextEditingController(text: widget.day.r3.toStringAsFixed(1)),
+      TextEditingController(text: widget.day.r4.toStringAsFixed(1)),
+    ];
   }
 
-  void _scrollToToday() {
-    final pond = _getPond();
-    if (pond == null) return;
-    
-    // Estimate scroll position (roughly 80 pixels per item)
-    final double offset = (pond.doc - 2) * 80.0;
-    if (offset > 0 && _scrollController.hasClients) {
-      _scrollController.animateTo(
-        offset,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
+  @override
+  void didUpdateWidget(_FeedRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.day != widget.day) {
+      // Update controllers if the day data changes externally
+      _controllers[0].text = widget.day.r1.toStringAsFixed(1);
+      _controllers[1].text = widget.day.r2.toStringAsFixed(1);
+      _controllers[2].text = widget.day.r3.toStringAsFixed(1);
+      _controllers[3].text = widget.day.r4.toStringAsFixed(1);
     }
   }
 
-  Pond? _getPond() {
-    final farmState = ref.read(farmProvider);
-    for (var farm in farmState.farms) {
-      try {
-        return farm.ponds.firstWhere((p) => p.id == widget.pondId);
-      } catch (_) {}
+  void _onChanged() {
+    final r1 = double.tryParse(_controllers[0].text) ?? 0;
+    final r2 = double.tryParse(_controllers[1].text) ?? 0;
+    final r3 = double.tryParse(_controllers[2].text) ?? 0;
+    final r4 = double.tryParse(_controllers[3].text) ?? 0;
+
+    ref.read(feedPlanProvider.notifier).updateFeed(
+          pondId: widget.pondId,
+          doc: widget.day.doc,
+          r1: r1,
+          r2: r2,
+          r3: r3,
+          r4: r4,
+        );
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _controllers) {
+      controller.dispose();
     }
-    return null;
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final pond = _getPond();
+    // Re-watch for total updates if needed, but since updateFeed triggers state change,
+    // and this is a ConsumerStatefulWidget, it should work fine if we watch something or if the parent rebuilds.
+    // However, for efficiency, widget.day is already updated in the provider since it's a reference (mostly).
+    // Let's ensure the total updates accurately.
+    final currentDay = ref.watch(feedPlanProvider)[widget.pondId]?.days.firstWhere((d) => d.doc == widget.day.doc);
+    final total = currentDay?.total ?? 0;
 
-    if (pond == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text("Feed Schedule")),
-        body: const Center(child: Text("Pond not found")),
-      );
-    }
-
-    final planMap = ref.watch(feedPlanProvider);
-    final plan = planMap[widget.pondId];
-
-    if (plan == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text("Feed Schedule")),
-        body: const Center(child: Text("No Feed Plan Found")),
-      );
-    }
-
-    // Calculate totals
-    double totalFeedCycle = plan.days.fold(0, (sum, day) => sum + day.total);
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverAppBar(
-            backgroundColor: Theme.of(context).primaryColor,
-            foregroundColor: Colors.white,
-            expandedHeight: 140,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 50, bottom: 16),
-              title: const Text(
-                "Feed Schedule",
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Theme.of(context).primaryColor, Colors.blue.shade800],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text(
-                        "Total Cycle Feed",
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                      Text(
-                        "${totalFeedCycle.toStringAsFixed(0)} kg",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              "${widget.day.doc}",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: AppColors.textPrimary,
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final dayPlan = plan.days[index];
-                  final isToday = dayPlan.doc == pond.doc;
-                  final isFuture = dayPlan.doc > pond.doc;
-
-                  return _buildDayCard(context, dayPlan, isToday, isFuture);
-                },
-                childCount: plan.days.length,
+          _buildInputCell(_controllers[0]),
+          _buildInputCell(_controllers[1]),
+          _buildInputCell(_controllers[2]),
+          _buildInputCell(_controllers[3]),
+          Expanded(
+            flex: 2,
+            child: Text(
+              total.toStringAsFixed(1),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
               ),
             ),
           ),
@@ -139,128 +342,37 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     );
   }
 
-  Widget _buildDayCard(BuildContext context, FeedDayPlan dayPlan, bool isToday, bool isFuture) {
-    Color cardColor = Colors.white;
-    Color textColor = Colors.black87;
-    Color iconColor = Colors.grey.shade400;
-
-    if (isToday) {
-      cardColor = Theme.of(context).primaryColor;
-      textColor = Colors.white;
-      iconColor = Colors.white70;
-    } else if (isFuture) {
-      cardColor = Colors.white.withOpacity(0.7);
-      textColor = Colors.grey.shade600;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isToday
-            ? [BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
-            : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))],
-        border: isFuture ? Border.all(color: Colors.grey.shade200) : null,
-      ),
+  Widget _buildInputCell(TextEditingController controller) {
+    return Expanded(
+      flex: 3,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            // DOC Badge
-            Container(
-              width: 50,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: isToday ? Colors.white.withOpacity(0.2) : (isFuture ? Colors.grey.shade100 : Colors.blue.shade50),
-                borderRadius: BorderRadius.circular(12),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: SizedBox(
+          height: 48,
+          child: TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.center,
+            onChanged: (val) => _onChanged(),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            decoration: InputDecoration(
+              contentPadding: EdgeInsets.zero,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              child: Column(
-                children: [
-                  Text(
-                    "DOC",
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: isToday ? Colors.white70 : (isFuture ? Colors.grey.shade500 : Colors.blue.shade300),
-                    ),
-                  ),
-                  Text(
-                    "${dayPlan.doc}",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: isToday ? Colors.white : (isFuture ? Colors.grey.shade400 : Colors.blue.shade700),
-                    ),
-                  ),
-                ],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.blue, width: 1.5),
               ),
             ),
-            const SizedBox(width: 16),
-            
-            // Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Total: ${dayPlan.total.toStringAsFixed(1)} kg",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      if (isToday)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            "TODAY",
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                          ),
-                        )
-                      else if (!isFuture)
-                        const Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      _mealText("R1", dayPlan.r1, textColor),
-                      _mealText("R2", dayPlan.r2, textColor),
-                      _mealText("R3", dayPlan.r3, textColor),
-                      _mealText("R4", dayPlan.r4, textColor),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _mealText(String label, double val, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text("$label: ", style: TextStyle(color: color.withOpacity(0.6), fontSize: 12, fontWeight: FontWeight.bold)),
-        Text("${val.toStringAsFixed(1)}", style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
 }
-

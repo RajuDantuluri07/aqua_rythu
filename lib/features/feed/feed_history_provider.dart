@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/enums/tray_status.dart';
 
 class FeedHistoryLog {
   final DateTime date;
   final int doc;
   final List<double> rounds; // Use a list for flexibility
+  final List<TrayStatus?> trayStatuses;
   final double expected;
   final double cumulative;
 
@@ -11,6 +13,7 @@ class FeedHistoryLog {
     required this.date,
     required this.doc,
     required this.rounds,
+    required this.trayStatuses,
     required this.expected,
     required this.cumulative,
   });
@@ -22,51 +25,154 @@ class FeedHistoryLog {
   bool get isWarning => delta < -1;
 }
 
-class FeedHistoryNotifier extends StateNotifier<List<FeedHistoryLog>> {
-  FeedHistoryNotifier() : super([]) {
-    _loadMockData();
+class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>>> {
+  FeedHistoryNotifier() : super({}) {
+    _loadInitialMockData();
   }
 
-  void _loadMockData() {
+  void _loadInitialMockData() {
+    // Generate some history for 'Pond 1'
     final now = DateTime.now();
     final List<FeedHistoryLog> logs = [];
     double runningCum = 0;
 
-    // Generate 30 days of mock data (Oldest -> Newest for calculation, then reversed for UI)
-    // Actually, usually we calculate cumulative from start. 
-    // Let's generate from DOC 1 to DOC 32.
-    
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 31; i++) {
       final doc = i + 1;
-      final date = now.subtract(Duration(days: 32 - doc));
+      final date = now.subtract(Duration(days: 31 - i + 1)); // Past days
       
-      // Mock Algorithm: Feed increases with DOC
-      final double baseFeed = doc * 0.8; 
-      
-      // Add some noise
-      // Mocking 4 rounds for now, but this can be dynamic
-      final mockRounds = List.generate(4, (_) => (baseFeed * 0.25).roundToDouble());
+      final double baseFeed = doc * 0.5 + 5; 
+      final mockRounds = [baseFeed * 0.25, baseFeed * 0.25, baseFeed * 0.25, baseFeed * 0.25];
       
       final total = mockRounds.reduce((a, b) => a + b);
       runningCum += total;
       
-      // Mock Expected (Simulate overfeeding/underfeeding occasionally)
-      final expected = (i % 7 == 0) ? total + 2.0 : total;
-
       logs.add(FeedHistoryLog(
         date: date,
         doc: doc,
         rounds: mockRounds,
-        expected: expected,
+        trayStatuses: List.filled(4, null),
+        expected: total,
         cumulative: runningCum,
       ));
     }
     
-    // UI needs Newest First (Top)
-    state = logs.reversed.toList(); 
+    // Add Today as an empty placeholder or partially filled if needed
+    // But better to add it on the fly from Dashboard
+    
+    state = {
+      'Pond 1': logs.reversed.toList(),
+    };
+  }
+
+  /// 🍽 LOG REAL-TIME FEEDING
+  void logFeeding({
+    required String pondId,
+    required int doc,
+    required int round,
+    required double qty,
+  }) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    final pondLogs = List<FeedHistoryLog>.from(state[pondId] ?? []);
+    
+    // Check if today already exists
+    int todayIdx = pondLogs.indexWhere((log) => 
+      log.date.year == today.year && 
+      log.date.month == today.month && 
+      log.date.day == today.day
+    );
+
+    if (todayIdx != -1) {
+      final existing = pondLogs[todayIdx];
+      final newRounds = List<double>.from(existing.rounds);
+      final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
+      
+      // Expand rounds if needed (e.g. if rounds was [0,0,0,0])
+      if (newRounds.length < round) {
+        final diff = round - newRounds.length;
+        newRounds.addAll(List.filled(diff, 0.0));
+        newTrays.addAll(List.filled(diff, null));
+      }
+      newRounds[round - 1] = qty;
+
+      pondLogs[todayIdx] = FeedHistoryLog(
+        date: existing.date,
+        doc: doc,
+        rounds: newRounds,
+        trayStatuses: newTrays,
+        expected: existing.expected,
+        cumulative: existing.cumulative, // We should update this too, but let's keep it simple for now
+      );
+    } else {
+      // Create new today log
+      final newRounds = List.filled(4, 0.0);
+      newRounds[round - 1] = qty;
+      final newTrays = List<TrayStatus?>.filled(4, null);
+      
+      final prevCum = pondLogs.isNotEmpty ? pondLogs.first.cumulative : 0.0;
+
+      pondLogs.insert(0, FeedHistoryLog(
+        date: today,
+        doc: doc,
+        rounds: newRounds,
+        trayStatuses: newTrays,
+        expected: 10.0, // Mock expected
+        cumulative: prevCum + qty,
+      ));
+    }
+
+    state = {
+      ...state,
+      pondId: pondLogs,
+    };
+  }
+
+  /// 📥 LOG TRAY STATUS
+  void logTray({
+    required String pondId,
+    required int doc,
+    required int round,
+    required TrayStatus status,
+  }) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final pondLogs = List<FeedHistoryLog>.from(state[pondId] ?? []);
+
+    final todayIdx = pondLogs.indexWhere((log) =>
+        log.date.year == today.year &&
+        log.date.month == today.month &&
+        log.date.day == today.day);
+
+    if (todayIdx != -1) {
+      final existing = pondLogs[todayIdx];
+      final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
+
+      // Ensure capacity if rounds are expanding dynamically
+      if (newTrays.length < round) {
+        newTrays.addAll(List.filled(round - newTrays.length, null));
+      }
+
+      newTrays[round - 1] = status;
+
+      pondLogs[todayIdx] = FeedHistoryLog(
+        date: existing.date,
+        doc: existing.doc,
+        rounds: existing.rounds,
+        trayStatuses: newTrays,
+        expected: existing.expected,
+        cumulative: existing.cumulative,
+      );
+
+      state = {
+        ...state,
+        pondId: pondLogs,
+      };
+    }
   }
 }
 
-final feedHistoryProvider = StateNotifierProvider<FeedHistoryNotifier, List<FeedHistoryLog>>((ref) {
+final feedHistoryProvider = StateNotifierProvider<FeedHistoryNotifier, Map<String, List<FeedHistoryLog>>>((ref) {
   return FeedHistoryNotifier();
 });

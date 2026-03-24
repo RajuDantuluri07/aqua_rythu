@@ -1,41 +1,64 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SamplingLog {
+class GrowthSample {
+  final String id;
   final String pondId;
   final DateTime date;
   final int doc;
-  final double avgWeight;
-  final int count;
+  
+  final double sampleWeightKg;
+  final int sampleCount;
+  
+  final double countSize; // Count per kg
+  final double abw;       // Average Body Weight in grams
 
-  SamplingLog({
+  GrowthSample({
+    required this.id,
     required this.pondId,
     required this.date,
     required this.doc,
-    required this.avgWeight,
-    required this.count,
+    required this.sampleWeightKg,
+    required this.sampleCount,
+    required this.countSize,
+    required this.abw,
   });
+
+  /// Factory to calculate from inputs
+  factory GrowthSample.fromInput({
+    required String pondId,
+    required int doc,
+    required double weightKg,
+    required int count,
+  }) {
+    final countSize = count / weightKg;
+    final abw = (weightKg * 1000) / count;
+    
+    return GrowthSample(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      pondId: pondId,
+      date: DateTime.now(),
+      doc: doc,
+      sampleWeightKg: weightKg,
+      sampleCount: count,
+      countSize: countSize,
+      abw: abw,
+    );
+  }
 }
 
 class GrowthState {
-  final double avgWeight; // grams
-  final int totalCount;   // estimated total survival
-  final double biomass;   // kg
-  final List<SamplingLog> logs;
+  final List<GrowthSample> logs;
 
   GrowthState({
-    this.avgWeight = 15.0, // Default matching temp data
-    this.totalCount = 100000,
     this.logs = const [],
-  }) : biomass = (avgWeight * totalCount) / 1000;
+  });
+
+  GrowthSample? get lastSample => logs.isNotEmpty ? logs.first : null;
 
   GrowthState copyWith({
-    double? avgWeight,
-    int? totalCount,
-    List<SamplingLog>? logs,
+    List<GrowthSample>? logs,
   }) {
     return GrowthState(
-      avgWeight: avgWeight ?? this.avgWeight,
-      totalCount: totalCount ?? this.totalCount,
       logs: logs ?? this.logs,
     );
   }
@@ -45,20 +68,17 @@ class GrowthNotifier extends StateNotifier<GrowthState> {
   final String pondId;
   GrowthNotifier(this.pondId) : super(GrowthState());
 
-  /// Update stats from Sampling or Mortality checks
-  void updateStats({double? avgWeight, int? totalCount, required int doc}) {
-    final newLog = SamplingLog(
+  /// 💾 Add New Sample
+  void addSample({required double weightKg, required int count, required int doc}) {
+    final newSample = GrowthSample.fromInput(
       pondId: pondId,
-      date: DateTime.now(),
       doc: doc,
-      avgWeight: avgWeight ?? state.avgWeight,
-      count: totalCount ?? state.totalCount,
+      weightKg: weightKg,
+      count: count,
     );
 
     state = state.copyWith(
-      avgWeight: avgWeight,
-      totalCount: totalCount,
-      logs: [newLog, ...state.logs],
+      logs: [newSample, ...state.logs],
     );
   }
 }

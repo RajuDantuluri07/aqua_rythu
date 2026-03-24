@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/engines/feed_state_engine.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_plan_provider.dart';
+import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
+
 
 /// =======================
 /// STATE
@@ -106,7 +108,38 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     newMap[round] = true;
 
     state = state.copyWith(feedDone: newMap);
+
+    // 🕒 Persistence to History Ledger
+    final planMap = ref.read(feedPlanProvider);
+    final plan = planMap[state.selectedPond];
+    if (plan != null) {
+      final dayPlan = plan.days.firstWhere((d) => d.doc == state.doc, 
+        orElse: () => FeedDayPlan(doc: state.doc, r1: 1.0, r2: 1.0, r3: 1.0, r4: 1.0));
+      
+      double qty = round == 1 ? dayPlan.r1 : 
+                 (round == 2 ? dayPlan.r2 : 
+                 (round == 3 ? dayPlan.r3 : dayPlan.r4));
+
+      // Apply adjustment if round > 1
+      if (round > 1) {
+         final prevTray = state.trayResults[round - 1];
+         if (prevTray != null) {
+            qty = FeedStateEngine.applyTrayAdjustment(
+              plannedQty: qty, 
+              trayResult: prevTray
+            );
+         }
+      }
+
+      ref.read(feedHistoryProvider.notifier).logFeeding(
+        pondId: state.selectedPond, 
+        doc: state.doc, 
+        round: round, 
+        qty: qty
+      );
+    }
   }
+
 
   // =========================================================
   // 🧠 TRAY LOGIC (FIXED)
@@ -122,17 +155,24 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final List<TrayStatus> trayStatuses = latest.trays;
     if (trayStatuses.isEmpty) return;
 
-    /// ✅ Save first tray result to the dashboard state for immediate UI feedback.
+    final finalStatus = FeedStateEngine.aggregateTrayStatus(trayStatuses);
+
+    ref.read(feedHistoryProvider.notifier).logTray(
+      pondId: state.selectedPond,
+      doc: state.doc,
+      round: round,
+      status: finalStatus,
+    );
+
     final newMap = Map<int, TrayStatus>.from(state.trayResults);
-    newMap[round] = trayStatuses.first;
+    newMap[round] = finalStatus;
 
     state = state.copyWith(
       trayResults: newMap,
     );
   }
-
-  }
 }
+
 
 
 /// =======================

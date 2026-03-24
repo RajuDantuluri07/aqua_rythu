@@ -1,4 +1,6 @@
 import '../enums/tray_status.dart';
+import 'package:aqua_rythu/features/tray/tray_model.dart';
+import 'engine_constants.dart';
 
 enum FeedMode {
   beginner,
@@ -57,7 +59,9 @@ class FeedStateEngine {
 
     final showMarkFeed = isCurrent && !isDone && !isLocked;
 
-    // Show Tray CTA if fed, not blind mode, and tray not yet logged
+    // ✅ TRAY CTA LOGIC: 
+    // - Never show in Beginner Mode (DOC <= 15)
+    // - Always show after feeding in other modes unless already logged
     final showTrayCTA = isDone &&
         mode != FeedMode.beginner &&
         !isTrayLogged;
@@ -71,6 +75,7 @@ class FeedStateEngine {
       isTrayLogged: isTrayLogged,
     );
   }
+
 
   /// LOCK RULE
   static bool _isLocked({
@@ -123,26 +128,58 @@ class FeedStateEngine {
 
   /// Calculates the adjustment factor based on tray priorities.
   /// Priority: Full > Half > Small > Empty
-  static double getAdjustmentFactor(List<TrayStatus> trays) {
+  static double getAdjustmentFactor(TrayStatus status) {
     // 🔒 CORE LOGIC (LOCKED)
-    if (trays.contains(TrayStatus.fullLeft)) {
-      return 0.7; // -30%
+    if (status == TrayStatus.heavy) {
+      return FeedEngineConstants.heavyLeftoverMultiplier; // -30%
     }
-    if (trays.contains(TrayStatus.halfLeft)) {
-      return 0.85; // -15%
+    if (status == TrayStatus.medium) {
+      return FeedEngineConstants.mediumLeftoverMultiplier; // -15%
     }
-    if (trays.contains(TrayStatus.smallLeft)) {
-      return 0.95; // -5%
+    if (status == TrayStatus.slight) {
+      return FeedEngineConstants.slightLeftoverMultiplier; // -5%
     }
-    return 1.0; // No change for Empty
+    return FeedEngineConstants.emptyTrayMultiplier; // No change for Empty
   }
 
   /// Applies the calculated tray adjustment to a planned feed quantity.
   static double applyTrayAdjustment(
-      {required double plannedQty, required List<TrayStatus> trayResults}) {
-    final factor = getAdjustmentFactor(trayResults);
+      {required double plannedQty, required TrayStatus trayResult}) {
+    final factor = getAdjustmentFactor(trayResult);
     final adjustedQty = plannedQty * factor;
     
     return adjustedQty;
+  }
+
+  /// Aggregates a list of tray statuses into a single representative status.
+  /// Logic: Weighted Average (Heavy=3, Medium=2, Slight=1, Empty=0)
+  static TrayStatus aggregateTrayStatus(List<TrayStatus> statuses) {
+    if (statuses.isEmpty) return TrayStatus.slight; // Default fallback
+
+    int totalScore = 0;
+    TrayStatus? emptyStatus;
+
+    for (final status in statuses) {
+      if (status == TrayStatus.heavy) {
+        totalScore += 3;
+      } else if (status == TrayStatus.medium) {
+        totalScore += 2;
+      } else if (status == TrayStatus.slight) {
+        totalScore += 1;
+      } else {
+        emptyStatus = status; // Capture the 'empty' enum variant
+      }
+    }
+
+    final double avg = totalScore / statuses.length;
+
+    if (avg >= 2.5) return TrayStatus.heavy;
+    if (avg >= 1.5) return TrayStatus.medium;
+    if (avg >= 0.5) return TrayStatus.slight;
+
+    return emptyStatus ?? TrayStatus.values.firstWhere(
+        (e) => e != TrayStatus.heavy && e != TrayStatus.medium && e != TrayStatus.slight,
+        orElse: () => TrayStatus.slight // Fallback safety
+    );
   }
 }

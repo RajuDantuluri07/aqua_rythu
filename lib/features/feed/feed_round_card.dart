@@ -4,21 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/features/pond/pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/supplements/supplement_provider.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
+import '../../core/theme/app_theme.dart';
+import 'widgets/supplement_chip.dart';
 
 /// 🔁 Round → Feeding Time
 String mapRoundToTimeKey(int round) {
-  switch (round) {
+    switch (round) {
     case 1:
-      return "morning";
+      return "6 AM";
     case 2:
-      return "noon";
+      return "10 AM";
     case 3:
-      return "evening";
+      return "2 PM";
     case 4:
-      return "night";
+      return "6 PM";
     default:
-      return "morning";
+      return "6 AM";
   }
+
 }
 
 class FeedRoundCard extends ConsumerStatefulWidget {
@@ -73,135 +76,189 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
     final feedingTime = mapRoundToTimeKey(widget.round);
 
     /// 🧠 Calculate supplements
-    // print("DOC: $currentDoc | Feed: $feedQty | Time: $feedingTime");
-
     final supplementResults = SupplementCalculator.calculate(
       supplements: supplements,
       currentDoc: currentDoc,
       currentFeedingTime: feedingTime,
       feedQty: widget.feedQty, // ✅ Uses passed qty (plan-based), not static state
     );
-    // print("Supplements: $supplementResults");
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(AppSpacing.s + 2),
+      margin: const EdgeInsets.only(bottom: AppSpacing.m),
       decoration: BoxDecoration(
-        color: widget.isLocked ? Colors.grey.shade100 : (widget.isCurrent ? Colors.green.shade50 : Colors.white),
-        borderRadius: BorderRadius.circular(16),
+        color: widget.isLocked ? Colors.grey.shade100 : (widget.isCurrent ? AppColors.success.withOpacity(0.05) : Colors.white),
+        borderRadius: AppRadius.rBase,
         border: widget.isLocked
-            ? Border.all(color: Colors.grey.shade300)
+            ? Border.all(color: AppColors.border)
             : (widget.isPendingTray 
-                ? Border.all(color: Colors.orange, width: 2) // ⚠️ Pending Tray Border
+                ? Border.all(color: AppColors.warning, width: 2) // ⚠️ Pending Tray Border
                 : widget.isCurrent
-                ? Border.all(color: Colors.green, width: 2)
-                : Border.all(color: Colors.grey.shade300)),
+                ? Border.all(color: AppColors.success, width: 2)
+                : Border.all(color: AppColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// HEADER
+          /// 🔝 TOP HEADER ROW
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Round ${widget.round} • ${widget.time}",
-                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
-              ),
-              if (widget.isLocked) 
-                const Icon(Icons.lock, size: 16, color: Colors.grey)
-              else if (widget.isPendingTray)
-                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded, size: 12, color: Colors.orange.shade800),
-                      const SizedBox(width: 4),
-                      Text("TRAY CHECK PENDING", style: TextStyle(fontSize: 10, color: Colors.orange.shade800, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          /// FEED
-          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    "${widget.feedQty.toStringAsFixed(1)} kg",
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Badge Row
+                    Row(
+                      children: [
+                        if (widget.isCurrent) ...[
+                          const SizedBox(width: AppSpacing.s),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.error,
+                              borderRadius: AppRadius.rs / 2,
+                            ),
+                            child: const Text("NOW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                        if (widget.isAutoAdjusted) ...[
+                          const SizedBox(width: AppSpacing.s),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: AppRadius.rs / 2,
+                              border: Border.all(color: const Color(0xFFDBEafe)),
+                            ),
+                            child: const Text("AUTO ADJUSTED", style: TextStyle(color: Color(0xFF3B82F6), fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ],
                     ),
+                    AppSpacing.hS,
+                    Text(
+                      "Round ${widget.round} • ${widget.time}",
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    if (widget.isCurrent && !widget.isDone && !widget.isLocked) ...[
+                      AppSpacing.hS,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning,
+                          borderRadius: AppRadius.rs - 2,
+                        ),
+                        child: const Text(
+                          "RECOMMENDED ACTION",
+                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              
+              /// ⚖️ WEIGHT DISPLAY (TOP RIGHT)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        "${widget.feedQty.toStringAsFixed(1)}",
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Text(
+                        "kg",
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                      ),
+                    ],
                   ),
-                  if (widget.isAutoAdjusted && widget.originalQty != null) ...[
-                    const SizedBox(width: 8),
+                  if (widget.isAutoAdjusted && widget.originalQty != null)
                     Text(
                       "${widget.originalQty!.toStringAsFixed(1)} kg",
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         decoration: TextDecoration.lineThrough,
-                        color: Colors.grey,
+                        color: Color(0xFF94A3B8),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ],
                 ],
               ),
-              const SizedBox(height: 4),
-              if (widget.isAutoAdjusted) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: const Text(
-                    "AUTO ADJUSTED",
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.brown,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
+          
+          if (!widget.isCurrent && widget.isLocked)
+             const Padding(
+               padding: EdgeInsets.only(top: 8),
+               child: Icon(Icons.lock, size: 16, color: Colors.grey),
+             ),
 
-          const SizedBox(height: 10),
+          if (widget.isPendingTray)
+             Padding(
+               padding: const EdgeInsets.only(top: AppSpacing.m),
+               child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
+                  AppSpacing.wS,
+                  const Text("TRAY CHECK PENDING", style: TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.bold)),
+                ],
+              ),
+             ),
+
+
+
+          const SizedBox(height: 8),
 
           /// ⚠️ ADJUSTMENT WARNING
           if (widget.isAutoAdjusted && widget.originalQty != null && widget.originalQty! > widget.feedQty) ...[
             Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 12),
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.m),
+              margin: const EdgeInsets.only(bottom: AppSpacing.m, top: AppSpacing.s),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
+                color: const Color(0xFFFEFCE8),
+                borderRadius: AppRadius.rm,
+                border: Border.all(color: const Color(0xFFFEF08A)),
               ),
-              child: Text(
-                "Feed reduced due to leftover\nPrevious: ${widget.originalQty!.toStringAsFixed(1)} kg → Now: ${widget.feedQty.toStringAsFixed(1)} kg",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.orange.shade900,
-                  height: 1.4,
-                ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 20, color: Color(0xFF854D0E)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Feed reduced due to leftover",
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF854D0E), fontSize: 13),
+                        ),
+                        Text(
+                          "Previous: ${widget.originalQty!.toStringAsFixed(1)} kg → Now: ${widget.feedQty.toStringAsFixed(1)} kg",
+                          style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
+
 
           /// TRAY
           if (tray != null)
@@ -210,108 +267,13 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
               style: const TextStyle(color: Colors.grey),
             ),
 
-          /// 🧠 SUPPLEMENTS
+          /// 🧠 SUPPLEMENTS (COMPACT)
           if (!widget.isLocked && supplementResults.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.purple.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.purple.shade100),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.assignment_turned_in, size: 16, color: Colors.purple.shade700),
-                      const SizedBox(width: 8),
-                      Text(
-                        "MIX REQUIRED",
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.purple.shade800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.purple.shade200),
-                        ),
-                        child: Text(
-                          "MANDATORY",
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade800),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...supplementResults.map((group) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          group.supplementName,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
-                        const SizedBox(height: 4),
-                        ...group.items.map((item) {
-                          if (item.totalDose <= 0) return const SizedBox();
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Flex(
-                              direction: Axis.horizontal,
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    item.itemName,
-                                    style: const TextStyle(fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 2,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "${item.totalDose.toStringAsFixed(1)} ${item.unit}",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                        const SizedBox(height: 8),
-                      ],
-                    );
-                  }),
-                  const Divider(height: 16),
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 14, color: Colors.purple.shade700),
-                      const SizedBox(width: 6),
-                      Text(
-                        "Mix into feed before putting in pond",
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.purple.shade800, fontStyle: FontStyle.italic),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            AppSpacing.hS,
+            _buildCompactSupplements(context, supplementResults),
           ],
 
-          const SizedBox(height: 12),
+          AppSpacing.hS,
 
           /// BUTTONS
           if (widget.isCurrent && !widget.isDone && !widget.isLocked)
@@ -328,23 +290,34 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
+                  backgroundColor: AppColors.success,
                   foregroundColor: Colors.white,
                 ),
-                child: _isSubmitting ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text("MARK AS FED"),
+                child: _isSubmitting 
+                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_outline, size: 20),
+                        AppSpacing.wS,
+                        const Text("MARK AS FED", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      ],
+                    ),
               ),
             )
+
+
           else if (widget.isDone && !widget.isPendingTray)
-            const Row( // Only show simple "Feeding Completed" if tray is also done (or not needed)
+            Row( // Only show simple "Feeding Completed" if tray is also done (or not needed)
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 20),
-                SizedBox(width: 8),
-                Text("Feeding Completed", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                AppSpacing.wS,
+                const Text("Feeding Completed", style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
               ],
             ),
 
           if (widget.showTrayCTA) ...[
-             const SizedBox(height: 8),
+             AppSpacing.hS,
              SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -356,5 +329,52 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
         ],
       ),
     );
+  }
+
+  Widget _buildCompactSupplements(BuildContext context, List<SupplementGroupResult> results) {
+    // Flatten results to individual items
+    final List<SupplementItem> items = results.expand((group) {
+      return group.items.map((item) => SupplementItem(
+            name: item.itemName,
+            unit: item.unit,
+            quantity: item.totalDose,
+            isMandatory: true, // Defaulting to true as per current logic
+          ));
+    }).toList();
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    if (items.length <= 2) {
+      // Case A: ≤ 2 items → Horizontal row
+      return Row(
+        children: items.map((s) => SupplementChip(item: s)).toList(),
+      );
+    } else if (items.length <= 4) {
+      // Case B: 3–4 items → 2-column grid
+      return GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        childAspectRatio: 3.5,
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
+        children: items.map((s) => SupplementChip(item: s)).toList(),
+      );
+    } else {
+      // Case C: > 4 items → Show first 2 + “+N more”
+      return Row(
+        children: [
+          SupplementChip(item: items[0]),
+          SupplementChip(item: items[1]),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              "+${items.length - 2} more",
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+            ),
+          ),
+        ],
+      );
+    }
   }
 }

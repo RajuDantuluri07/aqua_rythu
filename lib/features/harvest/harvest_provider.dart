@@ -8,6 +8,8 @@ class HarvestEntry {
   final double quantity; // kg
   final int countPerKg;
   final double pricePerKg;
+  final double expenses;
+  final String notes;
   final String type;     // partial / intermediate / final
 
   HarvestEntry({
@@ -17,10 +19,13 @@ class HarvestEntry {
     required this.quantity,
     required this.countPerKg,
     required this.pricePerKg,
+    this.expenses = 0,
+    this.notes = "",
     required this.type,
   });
 
   double get revenue => quantity * pricePerKg;
+  double get profit => revenue - expenses;
 }
 
 /// ================= NOTIFIER =================
@@ -32,6 +37,11 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
     state = [...state, entry];
   }
 
+  /// 🧹 RESET HARVESTS (New Cycle)
+  void clearHarvests() {
+    state = [];
+  }
+
   /// 📊 TOTAL HARVEST
   double get totalHarvest =>
       state.fold(0, (sum, h) => sum + h.quantity);
@@ -39,6 +49,13 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
   /// 💰 TOTAL REVENUE
   double get totalRevenue =>
       state.fold(0, (sum, h) => sum + h.revenue);
+
+  /// 💸 TOTAL EXPENSES
+  double get totalExpenses =>
+      state.fold(0, (sum, h) => sum + h.expenses);
+
+  /// 💰 TOTAL PROFIT
+  double get totalProfit => totalRevenue - totalExpenses;
 
   /// 🏁 FINAL HARVEST DONE?
   bool get isFinalHarvestDone =>

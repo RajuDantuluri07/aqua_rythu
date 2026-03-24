@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/utils/logger.dart';
+
+enum PondStatus { active, completed }
 
 class Pond {
   final String id;
@@ -8,6 +11,7 @@ class Pond {
   final int seedCount;
   final int plSize;
   final int numTrays;
+  final PondStatus status;
 
   Pond({
     required this.id,
@@ -17,7 +21,30 @@ class Pond {
     this.seedCount = 100000,
     this.plSize = 10,
     this.numTrays = 4,
+    this.status = PondStatus.active,
   });
+
+  Pond copyWith({
+    String? id,
+    String? name,
+    double? area,
+    DateTime? stockingDate,
+    int? seedCount,
+    int? plSize,
+    int? numTrays,
+    PondStatus? status,
+  }) {
+    return Pond(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      area: area ?? this.area,
+      stockingDate: stockingDate ?? this.stockingDate,
+      seedCount: seedCount ?? this.seedCount,
+      plSize: plSize ?? this.plSize,
+      numTrays: numTrays ?? this.numTrays,
+      status: status ?? this.status,
+    );
+  }
 
   int get doc => DateTime.now().difference(stockingDate).inDays + 1;
 }
@@ -157,6 +184,51 @@ class FarmNotifier extends StateNotifier<FarmState> {
       }).toList(),
     );
   }
+
+  void updatePondStatus(String pondId, PondStatus status) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        return Farm(
+          id: f.id,
+          name: f.name,
+          location: f.location,
+          ponds: f.ponds.map((p) {
+            if (p.id == pondId) {
+              return p.copyWith(status: status);
+            }
+            return p;
+          }).toList(),
+        );
+      }).toList(),
+    );
+  }
+
+  void resetPond(String pondId, {
+    required int seedCount,
+    required int plSize,
+    required DateTime stockingDate,
+  }) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        return Farm(
+          id: f.id,
+          name: f.name,
+          location: f.location,
+          ponds: f.ponds.map((p) {
+            if (p.id == pondId) {
+              return p.copyWith(
+                status: PondStatus.active,
+                seedCount: seedCount,
+                plSize: plSize,
+                stockingDate: stockingDate,
+              );
+            }
+            return p;
+          }).toList(),
+        );
+      }).toList(),
+    );
+  }
 }
 
 final farmProvider =
@@ -169,9 +241,13 @@ final docProvider = Provider.family<int, String>((ref, pondId) {
 
   for (var farm in farmState.farms) {
     try {
-      final pond = farm.ponds.firstWhere((p) => p.id == pondId);
-      return pond.doc;
-    } catch (_) {}
+      final pondIndex = farm.ponds.indexWhere((p) => p.id == pondId);
+      if (pondIndex != -1) {
+        return farm.ponds[pondIndex].doc;
+      }
+    } catch (e, stack) {
+      AppLogger.error("Error in docProvider for pondId: $pondId", e, stack);
+    }
   }
 
   return 1;

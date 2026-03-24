@@ -15,7 +15,12 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
         log.time.month == today.month &&
         log.time.day == today.day);
   }
+
+  void clearLogs() {
+    state = [];
+  }
 }
+
 
 final trayProvider =
     StateNotifierProvider.family<TrayNotifier, List<TrayLog>, String>(

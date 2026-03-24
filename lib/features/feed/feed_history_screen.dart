@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'feed_history_provider.dart';
+import '../../core/theme/app_theme.dart';
 
 class FeedHistoryScreen extends ConsumerWidget {
   final String pondId;
@@ -9,318 +10,263 @@ class FeedHistoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final logs = ref.watch(feedHistoryProvider);
+    final historyMap = ref.watch(feedHistoryProvider);
+    final logs = historyMap[pondId] ?? [];
 
-    // Calculate Summary Stats from mock data
+    // Summary Stats
     double total7d = 0;
-    int count7d = 0;
     for (int i = 0; i < logs.length && i < 7; i++) {
-       total7d += logs[i].total;
-       count7d++;
+      total7d += logs[i].total;
     }
-    double avg7d = count7d > 0 ? (total7d / count7d) : 0;
-    
-    // Hardcoded DOC for now based on first log if exists
-    final currentDoc = logs.isNotEmpty ? logs.first.doc : 0;
+    double avg7d = logs.isNotEmpty ? (total7d / (logs.length > 7 ? 7 : logs.length)) : 0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: CustomScrollView(
-        slivers: [
-          // 1. Premium Header
-          SliverAppBar(
-            backgroundColor: Theme.of(context).primaryColor,
-            foregroundColor: Colors.white,
-            expandedHeight: 120,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 50, bottom: 16),
-              title: const Text(
-                "Feed History",
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Theme.of(context).primaryColor, Colors.teal.shade700],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+      backgroundColor: AppColors.cardBg,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          children: [
+            const Text("Feed History", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+            Text("${pondId.toUpperCase()} | DOC ${logs.isNotEmpty ? logs.first.doc : 0}", 
+                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          IconButton(onPressed: () {}, icon: const Icon(Icons.calendar_today_outlined, size: 20)),
+          IconButton(onPressed: () {}, icon: const Icon(Icons.table_rows_outlined, size: 20)),
+          IconButton(onPressed: () {}, icon: const Icon(Icons.file_download_outlined, size: 20)),
+        ],
+        elevation: 0.5,
+        backgroundColor: AppColors.cardBg,
+        centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          // Summary Strip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.m),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              border: Border(bottom: BorderSide(color: AppColors.border)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
+                      children: [
+                        const TextSpan(text: "Last 7d: "),
+                        TextSpan(text: "${total7d.toInt()}kg ", style: const TextStyle(fontWeight: FontWeight.w900)),
+                        const TextSpan(text: "(+5.2%) ", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        const TextSpan(text: "| Avg: "),
+                        TextSpan(text: "${avg7d.toInt()}kg", style: const TextStyle(fontWeight: FontWeight.w900)),
+                      ],
+                    ),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: AppRadius.rs / 2,
+                  ),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          "POND 1 • DOC $currentDoc",
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      )
+                      const Text("DOC: ", style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                      Text("${logs.isNotEmpty ? logs.first.doc : 0}", 
+                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                     ],
                   ),
                 ),
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.file_download_outlined),
-                onPressed: () {},
-                tooltip: "Export PDF",
-              ),
-            ],
-          ),
-
-          // 2. Summary Strip
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(16, 20, 16, 20),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _SummaryStat(
-                    label: "Last 7 Days",
-                    value: "${total7d.toStringAsFixed(1)} kg",
-                    icon: Icons.bar_chart_rounded,
-                    color: Colors.blue,
-                  ),
-                  Container(width: 1, height: 40, color: Colors.grey.shade200),
-                  _SummaryStat(
-                    label: "Daily Avg",
-                    value: "${avg7d.toStringAsFixed(1)} kg",
-                    icon: Icons.trending_up_rounded,
-                    color: Colors.green,
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
 
-          // 3. Ledger Header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                children: [
-                  _LedgerHeaderCell("DATE", flex: 3),
-                  _LedgerHeaderCell("DOC", flex: 2),
-                  _LedgerHeaderCell("TOT", flex: 3),
-                  _LedgerHeaderCell("Δ", flex: 2),
-                  _LedgerHeaderCell("CUM", flex: 3),
-                ],
-              ),
-            ),
-          ),
-
-          // 4. Ledger List
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final log = logs[index];
-                  final now = DateTime.now();
-                  final isToday = log.date.year == now.year && log.date.month == now.month && log.date.day == now.day;
-                  
-                  return _LedgerRow(log: log, isToday: isToday);
-                },
-                childCount: logs.length,
-              ),
-            ),
-          ),
-          
-          const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _SummaryStat({required this.label, required this.value, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Row(
-        children: [
+          // Table Header
           Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 20),
+            color: const Color(0xFFF1F5F9), // Light blue-grey header
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+            child: Row(
+              children: [
+                _headerCell("DATE", flex: 3),
+                _headerCell("DOC", flex: 1),
+                _headerCell("R1", flex: 1),
+                _headerCell("R2", flex: 1),
+                _headerCell("R3", flex: 1),
+                _headerCell("R4", flex: 1),
+                _headerCell("TOT", flex: 2),
+                _headerCell("Δ", flex: 2),
+                _headerCell("CUM", flex: 2),
+                _headerCell("ST", flex: 1),
+              ],
+            ),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.black87)),
-            ],
-          )
+
+          // Scrollable List
+          Expanded(
+            child: ListView.builder(
+              itemCount: logs.length,
+              itemBuilder: (context, index) {
+                final log = logs[index];
+                final prevLog = (index + 1 < logs.length) ? logs[index + 1] : null;
+                final delta = (prevLog != null) ? (log.total - prevLog.total) : 0.0;
+                
+                return _buildHistoryRow(log, index == 0, delta);
+              },
+            ),
+          ),
         ],
       ),
     );
   }
-}
 
-class _LedgerHeaderCell extends StatelessWidget {
-  final String text;
-  final int flex;
-  const _LedgerHeaderCell(this.text, {required this.flex});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _headerCell(String label, {required int flex}) {
     return Expanded(
       flex: flex,
       child: Text(
-        text,
+        label,
         textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          color: AppColors.textSecondary,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
-}
 
-class _LedgerRow extends StatefulWidget {
-  final FeedHistoryLog log;
-  final bool isToday;
-
-  const _LedgerRow({required this.log, required this.isToday});
-
-  @override
-  State<_LedgerRow> createState() => _LedgerRowState();
-}
-
-class _LedgerRowState extends State<_LedgerRow> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHistoryRow(FeedHistoryLog log, bool isToday, double delta) {
     final dateFormat = DateFormat('dd MMM');
-    final String dateStr = widget.isToday ? "Today" : dateFormat.format(widget.log.date);
+    final String dateStr = isToday ? "Today, ${dateFormat.format(log.date)}" : dateFormat.format(log.date);
     
-    final bool hasWarning = widget.log.isWarning;
+    // Status Logic
+    // Today has R4 empty? (Simulation)
+    final bool incomplete = isToday && log.rounds.length > 3 && log.rounds[3] == 0;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: widget.isToday ? Theme.of(context).primaryColor.withOpacity(0.05) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: widget.isToday ? Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)) : Border.all(color: Colors.grey.shade200),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
       ),
-      child: InkWell(
-        onTap: () => setState(() => _expanded = !_expanded),
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
+      child: IntrinsicHeight(
+        child: Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 16, 4, 16),
-              child: Row(
-                children: [
-                  _Cell(dateStr, flex: 3, bold: widget.isToday, color: widget.isToday ? Theme.of(context).primaryColor : Colors.black87),
-                  _Cell("${widget.log.doc}", flex: 2, color: Colors.grey.shade700),
-                  _Cell(widget.log.total.toStringAsFixed(1), flex: 3, bold: true),
-                  _Cell(
-                    widget.log.delta > 0 ? "+${widget.log.delta.toStringAsFixed(1)}" : widget.log.delta.toStringAsFixed(1),
-                    flex: 2,
-                    color: widget.log.delta == 0 ? Colors.grey : (widget.log.delta > 0 ? Colors.green : Colors.red),
-                    bold: widget.log.delta != 0,
-                  ),
-                  _Cell(widget.log.cumulative.toStringAsFixed(0), flex: 3, color: Colors.blue.shade700, bold: true),
-                ],
-              ),
-            ),
-            if (_expanded)
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
+            // DATE
+            _dataCell(dateStr, flex: 3, bold: isToday, color: isToday ? Colors.orange.shade700 : Colors.black87),
+            _vDivider(),
+            // DOC
+            _dataCell("${log.doc}", flex: 1, color: isToday ? Colors.black87 : Colors.grey.shade500, bold: isToday),
+            _vDivider(),
+            // R1-R4
+            ...List.generate(4, (i) {
+              final val = (i < log.rounds.length) ? log.rounds[i] : 0.0;
+              final isMissing = (isToday && i == 3); // Emulate R4 missing for Today
+              return Expanded(
+                flex: 1,
+                child: Row(
                   children: [
-                    if (hasWarning)
+                    Expanded(
+                      child: Text(
+                        isMissing ? "--" : val.toStringAsFixed(1),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12, 
+                          fontWeight: isToday ? FontWeight.w900 : FontWeight.w500,
+                          color: isMissing ? Colors.grey.shade300 : Colors.black87,
+                        ),
+                      ),
+                    ),
+                    _vDivider(),
+                  ],
+                ),
+              );
+            }),
+            // TOT
+            _dataCell(log.total.toStringAsFixed(1), flex: 2, color: const Color(0xFF10B981), bold: true),
+            _vDivider(),
+            // DELTA
+            Expanded(
+              flex: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (delta != 0) ...[
                       Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
+                          border: Border.all(color: delta > 0 ? Colors.green.shade200 : Colors.red.shade200),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text("Feed consumption critically below expected (${widget.log.expected.toStringAsFixed(1)} kg). Check trays for uneaten feed.", style: TextStyle(color: Colors.red.shade900, fontSize: 12))),
+                            Icon(
+                              delta > 0 ? Icons.north_east : Icons.south_east,
+                              size: 10,
+                              color: delta > 0 ? Colors.green : Colors.red,
+                            ),
+                            Text(
+                              delta.abs().toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 10, 
+                                fontWeight: FontWeight.bold, 
+                                color: delta > 0 ? Colors.green : Colors.red,
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: List.generate(widget.log.rounds.length, (index) {
-                        return Column(
-                          children: [
-                            Text("R${index + 1}", style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text("${widget.log.rounds[index].toStringAsFixed(1)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          ],
-                        );
-                      }),
-                    ),
+                    ] else ...[
+                      const Text("0.0", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                    ],
                   ],
                 ),
-              )
+              ),
+            ),
+            _vDivider(),
+            // CUM
+            _dataCell(log.cumulative.toInt().toString(), flex: 2, bold: true, color: Colors.grey.shade800),
+            _vDivider(),
+            // ST
+            Expanded(
+              flex: 1,
+              child: Center(
+                child: Icon(
+                  incomplete ? Icons.warning_amber_rounded : Icons.check_rounded,
+                  size: 16,
+                  color: incomplete ? Colors.orange : Colors.green,
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
-}
 
-class _Cell extends StatelessWidget {
-  final String text;
-  final int flex;
-  final bool bold;
-  final Color? color;
-
-  const _Cell(this.text, {required this.flex, this.bold = false, this.color});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _dataCell(String text, {required int flex, bool bold = false, Color? color}) {
     return Expanded(
       flex: flex,
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: color ?? Colors.black87,
-          fontSize: 13,
-          fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: bold ? FontWeight.w900 : FontWeight.w500,
+            color: color ?? Colors.black87,
+          ),
+            color: color ?? AppColors.textPrimary,
+          ),
         ),
       ),
     );
   }
+
+  Widget _vDivider() => Container(width: 1, color: AppColors.border.withOpacity(0.5));
 }

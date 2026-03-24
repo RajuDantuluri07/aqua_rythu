@@ -13,13 +13,20 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_round_card.dart';
 import '../feed/completed_round_card.dart';
+import '../feed/upcoming_round_card.dart';
 import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
-import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
-import '../../core/engines/feed_state_engine.dart';
 import '../../features/supplements/supplement_provider.dart';
+import '../farm/new_cycle_setup_screen.dart';
+import '../harvest/harvest_summary_screen.dart';
+import 'package:intl/intl.dart';
+import '../../core/engines/feed_state_engine.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
+import '../../core/theme/app_theme.dart';
+
+
 
 
 
@@ -39,7 +46,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     {"round": 4, "time": "06:00 PM"},
   ];
 
-  void openTray(int round) async {
+  void openTray(int round, bool isLocked) async {
+    if (isLocked) return;
     final selectedPond = ref.read(pondDashboardProvider).selectedPond;
     final doc = ref.read(docProvider(selectedPond));
     
@@ -182,11 +190,24 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final dashboardState = ref.watch(pondDashboardProvider);
-    final selectedPond = dashboardState.selectedPond;
+    
+    // 🎯 NEW: Read pondId from arguments if provided
+    String selectedPond = dashboardState.selectedPond;
+    final args = ModalRoute.of(context)?.settings.arguments as String?;
+    if (args != null && args != selectedPond) {
+       // Sync provider with arguments
+       Future.microtask(() {
+         ref.read(pondDashboardProvider.notifier).selectPond(args);
+       });
+       selectedPond = args;
+    }
 
     final farmState = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
     final ponds = currentFarm?.ponds ?? [];
+    
+    final currentPond = ponds.firstWhere((p) => p.id == selectedPond, orElse: () => ponds.isNotEmpty ? ponds.first : Pond(id: "Dummy", name: "No Pond", area: 0, stockingDate: DateTime.now()));
+    final isCompleted = currentPond.status == PondStatus.completed;
 
     final allSupplements = ref.watch(supplementProvider);
     final supplements = allSupplements
@@ -205,6 +226,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
           log.round: log
     };
     final Map<int, bool> trayDone = todayTrayMap.map((key, value) => MapEntry(key, true));
+
 
     /// EMPTY STATE
     if (currentFarm != null && currentFarm.ponds.isEmpty) {
@@ -255,8 +277,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
         Future.microtask(() {
           ref.read(feedPlanProvider.notifier).createPlan(
             pondId: selectedPond,
-            seedCount: pondObj.seedCount,
-            plSize: pondObj.plSize,
+            seedCount: pondObj?.seedCount ?? 0,
+            plSize: pondObj?.plSize ?? 0,
           );
         });
       }
@@ -292,7 +314,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       bottomNavigationBar: const AppBottomBar(currentIndex: 1),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.base, AppSpacing.base, AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -305,7 +327,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(AppSpacing.s + 2),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
@@ -316,7 +338,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         child: Icon(Icons.water_drop_rounded,
                             color: Theme.of(context).primaryColor, size: 22),
                       ),
-                      const SizedBox(width: 12),
+                      AppSpacing.wM,
                       const Text(
                         "AquaRythu",
                         style: TextStyle(
@@ -331,7 +353,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     borderRadius: BorderRadius.circular(30),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                          horizontal: AppSpacing.base, vertical: AppSpacing.s + 2),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         boxShadow: [
@@ -413,14 +435,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         );
                       },
                       child: Container(
-                        margin: const EdgeInsets.only(right: 10),
+                        margin: const EdgeInsets.only(right: AppSpacing.s + 2),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                            horizontal: AppSpacing.base, vertical: AppSpacing.s + 2),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? Theme.of(context).primaryColor
                               : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: AppRadius.rl,
                         ),
                         child: Text(
                           pond.name,
@@ -440,10 +462,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         Navigator.pushNamed(context, AppRoutes.addPond),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                          horizontal: AppSpacing.base, vertical: AppSpacing.s + 2),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: AppRadius.rl,
                         border: Border.all(
                             color: Theme.of(context).primaryColor),
                       ),
@@ -470,10 +492,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
               /// 📊 POND STATUS SUMMARY
               // KPI Row
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.base, horizontal: AppSpacing.base),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: AppRadius.rl,
                   boxShadow: [
                     BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
                   ]
@@ -500,31 +522,37 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     label: "Sampling",
                     icon: Icons.science_rounded,
                     color: Colors.purple,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                SamplingScreen(pondId: selectedPond))),
+                    onTap: () {
+                      if (isCompleted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sampling is locked for completed ponds")));
+                      } else {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => SamplingScreen(pondId: selectedPond)));
+                      }
+                    },
                   ),
                   _OperationButton(
                     label: "Water",
                     icon: Icons.water_drop_rounded,
-                    color: Colors.blue,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                WaterTestScreen(pondId: selectedPond))),
+                    color: AppColors.primary,
+                    onTap: () {
+                      if (isCompleted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Water test is locked for completed ponds")));
+                      } else {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => WaterTestScreen(pondId: selectedPond)));
+                      }
+                    },
                   ),
                   _OperationButton(
                     label: "Harvest",
                     icon: Icons.agriculture_rounded,
-                    color: Colors.orange,
+                    color: AppColors.warning,
                     onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                             builder: (_) =>
-                                HarvestScreen(pondId: selectedPond))),
+                                isCompleted 
+                                ? HarvestSummaryScreen(pondId: selectedPond) 
+                                : HarvestScreen(pondId: selectedPond))),
                   ),
                   _OperationButton(
                     label: "History",
@@ -541,6 +569,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
               const SizedBox(height: 20),
 
+              if (isCompleted) 
+                _buildCompletedDashboard(context, ref, currentPond)
+              else ...[
               /// ACTION BUTTONS
               Row(
                 children: [
@@ -558,16 +589,16 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: AppRadius.rm,
                         ),
                       ),
                       child: const Text("Feed Schedule"),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  AppSpacing.wM,
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
@@ -582,9 +613,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Theme.of(context).primaryColor,
                         side: BorderSide(color: Theme.of(context).primaryColor),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: AppRadius.rm,
                         ),
                       ),
                       child: const Text("Supplement Mix"),
@@ -605,14 +636,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
               /// TRAY INFO HINT (Moved)
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 2),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, size: 14, color: Colors.grey),
-                    const SizedBox(width: 6),
+                    const Icon(Icons.info_outline, size: 14, color: AppColors.textTertiary),
+                    AppSpacing.wS,
                     Text(
                       _getTrayInfoText(feedMode),
-                      style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: 12, color: AppColors.textTertiary, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -625,81 +656,165 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 children: [
                   /// 1. FEED ROUNDS
                   ...feedRoundsData.map<Widget>((data) {
-                  final round = data['round'] as int;
-                  final time = data['time'] as String;
+                    final round = data['round'] as int;
+                    final time = data['time'] as String;
 
-                  // 🧠 CALCULATE QTY (Centralized Logic)
-                  final double baseQty = _getFeedQty(dayPlan, round);
-                  final double qty = _calculateAdjustedQty(dayPlan, round, todayTrayMap);
-                  
-                  final bool isAutoAdjusted = (qty - baseQty).abs() > 0.01;
-                  
-                  // Get tray log for THIS round if it exists (for Completed Card display)
-                  final thisRoundLog = todayTrayMap[round];
+                    // 🧠 CALCULATE QTY (Centralized Logic)
+                    final double baseQty = _getFeedQty(dayPlan, round);
+                    final double qty = _calculateAdjustedQty(dayPlan, round, todayTrayMap);
+                    
+                    final bool isAutoAdjusted = (qty - baseQty).abs() > 0.01;
+                    
+                    // Get tray log for THIS round if it exists (for Completed Card display)
+                    final thisRoundLog = todayTrayMap[round];
 
-                  // ✅ Use Engine to determine state
-                  final roundState = FeedStateEngine.getRoundState(
-                    doc: currentDoc,
-                    round: round,
-                    totalRounds: 4,
-                    feedDone: dashboardState.feedDone,
-                    trayDone: trayDone,
-                  );
-
-                  // ✅ RENDER COMPLETED CARD
-                  if (roundState.isDone && !roundState.showTrayCTA) {
-                    // Calculate supplements for display
-                    // We re-calculate based on plan because we don't store exact strings yet
-                    final feedingTime = mapRoundToTimeKey(round);
-                    final supplementResults = SupplementCalculator.calculate(
-                      supplements: supplements,
-                      currentDoc: currentDoc,
-                      currentFeedingTime: feedingTime,
-                      feedQty: qty,
+                    // ✅ Use Engine to determine state
+                    final roundState = FeedStateEngine.getRoundState(
+                      doc: currentDoc,
+                      round: round,
+                      totalRounds: 4,
+                      feedDone: dashboardState.feedDone,
+                      trayDone: trayDone,
                     );
 
-                    // Flatten for UI: "MINERAL MIX 135g"
-                    final List<String> supplementStrings = [];
-                    for (var group in supplementResults) {
-                      for (var item in group.items) {
-                        supplementStrings.add(
-                          "${item.itemName.toUpperCase()} ${item.totalDose.toInt()}${item.unit}"
-                        );
+                    // Determine Timeline Color
+                    final Color timelineColor = roundState.isDone && !roundState.showTrayCTA 
+                        ? const Color(0xFF10B981) 
+                        : (roundState.isCurrent ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1));
+
+                    Widget card;
+
+                    // ✅ RENDER COMPLETED CARD
+                    // - Always move to Completed in Beginner (DOC <= 15) after feeding
+                    // - Move to Completed in Habit (DOC 16-30) after feeding (optional tray results)
+                    // - Only move to Completed in Precision (DOC > 30) after BOTH feeding AND tray log
+                    final bool isDoneInHabitOrBeginner = roundState.isDone && feedMode != FeedMode.precision;
+                    final bool isActuallyDoneInPrecision = roundState.isDone && !roundState.showTrayCTA;
+
+                    if (isDoneInHabitOrBeginner || isActuallyDoneInPrecision) {
+                      final feedingTime = mapRoundToTimeKey(round);
+                      
+                      // ... Calculate supplements (existing logic preserved)
+                      final supplementResults = SupplementCalculator.calculate(
+                        supplements: supplements,
+                        currentDoc: currentDoc,
+                        currentFeedingTime: feedingTime,
+                        feedQty: qty,
+                      );
+
+                      final List<String> supplementStrings = [];
+                      for (var group in supplementResults) {
+                        for (var item in group.items) {
+                          supplementStrings.add(
+                            "${item.itemName.toUpperCase()} ${item.totalDose.toInt()}${item.unit}"
+                          );
+                        }
                       }
+
+                      card = CompletedRoundCard(
+                        round: round,
+                        time: time,
+                        feedQty: qty,
+                        trayStatuses: thisRoundLog?.trays,
+                        supplements: supplementStrings,
+                        showTraySummary: feedMode != FeedMode.beginner,
+                        onLogTray: (feedMode == FeedMode.habit && !roundState.isTrayLogged)
+                            ? () => openTray(round, false)
+                            : null,
+                      );
+                    } 
+                    // ✅ RENDER UPCOMING CARD
+                    else if (roundState.isLocked) {
+                      // Logic for "NEXT" badge: Only the first locked round after current is NEXT
+                      bool isRoundNext = false;
+                      if (round > 1) {
+                        final prevRoundState = FeedStateEngine.getRoundState(
+                          doc: currentDoc,
+                          round: round - 1,
+                          totalRounds: 4,
+                          feedDone: dashboardState.feedDone,
+                          trayDone: trayDone,
+                        );
+                        if (prevRoundState.isDone || prevRoundState.isCurrent) {
+                          isRoundNext = true;
+                        }
+                      }
+
+                      card = UpcomingRoundCard(
+                        round: round,
+                        time: time,
+                        feedQty: qty,
+                        isNext: isRoundNext,
+                      );
+                    }
+                    // ✅ RENDER CURRENT/ACTIVE CARD
+                    else {
+                      card = FeedRoundCard(
+                        round: round,
+                        time: time,
+                        feedQty: qty,
+                        originalQty: isAutoAdjusted ? baseQty : null,
+                        isAutoAdjusted: isAutoAdjusted,
+                        isDone: roundState.isDone,
+                        isCurrent: roundState.isCurrent,
+                        isLocked: roundState.isLocked,
+                        showTrayCTA: roundState.showTrayCTA,
+                        isPendingTray: roundState.isDone && roundState.showTrayCTA,
+                        onOpenTray: (r) => openTray(r, false),
+                        onMarkDone: () {
+                          if (!roundState.isLocked) {
+                            ref.read(pondDashboardProvider.notifier).markFeedDone(round);
+                          }
+                        },
+                      );
                     }
 
-                    return CompletedRoundCard(
-                      round: round,
-                      time: time,
-                      feedQty: qty,
-                      // Verified: qty includes tray adjustment from logic above
-                      // Only show trays if logged
-                      trayStatuses: thisRoundLog?.trays,
-                      supplements: supplementStrings,
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Timeline Graphics
+                        SizedBox(
+                          width: 32,
+                          child: Stack(
+                            alignment: Alignment.topCenter,
+                            children: [
+                              // Vertical Line
+                              if (round < 4)
+                                Positioned(
+                                  top: 12,
+                                  bottom: -12,
+                                  child: Container(
+                                    width: 2,
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                              // Dot
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: timelineColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(color: timelineColor.withOpacity(0.3), blurRadius: 4, spreadRadius: 1)
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Content Card
+                        Expanded(child: card),
+                      ],
                     );
-                  }
+                  }).toList(),
 
-                  return FeedRoundCard(
-                    round: round,
-                    time: time,
-                    feedQty: qty,
-                    originalQty: isAutoAdjusted ? baseQty : null,
-                    isAutoAdjusted: isAutoAdjusted,
-                    isDone: roundState.isDone,
-                    isCurrent: roundState.isCurrent,
-                    isLocked: roundState.isLocked,
-                    showTrayCTA: roundState.showTrayCTA,
-                    isPendingTray: roundState.isDone && roundState.showTrayCTA,
-                    onOpenTray: (r) => openTray(r),
-                    onMarkDone: () {
-                      if (!roundState.isLocked) {
-                        ref.read(pondDashboardProvider.notifier).markFeedDone(round);
-                      }
-                    },
-                  );
-                }).toList(),
+
                 ],
               ),
+              ],
 
             ],
           ),
@@ -799,6 +914,140 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       case FeedMode.habit: return "Tray observation Recommended";
       case FeedMode.precision: return "Tray based adjustments Active";
     }
+  }
+
+  Widget _buildCompletedDashboard(BuildContext context, WidgetRef ref, Pond pond) {
+    final harvests = ref.watch(harvestProvider(pond.id));
+    final totalYield = harvests.fold(0.0, (sum, h) => sum + h.quantity);
+    final totalRevenue = harvests.fold(0.0, (sum, h) => sum + h.revenue);
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.purple.shade600, Colors.purple.shade800],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.purple.withOpacity(0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Cycle Completed",
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(30)),
+                    child: const Text("IDLE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  _completedStat("TOTAL YIELD", "${totalYield.toInt()} kg"),
+                  const SizedBox(width: 40),
+                  _completedStat("TOTAL REVENUE", "₹${NumberFormat('#,##,###').format(totalRevenue)}"),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _completedStat("DURATION", "${pond.doc} Days"),
+              const SizedBox(height: 32),
+              
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => NewCycleSetupScreen(pondId: pond.id)));
+                  },
+                  icon: const Icon(Icons.rocket_launch_rounded, size: 20),
+                  label: const Text("START NEW CYCLE", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.purple.shade800,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        
+        // Secondary Summary Access
+        Row(
+          children: [
+            Expanded(
+              child: _actionCard(
+                context,
+                "Reports",
+                Icons.analytics_rounded,
+                Colors.orange,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => HarvestSummaryScreen(pondId: pond.id))),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _actionCard(
+                context,
+                "History",
+                Icons.history_rounded,
+                Colors.blue,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => FeedHistoryScreen(pondId: pond.id))),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _completedStat(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+      ],
+    );
+  }
+
+  Widget _actionCard(BuildContext context, String title, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 12),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/enums/tray_status.dart';
+import 'widgets/supplement_chip.dart';
 
 class CompletedRoundCard extends StatelessWidget {
   final int round;
@@ -7,6 +8,8 @@ class CompletedRoundCard extends StatelessWidget {
   final double feedQty;
   final List<TrayStatus>? trayStatuses;
   final List<String> supplements;
+  final bool showTraySummary;
+  final VoidCallback? onLogTray;
 
   const CompletedRoundCard({
     super.key,
@@ -15,101 +18,167 @@ class CompletedRoundCard extends StatelessWidget {
     required this.feedQty,
     this.trayStatuses,
     this.supplements = const [],
+    this.showTraySummary = true,
+    this.onLogTray,
   });
+
+
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          /// 🔝 HEADER
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Round $round • $time",
-                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
-              ),
-              const Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Icon(Icons.check_circle, color: Colors.green, size: 20),
-                   SizedBox(width: 4),
-                   Text("DONE", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Row(
+                    children: [
+                      Text(
+                        "ROUND $round",
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8), letterSpacing: 0.5),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text("COMPLETED", style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    time,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                  ),
                 ],
-              )
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        "${feedQty.toStringAsFixed(1)}",
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Text("kg", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text("DONE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 8),
 
-          // Feed Qty
-          Text(
-            "${feedQty.toStringAsFixed(1)} kg",
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+          const SizedBox(height: 16),
+
+          /// 📥 TRAY SUMMARY BOX
+          if (showTraySummary && trayStatuses != null && trayStatuses!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: List.generate(4, (i) {
+                  final status = (trayStatuses != null && trayStatuses!.length > i) ? trayStatuses![i] : null;
+                  return Column(
+                    children: [
+                      Text(
+                        "TRAY ${i + 1}",
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        status?.label ?? "EMPTY",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: status?.color ?? const Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "${(feedQty * 10).toInt()}g", // Logic: ~10% per tray approx
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  );
+                }),
+              ),
             ),
-          ),
-          
-          // Trays
-          if (trayStatuses != null && trayStatuses!.isNotEmpty) ...[
-            const SizedBox(height: 12),
+          ],
+
+
+          if (supplements.isNotEmpty) ...[
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 4,
-              children: trayStatuses!.map((status) {
-                 return Container(
-                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                   decoration: BoxDecoration(
-                     color: status.color.withOpacity(0.1),
-                     borderRadius: BorderRadius.circular(4),
-                     border: Border.all(color: status.color.withOpacity(0.3)),
-                   ),
-                   child: Row(
-                     mainAxisSize: MainAxisSize.min,
-                     children: [
-                       Icon(status.icon, size: 12, color: status.color),
-                       const SizedBox(width: 4),
-                       Text(
-                         status.label, 
-                         style: TextStyle(fontSize: 10, color: status.color, fontWeight: FontWeight.bold)
-                       ),
-                     ],
-                   ),
-                 );
-              }).toList(),
+              children: supplements.map((s) => SupplementChip(
+                item: SupplementItem(
+                  name: s,
+                  unit: "",
+                  quantity: 0,
+                  isMandatory: false,
+                ),
+              )).toList(),
             ),
           ],
-          
-          // Supplements
-          if (supplements.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.purple.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Supplements Added:", style: TextStyle(fontSize: 10, color: Colors.purple.shade900, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  ...supplements.map((s) => Text("• $s", style: TextStyle(fontSize: 12, color: Colors.purple.shade800))),
-                ],
-              ),
-            ),
+
+          if (onLogTray != null) ...[
+             const SizedBox(height: 12),
+             SizedBox(
+               width: double.infinity,
+               child: OutlinedButton.icon(
+                 onPressed: onLogTray,
+                 icon: const Icon(Icons.add_task_rounded, size: 16),
+                 label: Text(trayStatuses != null ? "Update Tray" : "Log Tray Outcome"),
+                 style: OutlinedButton.styleFrom(
+                   padding: const EdgeInsets.symmetric(vertical: 10),
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                 ),
+               ),
+             ),
           ],
         ],
       ),
     );
+
   }
 }

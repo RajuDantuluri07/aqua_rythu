@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
 import 'harvest_provider.dart';
+import 'harvest_summary_screen.dart';
 
 class HarvestScreen extends ConsumerWidget {
   final String pondId;
@@ -286,6 +287,8 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
   final _qtyCtrl = TextEditingController();
   final _countCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
+  final _expensesCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
 
   double get estimatedRevenue {
     final qty = double.tryParse(_qtyCtrl.text) ?? 0;
@@ -305,6 +308,8 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
     _qtyCtrl.dispose();
     _countCtrl.dispose();
     _priceCtrl.dispose();
+    _expensesCtrl.dispose();
+    _notesCtrl.dispose();
     super.dispose();
   }
 
@@ -372,8 +377,11 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
               Expanded(child: _buildInput("Count", _countCtrl, "/ kg", Icons.numbers_rounded, isInteger: true)),
             ],
           ),
-          const SizedBox(height: 20),
           _buildInput("Price", _priceCtrl, "₹ / kg", Icons.currency_rupee_rounded),
+          const SizedBox(height: 20),
+          _buildInput("Expenses", _expensesCtrl, "₹", Icons.money_off_rounded),
+          const SizedBox(height: 20),
+          _buildInput("Notes", _notesCtrl, "", Icons.notes_rounded),
           
           const SizedBox(height: 32),
           
@@ -431,26 +439,11 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
                   return;
                 }
 
-                final entry = HarvestEntry(
-                  pondId: widget.pondId,
-                  date: DateTime.now(),
-                  doc: widget.doc,
-                  quantity: double.parse(_qtyCtrl.text),
-                  countPerKg: int.tryParse(_countCtrl.text) ?? 0,
-                  pricePerKg: double.parse(_priceCtrl.text),
-                  type: widget.type,
-                );
-
-                ref.read(harvestProvider(widget.pondId).notifier).addHarvest(entry);
-                
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text("Harvest logged successfully"),
-                    backgroundColor: Colors.green.shade600,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                if (isFinal) {
+                  _showFinalConfirmation();
+                } else {
+                  _saveHarvest();
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: isFinal ? Colors.red.shade600 : Theme.of(context).primaryColor,
@@ -459,13 +452,70 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
                 shadowColor: (isFinal ? Colors.red : Theme.of(context).primaryColor).withOpacity(0.5),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text("SAVE HARVEST LOG", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              child: Text(isFinal ? "COMPLETE CYCLE" : "SAVE HARVEST LOG", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ),
           ),
         ],
       ),
     );
   }
+
+  void _showFinalConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Final Harvest Confirmation"),
+        content: const Text("This will permanently close the pond cycle. You cannot add feed, tray logs, or supplements after this."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              _saveHarvest(isFinal: true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("CONFIRM HARVEST"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveHarvest({bool isFinal = false}) {
+    final entry = HarvestEntry(
+      pondId: widget.pondId,
+      date: DateTime.now(),
+      doc: widget.doc,
+      quantity: double.parse(_qtyCtrl.text),
+      countPerKg: int.tryParse(_countCtrl.text) ?? 0,
+      pricePerKg: double.parse(_priceCtrl.text),
+      expenses: double.tryParse(_expensesCtrl.text) ?? 0,
+      notes: _notesCtrl.text,
+      type: widget.type,
+    );
+
+    ref.read(harvestProvider(widget.pondId).notifier).addHarvest(entry);
+    
+    if (isFinal) {
+      ref.read(farmProvider.notifier).updatePondStatus(widget.pondId, PondStatus.completed);
+      Navigator.pop(context); // Close modal
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HarvestSummaryScreen(pondId: widget.pondId)),
+      );
+    } else {
+      Navigator.pop(context);
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isFinal ? "Pond Cycle Completed!" : "Harvest logged successfully"),
+        backgroundColor: isFinal ? Colors.purple : Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
 
   Widget _buildInput(String label, TextEditingController ctrl, String suffix, IconData icon, {bool isInteger = false}) {
     return TextFormField(

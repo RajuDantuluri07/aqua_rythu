@@ -1,3 +1,5 @@
+import 'engine_constants.dart';
+
 class FeedCalculationEngine {
   /// MAIN CALCULATION
   static double calculateFeed({
@@ -15,41 +17,17 @@ class FeedCalculationEngine {
 
   /// SURVIVAL CURVE (Smooth Interpolation)
   static double _survivalRate(int doc) {
-    return _interpolate(doc, {
-      1: 0.98,
-      15: 0.96,
-      30: 0.93,
-      60: 0.88,
-      90: 0.83,
-      120: 0.80,
-    });
+    return _interpolate(doc, FeedEngineConstants.survivalRates);
   }
 
   /// WEIGHT CURVE (Smooth Interpolation — grams)
   static double _avgWeight(int doc) {
-    return _interpolate(doc, {
-      1: 0.01,
-      15: 0.08,
-      30: 0.5,
-      45: 2.0,
-      60: 5.0,
-      75: 10.0,
-      90: 18.0,
-      105: 25.0,
-      120: 32.0,
-    });
+    return _interpolate(doc, FeedEngineConstants.abwTargets);
   }
 
   /// FEED % (Smooth Interpolation)
   static double _feedPercent(int doc) {
-    return _interpolate(doc, {
-      1: 0.15,
-      15: 0.12,
-      30: 0.08,
-      60: 0.05,
-      90: 0.035,
-      120: 0.025,
-    });
+    return _interpolate(doc, FeedEngineConstants.feedingRates);
   }
 
   /// Linear interpolation between data points
@@ -76,8 +54,8 @@ class FeedCalculationEngine {
     final base = totalFeed / meals;
 
     return List.generate(meals, (i) {
-      if (i == 0) return base * 0.8;
-      if (i == meals - 1) return base * 1.2;
+      if (i == 0) return base * FeedEngineConstants.firstMealFactor;
+      if (i == meals - 1) return base * FeedEngineConstants.lastMealFactor;
       return base;
     });
   }

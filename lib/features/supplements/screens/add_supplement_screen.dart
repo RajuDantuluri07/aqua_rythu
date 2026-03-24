@@ -36,6 +36,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   final _itemDoseController = TextEditingController();
   final _itemUnitController = TextEditingController(text: 'ml');
 
+  // New Fields
+  List<String> _selectedFeedingTimes = [];
+  final List<String> _allRounds = ['6 AM', '10 AM', '2 PM', '6 PM'];
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +49,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       _startDocController.text = s.startDoc.toString();
       _endDocController.text = s.endDoc.toString();
       _items.addAll(s.items);
+      _selectedFeedingTimes = List.from(s.feedingTimes);
       _selectedPondIds = List.from(s.pondIds);
       
       if (_selectedPondIds.contains('ALL')) {
@@ -55,6 +60,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         _pondSelectionMode = 'MULTIPLE';
       }
     } else {
+      _selectedFeedingTimes = List.from(_allRounds);
       if (widget.initialPondId != null) {
         _pondSelectionMode = 'THIS';
         _selectedPondIds = [widget.initialPondId!];
@@ -62,6 +68,62 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         _pondSelectionMode = 'ALL';
         _selectedPondIds = ['ALL'];
       }
+    }
+  }
+
+  int _calculateDoc(DateTime pickedDate) {
+    final farmState = ref.read(farmProvider);
+    final pondId = widget.initialPondId ?? (_selectedPondIds.firstWhere((p) => p != 'ALL', orElse: () => ''));
+    
+    Pond? primaryPond;
+    for (var farm in farmState.farms) {
+      for (var p in farm.ponds) {
+        if (p.id == pondId) {
+          primaryPond = p;
+          break;
+        }
+      }
+    }
+
+    if (primaryPond == null) return 1;
+    return pickedDate.difference(primaryPond.stockingDate).inDays + 1;
+  }
+
+  void _selectDate(bool isStart) async {
+    final farmState = ref.read(farmProvider);
+    final pondId = widget.initialPondId ?? (_selectedPondIds.firstWhere((p) => p != 'ALL', orElse: () => ''));
+    
+    Pond? primaryPond;
+    for (var farm in farmState.farms) {
+      for (var p in farm.ponds) {
+        if (p.id == pondId) {
+          primaryPond = p;
+          break;
+        }
+      }
+    }
+
+    final initialDate = primaryPond != null 
+        ? primaryPond.stockingDate.add(Duration(days: int.tryParse(isStart ? _startDocController.text : _endDocController.text) ?? 0))
+        : DateTime.now();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate.isAfter(DateTime(1900)) ? initialDate : DateTime.now(),
+      firstDate: primaryPond?.stockingDate ?? DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: isStart ? "Select Start Date" : "Select End Date",
+    );
+
+    if (picked != null) {
+      final doc = _calculateDoc(picked);
+      setState(() {
+        if (isStart) {
+          _startDocController.text = doc.toString();
+        } else {
+          _endDocController.text = doc.toString();
+        }
+      });
     }
   }
 
@@ -107,9 +169,9 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       type: _selectedType,
       items: List.from(_items),
       
-      // Feed Mix defaults
+      // Feed Mix settings
       feedQty: 1.0,
-      feedingTimes: ['6 AM', '10 AM', '2 PM', '6 PM'], 
+      feedingTimes: _selectedFeedingTimes, 
       
       // Pond Selection
       pondIds: _pondSelectionMode == 'ALL' 
@@ -153,23 +215,65 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: _startDocController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Start DOC"),
-                    validator: (v) => v!.isEmpty ? "Required" : null,
+                  child: InkWell(
+                    onTap: () => _selectDate(true),
+                    child: IgnorePointer(
+                      child: TextFormField(
+                        controller: _startDocController,
+                        decoration: const InputDecoration(
+                          labelText: "Start DOC",
+                          suffixIcon: Icon(Icons.calendar_today, size: 18),
+                        ),
+                        validator: (v) => v!.isEmpty ? "Required" : null,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextFormField(
-                    controller: _endDocController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "End DOC"),
-                    validator: (v) => v!.isEmpty ? "Required" : null,
+                  child: InkWell(
+                    onTap: () => _selectDate(false),
+                    child: IgnorePointer(
+                      child: TextFormField(
+                        controller: _endDocController,
+                        decoration: const InputDecoration(
+                          labelText: "End DOC",
+                          suffixIcon: Icon(Icons.calendar_today, size: 18),
+                        ),
+                        validator: (v) => v!.isEmpty ? "Required" : null,
+                      ),
+                    ),
                   ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 24),
+            const Text("Feeding Rounds", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _allRounds.map((round) {
+                final isSelected = _selectedFeedingTimes.contains(round);
+                return FilterChip(
+                  label: Text(round),
+                  selected: isSelected,
+                  onSelected: (val) {
+                    setState(() {
+                      if (val) {
+                        _selectedFeedingTimes.add(round);
+                      } else {
+                        _selectedFeedingTimes.remove(round);
+                      }
+                    });
+                  },
+                  selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
+                  labelStyle: TextStyle(
+                    color: isSelected ? Theme.of(context).primaryColor : Colors.black,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                );
+              }).toList(),
             ),
 
             const SizedBox(height: 24),

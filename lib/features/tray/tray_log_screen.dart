@@ -4,6 +4,7 @@ import '../../core/enums/tray_status.dart';
 import 'tray_provider.dart';
 import 'tray_model.dart';
 import '../farm/farm_provider.dart';
+import '../../core/utils/logger.dart';
 
 class TrayLogScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -43,9 +44,14 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     Pond? pond;
     for (final farm in farmState.farms) {
       try {
-        pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
-        break;
-      } catch (_) {}
+        final pondIndex = farm.ponds.indexWhere((p) => p.id == widget.pondId);
+        if (pondIndex != -1) {
+          pond = farm.ponds[pondIndex];
+          break;
+        }
+      } catch (e, stack) {
+        AppLogger.error("Error loading pond in TrayLogScreen", e, stack);
+      }
     }
     _totalTrays = pond?.numTrays ?? 4;
   }
