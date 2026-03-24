@@ -228,7 +228,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                       Icon(Icons.assignment_turned_in, size: 16, color: Colors.purple.shade700),
                       const SizedBox(width: 8),
                       Text(
-                        "SUPPLEMENT REQUIRED",
+                        "MIX REQUIRED",
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -300,7 +300,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                       Icon(Icons.info_outline, size: 14, color: Colors.purple.shade700),
                       const SizedBox(width: 6),
                       Text(
-                        "Mix supplements into feed before feeding",
+                        "Mix into feed before putting in pond",
                         style: TextStyle(
                             fontSize: 12, color: Colors.purple.shade800, fontStyle: FontStyle.italic),
                       ),

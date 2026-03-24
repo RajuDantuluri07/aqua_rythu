@@ -1,172 +1,575 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
 import '../../widgets/app_bottom_bar.dart';
+import '../../routes/app_routes.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentFarm = ref.watch(farmProvider);
+    final farmState = ref.watch(farmProvider);
+    final currentFarm = farmState.currentFarm;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       bottomNavigationBar: const AppBottomBar(currentIndex: 0),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+        child: currentFarm == null
+            ? _buildNoFarmView(context)
+            : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: _buildHeader(context, ref, farmState, currentFarm),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildWeatherCard(),
+                          const SizedBox(height: 28),
+                          
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Today Overview",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                              Icon(Icons.insert_chart_outlined_rounded, color: Colors.grey.shade400, size: 20),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          _buildMetricsGrid(context),
+                          const SizedBox(height: 32),
+                          
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Active Ponds",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  "${currentFarm.ponds.length}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ),
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                  currentFarm.ponds.isEmpty
+                      ? SliverToBoxAdapter(child: _buildEmptyPonds())
+                      : SliverPadding(
+                          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 40),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _buildPondCard(context, currentFarm.ponds[index]),
+                              childCount: currentFarm.ponds.length,
+                            ),
+                          ),
+                        ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, WidgetRef ref, FarmState farmState, Farm currentFarm) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // LEFT: Logo + App Name
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
+                ]
+              ),
+              child: Icon(Icons.water_drop_rounded,
+                  color: Theme.of(context).primaryColor, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              "AquaRythu",
+              style: TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+            ),
+          ],
+        ),
+
+        // RIGHT: Farm Selector
+        InkWell(
+          onTap: () => _showFarmSwitchDialog(context, ref, farmState),
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))
+              ],
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.eco_rounded,
+                    size: 16, color: Theme.of(context).primaryColor),
+                const SizedBox(width: 6),
+                Text(
+                  currentFarm.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Colors.grey.shade800
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 18, color: Colors.grey.shade400),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showFarmSwitchDialog(BuildContext context, WidgetRef ref, FarmState farmState) {
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Select Farm"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        children: [
+          ...farmState.farms.map((farm) {
+            final isSelected = farm.id == farmState.selectedId;
+            return SimpleDialogOption(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              onPressed: () {
+                ref.read(farmProvider.notifier).selectFarm(farm.id);
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.landscape,
+                      color: isSelected ? Colors.green : Colors.grey),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      farm.name,
+                      style: TextStyle(
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 16),
+                    ),
+                  ),
+                  if (isSelected)
+                    const Icon(Icons.check_circle,
+                        color: Colors.green, size: 18),
+                ],
+              ),
+            );
+          }),
+          const Divider(),
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            onPressed: () {
+              Navigator.pop(context);
+              _showAddFarmDialog(context, ref);
+            },
+            child: Row(
+              children: [
+                Icon(Icons.add_circle_outline,
+                    color: Theme.of(context).primaryColor),
+                const SizedBox(width: 12),
+                Text(
+                  "Add New Farm",
+                  style: TextStyle(
+                      color: Theme.of(context).primaryColor,
+                      fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddFarmDialog(BuildContext context, WidgetRef ref) {
+    final nameCtrl = TextEditingController();
+    final locCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Add New Farm"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: "Farm Name",
+                hintText: "e.g. Sri Rama Farm",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: locCtrl,
+              decoration: const InputDecoration(
+                labelText: "Location",
+                hintText: "e.g. Nellore",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameCtrl.text.isNotEmpty) {
+                ref
+                    .read(farmProvider.notifier)
+                    .addFarm(nameCtrl.text, locCtrl.text);
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("Create Farm"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoFarmView(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.dashboard_customize_rounded, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            "No Farm Selected",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Please create or select a farm to continue.",
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.addFarm),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text("Create New Farm"),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyPonds() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+            child: Icon(Icons.water_drop_outlined, size: 40, color: Colors.blue.shade200),
+          ),
+          const SizedBox(height: 16),
+          Text("No ponds added yet", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600, fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeatherCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade600, Colors.blue.shade800],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            top: -20,
+            child: Icon(Icons.wb_sunny_rounded, size: 120, color: Colors.white.withOpacity(0.15)),
+          ),
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-              /// HEADER
-              Row(
-                children: [
-                  const Text(
-                    "Dashboard",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text("FARM",
-                          style: TextStyle(fontSize: 10)),
-                      Text(
-                        "No Farm",
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  )
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              /// TITLE
-              const Text(
-                "Farm Dashboard",
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 4),
-              const Text(
-                "Today Overview",
-                style: TextStyle(color: Colors.grey),
-              ),
-
-              const SizedBox(height: 16),
-
-              /// METRIC GRID
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.2,
-                children: const [
-                  _StatCard(
-                    title: "FEED CONSUMED",
-                    value: "1245 kg",
-                    subtitle: "+18%",
-                    positive: true,
-                  ),
-                  _StatCard(
-                    title: "BIOMASS",
-                    value: "2180 kg",
-                    subtitle: "Sampling soon",
-                    positive: true,
-                  ),
-                  _StatCard(
-                    title: "FCR",
-                    value: "1.18",
-                    subtitle: "Near target",
-                    positive: false,
-                  ),
-                  _StatCard(
-                    title: "GROWTH",
-                    value: "0.28 g",
-                    subtitle: "+0.03",
-                    positive: true,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              /// WEATHER CARD
               Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1F9D55), Color(0xFF2196F3)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text("Nellore, AP",
-                        style: TextStyle(color: Colors.white)),
-                    SizedBox(height: 10),
-                    Text(
-                      "32°C",
-                      style: TextStyle(
-                        fontSize: 36,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text("Sunny",
-                        style: TextStyle(color: Colors.white70)),
+                    Icon(Icons.calendar_today_rounded, size: 12, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text("Today's Climate", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 20),
-
-              /// PONDS TITLE
-              const Text(
-                "Ponds",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    "32°",
+                    style: TextStyle(
+                      fontSize: 48,
+                      height: 1,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      "C",
+                      style: TextStyle(
+                        fontSize: 20,
+                        color: Colors.white.withOpacity(0.8),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-
-              const SizedBox(height: 10),
-
-              /// POND LIST
-              _buildPond("Pond A"),
-              _buildPond("Pond B"),
-
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
+              const Text(
+                "Sunny • Humidity 65%",
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricsGrid(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: 1.15,
+      children: [
+        _StatCard(
+          title: "TOTAL BIOMASS",
+          value: "2,180",
+          unit: " kg",
+          icon: Icons.monitor_weight_outlined,
+          color: Colors.indigo,
+          subtitle: "+120 kg this week",
+          positive: true,
+        ),
+        _StatCard(
+          title: "FEED CONSUMED",
+          value: "1,245",
+          unit: " kg",
+          icon: Icons.grain_rounded,
+          color: Colors.orange,
+          subtitle: "Normal consumption",
+          positive: true,
+        ),
+        _StatCard(
+          title: "EST. FCR",
+          value: "1.18",
+          unit: "",
+          icon: Icons.trending_up_rounded,
+          color: Colors.green,
+          subtitle: "Better than target",
+          positive: true,
+        ),
+        _StatCard(
+          title: "AVG GROWTH",
+          value: "0.28",
+          unit: " g/day",
+          icon: Icons.show_chart_rounded,
+          color: Colors.teal,
+          subtitle: "Last 7 days",
+          positive: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPondCard(BuildContext context, Pond pond) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, AppRoutes.pondDashboard, arguments: pond.id);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                // Icon
+                Container(
+                  height: 60,
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(Icons.water_rounded, color: Colors.blue.shade300, size: 32),
+                      Positioned(
+                        bottom: 4,
+                        child: Icon(Icons.pets_rounded, color: Colors.blue.shade600, size: 16),
+                      )
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            pond.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              "Active",
+                              style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      
+                      Row(
+                        children: [
+                          _buildPondTag(Icons.calendar_month_rounded, "DOC ${pond.doc}"),
+                          const SizedBox(width: 12),
+                          _buildPondTag(Icons.straighten_rounded, "${pond.area} ac"),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildPond(String name) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(name),
+  Widget _buildPondTag(IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: Colors.grey.shade500),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+        ),
+      ],
     );
   }
 }
@@ -175,12 +578,18 @@ class DashboardScreen extends ConsumerWidget {
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
+  final String unit;
+  final IconData icon;
+  final Color color;
   final String subtitle;
   final bool positive;
 
   const _StatCard({
     required this.title,
     required this.value,
+    required this.unit,
+    required this.icon,
+    required this.color,
     required this.subtitle,
     required this.positive,
   });
@@ -191,34 +600,74 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           )
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-              )),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              Icon(Icons.more_horiz_rounded, color: Colors.grey.shade300, size: 20),
+            ],
+          ),
           const Spacer(),
-          Text(value,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+          Text(title,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: Colors.grey.shade500,
+                letterSpacing: 0.5,
               )),
+          const SizedBox(height: 4),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black87,
+                  ),
+                ),
+                TextSpan(
+                  text: unit,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Subtitle removed to make card less cluttered, or kept simple.
           Text(
             subtitle,
             style: TextStyle(
-              fontSize: 12,
-              color: positive ? Colors.green : Colors.red,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: positive ? Colors.green.shade600 : Colors.red.shade600,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

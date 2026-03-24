@@ -19,12 +19,12 @@ enum WaterMixTime {
 /// 📦 MODEL (Backend Ready)
 /// ---------------------------------------------------
 
-class SupplementItem {
+class MixItem {
   final String name;
   final double dosePerKg;
   final String unit;
 
-  SupplementItem({
+  MixItem({
     required this.name,
     required this.dosePerKg,
     required this.unit,
@@ -37,8 +37,8 @@ class SupplementItem {
         'unit': unit,
       };
 
-  factory SupplementItem.fromJson(Map<String, dynamic> json) {
-    return SupplementItem(
+  factory MixItem.fromJson(Map<String, dynamic> json) {
+    return MixItem(
       name: json['name'],
       dosePerKg: (json['dosePerKg'] as num).toDouble(),
       unit: json['unit'],
@@ -61,7 +61,7 @@ class Supplement {
   final int? frequencyDays;
   final WaterMixTime? preferredTime;
 
-  final List<SupplementItem> items;
+  final List<MixItem> items;
 
   Supplement({
     required this.id,
@@ -112,7 +112,7 @@ class Supplement {
           ? WaterMixTime.values.byName(json['preferredTime'])
           : null,
       items: (json['items'] as List)
-          .map((e) => SupplementItem.fromJson(e))
+          .map((e) => MixItem.fromJson(e))
           .toList(),
     );
   }

@@ -11,13 +11,13 @@ extension TrayStatusUI on TrayStatus {
   String get label {
     switch (this) {
       case TrayStatus.empty:
-        return 'Empty (0%)';
+        return 'Empty';
       case TrayStatus.smallLeft:
-        return 'Small Leftover (~10%)';
+        return 'Small';
       case TrayStatus.halfLeft:
-        return 'Half Left (~50%)';
+        return 'Half';
       case TrayStatus.fullLeft:
-        return 'Full / Untouched (100%)';
+        return 'Full';
     }
   }
 

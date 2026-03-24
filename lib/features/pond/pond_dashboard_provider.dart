@@ -15,6 +15,7 @@ class PondDashboardState {
   final double currentFeed;
   final Map<int, bool> feedDone;
   final Map<int, TrayStatus> trayResults;
+  final Map<String, String> waterTreatmentLogs; // supplementId_doc -> 'applied' | 'skipped'
 
   PondDashboardState({
     required this.selectedPond,
@@ -22,6 +23,7 @@ class PondDashboardState {
     required this.currentFeed,
     required this.feedDone,
     required this.trayResults,
+    required this.waterTreatmentLogs,
   });
 
   PondDashboardState copyWith({
@@ -30,6 +32,7 @@ class PondDashboardState {
     double? currentFeed,
     Map<int, bool>? feedDone,
     Map<int, TrayStatus>? trayResults,
+    Map<String, String>? waterTreatmentLogs,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -37,6 +40,7 @@ class PondDashboardState {
       currentFeed: currentFeed ?? this.currentFeed,
       feedDone: feedDone ?? this.feedDone,
       trayResults: trayResults ?? this.trayResults,
+      waterTreatmentLogs: waterTreatmentLogs ?? this.waterTreatmentLogs,
     );
   }
 }
@@ -55,6 +59,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           currentFeed: 15.0,
           feedDone: {},
           trayResults: <int, TrayStatus>{},
+          waterTreatmentLogs: {},
         )) {
     _updateStateForPond(state.selectedPond);
   }
@@ -71,6 +76,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       feedDone: {},
       currentFeed: 15.0, // Default baseline, UI overrides this per round
       trayResults: <int, TrayStatus>{},
+      waterTreatmentLogs: {},
     );
   }
 
@@ -115,7 +121,32 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       trayResults: newMap,
     );
   }
+
+  // =========================================================
+  // 💧 WATER TREATMENT LOGIC
+  // =========================================================
+
+  void markWaterTreatmentApplied(String supplementId, int scheduledDoc) {
+    final key = "${supplementId}_$scheduledDoc";
+    if (state.waterTreatmentLogs[key] == 'applied') return;
+
+    final newLogs = Map<String, String>.from(state.waterTreatmentLogs);
+    newLogs[key] = 'applied';
+
+    state = state.copyWith(waterTreatmentLogs: newLogs);
+  }
+
+  void markWaterTreatmentSkipped(String supplementId, int scheduledDoc) {
+    final key = "${supplementId}_$scheduledDoc";
+    if (state.waterTreatmentLogs[key] == 'skipped') return;
+
+    final newLogs = Map<String, String>.from(state.waterTreatmentLogs);
+    newLogs[key] = 'skipped';
+
+    state = state.copyWith(waterTreatmentLogs: newLogs);
+  }
 }
+
 
 /// =======================
 /// PROVIDER

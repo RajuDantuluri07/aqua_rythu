@@ -24,6 +24,7 @@ import '../growth/growth_provider.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
 import '../../core/engines/feed_state_engine.dart';
 import '../../features/supplements/supplement_provider.dart';
+import '../../features/supplements/widgets/water_treatment_card.dart';
 
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
@@ -263,9 +264,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     /// ✅ ENGINE STATE
     final feedMode = FeedStateEngine.getMode(currentDoc);
     
+    /// ✅ CALCULATE WATER TREATMENTS
+    final waterTreatments = SupplementCalculator.calculateWaterTreatments(
+      supplements: supplements,
+      currentDoc: currentDoc,
+      treatmentLogs: dashboardState.waterTreatmentLogs,
+    );
+
+    final overdueTreatments = waterTreatments.where((t) => t.isOverdue).toList();
+    final otherTreatments = waterTreatments.where((t) => !t.isOverdue).toList();
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: const Color(0xFFF5F7FA),
       bottomNavigationBar: const AppBottomBar(currentIndex: 1),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -282,20 +292,22 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color:
-                              Theme.of(context).primaryColor.withOpacity(0.1),
+                          color: Colors.white,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
+                          ]
                         ),
                         child: Icon(Icons.water_drop_rounded,
-                            color: Theme.of(context).primaryColor, size: 20),
+                            color: Theme.of(context).primaryColor, size: 22),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       const Text(
                         "AquaRythu",
                         style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.w800),
+                            fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5),
                       ),
                     ],
                   ),
@@ -303,30 +315,33 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   // RIGHT: Farm Selector
                   InkWell(
                     onTap: () => _showFarmSwitchDialog(farmState),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(30),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                          horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))
+                        ],
+                        borderRadius: BorderRadius.circular(30),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.landscape,
-                              size: 16, color: Colors.grey[700]),
-                          const SizedBox(width: 8),
+                          Icon(Icons.eco_rounded,
+                              size: 16, color: Theme.of(context).primaryColor),
+                          const SizedBox(width: 6),
                           Text(
                             currentFarm?.name ?? "No Farm",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
                               fontSize: 13,
+                              color: Colors.grey.shade800
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.keyboard_arrow_down,
-                              size: 18, color: Colors.grey[600]),
+                          Icon(Icons.keyboard_arrow_down_rounded,
+                              size: 18, color: Colors.grey.shade400),
                         ],
                       ),
                     ),
@@ -445,34 +460,32 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
+                  ]
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _kpi("SPECIES", "L. vannamei"),
+                    _kpi("SPECIES", "L. vannamei", Icons.pets_rounded, Colors.orange),
                     _divider(),
-                    _kpi("DOC", "${currentDoc} Days"),
+                    _kpi("DOC", "${currentDoc} Days", Icons.calendar_month_rounded, Colors.blue),
                     _divider(),
-                    _kpi("SURVIVAL", "98%"),
+                    _kpi("SURVIVAL", "98%", Icons.health_and_safety_rounded, Colors.green),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
 
               /// TANK OPERATIONS
-              GridView.count(
-                crossAxisCount: 4,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _OperationButton(
                     label: "Sampling",
-                    icon: Icons.science,
+                    icon: Icons.science_rounded,
                     color: Colors.purple,
                     onTap: () => Navigator.push(
                         context,
@@ -482,7 +495,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   ),
                   _OperationButton(
                     label: "Water",
-                    icon: Icons.water_drop,
+                    icon: Icons.water_drop_rounded,
                     color: Colors.blue,
                     onTap: () => Navigator.push(
                         context,
@@ -492,7 +505,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   ),
                   _OperationButton(
                     label: "Harvest",
-                    icon: Icons.agriculture,
+                    icon: Icons.agriculture_rounded,
                     color: Colors.orange,
                     onTap: () => Navigator.push(
                         context,
@@ -502,7 +515,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   ),
                   _OperationButton(
                     label: "History",
-                    icon: Icons.history,
+                    icon: Icons.history_rounded,
                     color: Colors.teal,
                     onTap: () => Navigator.push(
                         context,
@@ -571,11 +584,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
               /// PROGRESS CARD
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  gradient: LinearGradient(
+                    colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withOpacity(0.8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -583,27 +602,39 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("TODAY'S PROGRESS"),
+                        const Text("TODAY'S PROGRESS", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(6),
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: const Text(
                             "BLIND PLAN BASED",
-                            style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold),
+                            style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w900),
                           ),
                         )
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "${consumedFeed.toStringAsFixed(1)} / ${plannedFeed.toStringAsFixed(2)} kg",
-                      style: const TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
                     const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          consumedFeed.toStringAsFixed(1),
+                          style: const TextStyle(
+                              fontSize: 36, color: Colors.white, fontWeight: FontWeight.w900, height: 1),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6, left: 4),
+                          child: Text(
+                            "/ ${plannedFeed.toStringAsFixed(2)} kg",
+                            style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.w600),
+                          ),
+                        )
+                      ],
+                    ),
+                    const SizedBox(height: 20),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
@@ -611,25 +642,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         value: plannedFeed == 0
                             ? 0
                             : (consumedFeed / plannedFeed).clamp(0, 1),
-                        backgroundColor: Colors.grey.shade100,
-                        color: Colors.green,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
-                        color: _getModeColor(feedMode).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, size: 16, color: _getModeColor(feedMode)),
-                          const SizedBox(width: 8),
+                          const Icon(Icons.info_outline_rounded, size: 18, color: Colors.white),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _getTrayInfoText(feedMode),
-                              style: TextStyle(color: _getModeColor(feedMode), fontSize: 12),
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                             ),
                           ),
                         ],
@@ -641,9 +672,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
               const SizedBox(height: 20),
 
-              /// FEED ROUNDS
+              /// DAILY TASKS TIMELINE
               Column(
-                children: feedRoundsData.map<Widget>((data) {
+                children: [
+                  /// 1. OVERDUE WATER TREATMENTS
+                  ...overdueTreatments.map((wt) => WaterTreatmentCard(
+                    treatment: wt,
+                    onApply: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentApplied(wt.supplementId, wt.scheduledDoc),
+                    onSkip: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentSkipped(wt.supplementId, wt.scheduledDoc),
+                  )),
+
+                  /// 2. DUE/COMPLETED WATER TREATMENTS
+                  ...otherTreatments.map((wt) => WaterTreatmentCard(
+                    treatment: wt,
+                    onApply: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentApplied(wt.supplementId, wt.scheduledDoc),
+                    onSkip: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentSkipped(wt.supplementId, wt.scheduledDoc),
+                  )),
+
+                  /// 3. FEED ROUNDS
+                  ...feedRoundsData.map<Widget>((data) {
                   final round = data['round'] as int;
                   final time = data['time'] as String;
 
@@ -717,6 +764,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     },
                   );
                 }).toList(),
+                ],
               ),
 
             ],
@@ -776,13 +824,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     return const SizedBox();
   }
 
-  Widget _kpi(String title, String value) {
+  Widget _kpi(String title, String value, IconData icon, Color color) {
     return Expanded(
       child: Column(
         children: [
-          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Icon(icon, size: 20, color: color.withOpacity(0.7)),
+          const SizedBox(height: 6),
+          Text(title, style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.black87)),
         ],
       ),
     );
@@ -833,25 +883,24 @@ class _OperationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade100),
-        ),
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: color.withOpacity(0.1),
-              child: Icon(icon, color: color, size: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: color.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))
+                ]
+              ),
+              child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade700)),
           ],
         ),
       ),

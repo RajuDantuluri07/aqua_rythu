@@ -29,7 +29,12 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
           );
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("New Farm Added Successfully")),
+        SnackBar(
+          content: const Text("New Farm Added Successfully"),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: Colors.green.shade600,
+        ),
       );
       
       Navigator.pop(context);
@@ -39,45 +44,117 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Add New Farm")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text("Add New Farm", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: "Farm Name",
-                  border: OutlineInputBorder(),
-                  hintText: "e.g. Green Valley Aqua",
+              const Text(
+                "Farm Details",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? "Required" : null,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: "Location",
-                  border: OutlineInputBorder(),
-                  hintText: "e.g. Bhimavaram, AP",
-                ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? "Required" : null,
+              const SizedBox(height: 8),
+              const Text(
+                "Enter the basic information for your new farm.",
+                style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 24),
+              
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: "Farm Name",
+                        hintText: "e.g. Green Valley Aqua",
+                        prefixIcon: Icon(Icons.schema_rounded, color: Theme.of(context).primaryColor),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+                        ),
+                      ),
+                      validator: (value) => value == null || value.isEmpty ? "Required" : null,
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _locationController,
+                      decoration: InputDecoration(
+                        labelText: "Location",
+                        hintText: "e.g. Bhimavaram, AP",
+                        prefixIcon: Icon(Icons.location_on_rounded, color: Theme.of(context).primaryColor),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+                        ),
+                      ),
+                      validator: (value) => value == null || value.isEmpty ? "Required" : null,
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 40),
+              
               SizedBox(
                 width: double.infinity,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: _saveFarm,
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: const Color(0xFF1F9D55),
+                    backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
+                    elevation: 4,
+                    shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                  child: const Text("Create Farm"),
+                  child: const Text(
+                    "Create Farm",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
                 ),
               ),
             ],
