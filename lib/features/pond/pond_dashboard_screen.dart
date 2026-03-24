@@ -604,97 +604,32 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ],
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
 
-              /// PROGRESS CARD
+              /// COMPACT PROGRESS BAR
+              CompactProgressBar(
+                progress: plannedFeed == 0 ? 0 : (consumedFeed / plannedFeed).clamp(0, 1),
+                totalText: "${consumedFeed.toStringAsFixed(1)} / ${plannedFeed.toStringAsFixed(2)} kg",
+              ),
+
+              const SizedBox(height: 8),
+
+              /// TRAY INFO HINT (Moved)
               Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withOpacity(0.8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                child: Row(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text("TODAY'S PROGRESS", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            "BLIND PLAN BASED",
-                            style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w900),
-                          ),
-                        )
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          consumedFeed.toStringAsFixed(1),
-                          style: const TextStyle(
-                              fontSize: 36, color: Colors.white, fontWeight: FontWeight.w900, height: 1),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6, left: 4),
-                          child: Text(
-                            "/ ${plannedFeed.toStringAsFixed(2)} kg",
-                            style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.w600),
-                          ),
-                        )
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        minHeight: 8,
-                        value: plannedFeed == 0
-                            ? 0
-                            : (consumedFeed / plannedFeed).clamp(0, 1),
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline_rounded, size: 18, color: Colors.white),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _getTrayInfoText(feedMode),
-                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                        ],
-                      ),
+                    const Icon(Icons.info_outline, size: 14, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Text(
+                      _getTrayInfoText(feedMode),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 4),
 
               /// DAILY TASKS TIMELINE
               Column(
@@ -885,10 +820,69 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
   String _getTrayInfoText(FeedMode mode) {
     switch (mode) {
-      case FeedMode.beginner: return "Tray Feeding: Not Started (Recommended after DOC 15)";
-      case FeedMode.habit: return "Tray Feeding: Optional (Habit Phase)";
-      case FeedMode.precision: return "Tray Feeding: Mandatory (Next Feed Locked)";
+      case FeedMode.beginner: return "Tray feeding optional (habit phase)";
+      case FeedMode.habit: return "Tray observation Recommended";
+      case FeedMode.precision: return "Tray based adjustments Active";
     }
+  }
+}
+
+class CompactProgressBar extends StatelessWidget {
+  final double progress; // 0.0 → 1.0
+  final String totalText; // "0.0 / 0.0 kg"
+
+  const CompactProgressBar({
+    super.key,
+    required this.progress,
+    required this.totalText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                totalText,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                "Blind Plan",
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.green.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 4,
+              backgroundColor: Colors.white,
+              color: Colors.green.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
