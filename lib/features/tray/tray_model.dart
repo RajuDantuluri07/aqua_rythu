@@ -7,7 +7,6 @@ class TrayLog {
   final int round;
   final List<TrayStatus> trays;
   final Map<int, List<String>>? observations;
-  final List<String>? supplements;
 
   TrayLog({
     required this.pondId,
@@ -16,7 +15,6 @@ class TrayLog {
     required this.round,
     required this.trays,
     this.observations,
-    this.supplements,
   });
 
   Map<String, dynamic> toJson() {
@@ -27,7 +25,6 @@ class TrayLog {
       'round': round,
       'trays': trays.map((e) => e.name).toList(),
       'observations': observations?.map((k, v) => MapEntry(k.toString(), v)),
-      'supplements': supplements,
     };
   }
 
@@ -41,7 +38,6 @@ class TrayLog {
       observations: (json['observations'] as Map<String, dynamic>?)?.map(
         (k, v) => MapEntry(int.parse(k), List<String>.from(v)),
       ),
-      supplements: (json['supplements'] as List?)?.map((e) => e.toString()).toList(),
     );
   }
 }

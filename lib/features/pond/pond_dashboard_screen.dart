@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import '../../core/enums/tray_status.dart';
 import '../feed/feed_plan_provider.dart';
 import '../feed/feed_schedule_screen.dart';
 import 'pond_dashboard_provider.dart';
@@ -19,11 +17,10 @@ import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
-import '../growth/growth_provider.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
 import '../../core/engines/feed_state_engine.dart';
 import '../../features/supplements/supplement_provider.dart';
-import '../../features/supplements/widgets/water_treatment_card.dart';
+
 
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
@@ -258,8 +255,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
         Future.microtask(() {
           ref.read(feedPlanProvider.notifier).createPlan(
             pondId: selectedPond,
-            seedCount: pondObj!.seedCount,
-            plSize: pondObj!.plSize,
+            seedCount: pondObj.seedCount,
+            plSize: pondObj.plSize,
           );
         });
       }
@@ -288,15 +285,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     /// ✅ ENGINE STATE
     final feedMode = FeedStateEngine.getMode(currentDoc);
     
-    /// ✅ CALCULATE WATER TREATMENTS
-    final waterTreatments = SupplementCalculator.calculateWaterTreatments(
-      supplements: supplements,
-      currentDoc: currentDoc,
-      treatmentLogs: dashboardState.waterTreatmentLogs,
-    );
 
-    final overdueTreatments = waterTreatments.where((t) => t.isOverdue).toList();
-    final otherTreatments = waterTreatments.where((t) => !t.isOverdue).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -634,21 +623,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
               /// DAILY TASKS TIMELINE
               Column(
                 children: [
-                  /// 1. OVERDUE WATER TREATMENTS
-                  ...overdueTreatments.map((wt) => WaterTreatmentCard(
-                    treatment: wt,
-                    onApply: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentApplied(wt.supplementId, wt.scheduledDoc),
-                    onSkip: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentSkipped(wt.supplementId, wt.scheduledDoc),
-                  )),
-
-                  /// 2. DUE/COMPLETED WATER TREATMENTS
-                  ...otherTreatments.map((wt) => WaterTreatmentCard(
-                    treatment: wt,
-                    onApply: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentApplied(wt.supplementId, wt.scheduledDoc),
-                    onSkip: () => ref.read(pondDashboardProvider.notifier).markWaterTreatmentSkipped(wt.supplementId, wt.scheduledDoc),
-                  )),
-
-                  /// 3. FEED ROUNDS
+                  /// 1. FEED ROUNDS
                   ...feedRoundsData.map<Widget>((data) {
                   final round = data['round'] as int;
                   final time = data['time'] as String;

@@ -14,7 +14,6 @@ class ActiveFeedSupplement {
   });
 }
 
-
 /// -----------------------------------------------------------------
 /// 📦 RESULT MODEL
 /// -----------------------------------------------------------------
@@ -52,113 +51,10 @@ class SupplementGroupResult {
 }
 
 /// -----------------------------------------------------------------
-/// 📦 WATER TREATMENT RESULT (UI READY)
-/// -----------------------------------------------------------------
-class ActiveWaterTreatment {
-  final String supplementId;
-  final String supplementName;
-  final List<SupplementDoseResult> items;
-  final WaterMixTime? preferredTime;
-  final bool isOverdue;
-  final bool isDueToday;
-  final int scheduledDoc;
-  final bool isCompleted;
-  final bool isSkipped;
-
-  const ActiveWaterTreatment({
-    required this.supplementId,
-    required this.supplementName,
-    required this.items,
-    this.preferredTime,
-    this.isOverdue = false,
-    this.isDueToday = false,
-    required this.scheduledDoc,
-    this.isCompleted = false,
-    this.isSkipped = false,
-  });
-}
-
-/// -----------------------------------------------------------------
 /// 🧠 CALCULATION ENGINE
 /// -----------------------------------------------------------------
 class SupplementCalculator {
   const SupplementCalculator._(); // no instance
-
-  /// WATER MIX ENTRY POINT
-  static List<ActiveWaterTreatment> calculateWaterTreatments({
-    required List<Supplement> supplements,
-    required int currentDoc,
-    required Map<String, String> treatmentLogs,
-  }) {
-    if (supplements.isEmpty) return [];
-
-    final validSupplements = supplements.where((s) => s.type == SupplementType.waterMix).toList();
-    if (validSupplements.isEmpty) return [];
-
-    final List<ActiveWaterTreatment> treatments = [];
-
-    for (final supplement in validSupplements) {
-      if (currentDoc < supplement.startDoc) continue;
-
-      bool isDueToday = false;
-      bool isOverdue = false;
-
-      int freq = supplement.frequencyDays != null && supplement.frequencyDays! > 0 
-          ? supplement.frequencyDays! 
-          : 1;
-
-      int daysSinceStart = currentDoc - supplement.startDoc;
-      int scheduledDoc = supplement.startDoc + (daysSinceStart ~/ freq) * freq;
-
-      if (scheduledDoc == currentDoc) {
-        isDueToday = true;
-      } else {
-        if (currentDoc > supplement.endDoc) continue;
-      }
-
-      String statusKey = "${supplement.id}_$scheduledDoc";
-      bool isCompleted = treatmentLogs[statusKey] == 'applied';
-      bool isSkipped = treatmentLogs[statusKey] == 'skipped';
-
-      if (isCompleted || isSkipped) {
-        if (scheduledDoc != currentDoc) continue;
-      }
-
-      if (!isDueToday && !isCompleted && !isSkipped) {
-        isOverdue = true;
-      }
-
-      final List<SupplementDoseResult> itemResults = [];
-      for (final item in supplement.items) {
-        itemResults.add(
-          SupplementDoseResult(
-            supplementName: supplement.name,
-            itemName: item.name,
-            totalDose: _round(item.dosePerKg),
-            unit: item.unit,
-          ),
-        );
-      }
-
-      if (itemResults.isNotEmpty) {
-        treatments.add(
-          ActiveWaterTreatment(
-            supplementId: supplement.id,
-            supplementName: supplement.name,
-            items: itemResults,
-            preferredTime: supplement.preferredTime,
-            isDueToday: isDueToday,
-            isOverdue: isOverdue,
-            scheduledDoc: scheduledDoc,
-            isCompleted: isCompleted,
-            isSkipped: isSkipped,
-          ),
-        );
-      }
-    }
-
-    return treatments;
-  }
 
   /// MAIN ENTRY POINT
   static List<SupplementGroupResult> calculate({
@@ -177,13 +73,7 @@ class SupplementCalculator {
 
     // Step 1: Filter valid supplements
     final validSupplements = supplements.where((s) {
-      // This calculator is for feed-based supplements only.
-      if (s.type != SupplementType.feedMix) {
-        return false;
-      }
-
-      final inDocRange =
-          currentDoc >= s.startDoc && currentDoc <= s.endDoc;
+      final inDocRange = currentDoc >= s.startDoc && currentDoc <= s.endDoc;
 
       final matchesTime = s.feedingTimes
           .map((e) => e.toLowerCase())
@@ -202,7 +92,6 @@ class SupplementCalculator {
 
       for (final item in supplement.items) {
         // Normalize rate: If recipe is defined for X kg (feedQty), calculate per-kg rate first.
-        // This allows farmers to enter recipes like "500ml for 10kg feed".
         final double rate = (supplement.feedQty > 0)
             ? item.dosePerKg / supplement.feedQty
             : item.dosePerKg;

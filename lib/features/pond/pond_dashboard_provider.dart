@@ -15,24 +15,20 @@ class PondDashboardState {
   final double currentFeed;
   final Map<int, bool> feedDone;
   final Map<int, TrayStatus> trayResults;
-  final Map<String, String> waterTreatmentLogs; // supplementId_doc -> 'applied' | 'skipped'
-
   PondDashboardState({
     required this.selectedPond,
     required this.doc,
     required this.currentFeed,
     required this.feedDone,
     required this.trayResults,
-    required this.waterTreatmentLogs,
   });
 
   PondDashboardState copyWith({
     String? selectedPond,
     int? doc,
     double? currentFeed,
-    Map<int, bool>? feedDone,
-    Map<int, TrayStatus>? trayResults,
-    Map<String, String>? waterTreatmentLogs,
+    final Map<int, bool>? feedDone,
+    final Map<int, TrayStatus>? trayResults,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -40,7 +36,6 @@ class PondDashboardState {
       currentFeed: currentFeed ?? this.currentFeed,
       feedDone: feedDone ?? this.feedDone,
       trayResults: trayResults ?? this.trayResults,
-      waterTreatmentLogs: waterTreatmentLogs ?? this.waterTreatmentLogs,
     );
   }
 }
@@ -62,7 +57,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           currentFeed: 15.0,
           feedDone: {},
           trayResults: <int, TrayStatus>{},
-          waterTreatmentLogs: {},
         )) {
     _updateStateForPond(state.selectedPond);
   }
@@ -75,7 +69,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     _pondCache[state.selectedPond] = {
       'feedDone': Map<int, bool>.from(state.feedDone),
       'trayResults': Map<int, TrayStatus>.from(state.trayResults),
-      'waterTreatmentLogs': Map<String, String>.from(state.waterTreatmentLogs),
     };
   }
 
@@ -92,9 +85,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       trayResults: cached != null
           ? Map<int, TrayStatus>.from(cached['trayResults'])
           : <int, TrayStatus>{},
-      waterTreatmentLogs: cached != null
-          ? Map<String, String>.from(cached['waterTreatmentLogs'])
-          : {},
     );
   }
 
@@ -141,28 +131,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     );
   }
 
-  // =========================================================
-  // 💧 WATER TREATMENT LOGIC
-  // =========================================================
-
-  void markWaterTreatmentApplied(String supplementId, int scheduledDoc) {
-    final key = "${supplementId}_$scheduledDoc";
-    if (state.waterTreatmentLogs[key] == 'applied') return;
-
-    final newLogs = Map<String, String>.from(state.waterTreatmentLogs);
-    newLogs[key] = 'applied';
-
-    state = state.copyWith(waterTreatmentLogs: newLogs);
-  }
-
-  void markWaterTreatmentSkipped(String supplementId, int scheduledDoc) {
-    final key = "${supplementId}_$scheduledDoc";
-    if (state.waterTreatmentLogs[key] == 'skipped') return;
-
-    final newLogs = Map<String, String>.from(state.waterTreatmentLogs);
-    newLogs[key] = 'skipped';
-
-    state = state.copyWith(waterTreatmentLogs: newLogs);
   }
 }
 

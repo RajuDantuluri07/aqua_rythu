@@ -91,6 +91,7 @@ class SupplementMixScreen extends ConsumerWidget {
                           isActive: true, 
                           ref: ref,
                           currentDoc: currentDoc,
+                          pondId: pondId,
                         )),
                     const SizedBox(height: 24),
                   ],
@@ -103,6 +104,7 @@ class SupplementMixScreen extends ConsumerWidget {
                           isActive: false, 
                           ref: ref,
                           currentDoc: currentDoc,
+                          pondId: pondId,
                         )),
                     const SizedBox(height: 24),
                   ],
@@ -116,6 +118,7 @@ class SupplementMixScreen extends ConsumerWidget {
                           isCompleted: true,
                           ref: ref,
                           currentDoc: currentDoc,
+                          pondId: pondId,
                         )),
                   ],
                 ]),
@@ -198,6 +201,7 @@ class _SupplementCard extends StatelessWidget {
   final bool isCompleted;
   final WidgetRef ref;
   final int currentDoc;
+  final String pondId;
 
   const _SupplementCard({
     required this.supplement,
@@ -205,6 +209,7 @@ class _SupplementCard extends StatelessWidget {
     this.isCompleted = false,
     required this.ref,
     required this.currentDoc,
+    required this.pondId,
   });
 
   @override
@@ -259,26 +264,27 @@ class _SupplementCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: s.type == SupplementType.waterMix ? Colors.blue.shade100 : Colors.purple.shade100,
+                        color: Colors.purple.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            s.type == SupplementType.waterMix ? Icons.water_drop_rounded : Icons.grain_rounded, 
+                            Icons.grain_rounded, 
                             size: 12, 
-                            color: s.type == SupplementType.waterMix ? Colors.blue.shade800 : Colors.purple.shade800
+                            color: Colors.purple.shade800
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            s.type == SupplementType.waterMix ? "WATER MIX" : "FEED MIX",
+                            "FEED MIX",
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w900,
-                              color: s.type == SupplementType.waterMix ? Colors.blue.shade800 : Colors.purple.shade800,
+                              color: Colors.purple.shade800,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -363,7 +369,7 @@ class _SupplementCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 
-                if (s.type == SupplementType.feedMix && s.feedingTimes.isNotEmpty)
+                if (s.feedingTimes.isNotEmpty)
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -383,47 +389,6 @@ class _SupplementCard extends StatelessWidget {
                         ],
                       ),
                     )).toList(),
-                  )
-                else if (s.type == SupplementType.waterMix)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (s.frequencyDays != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blue.shade100)
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.calendar_month_rounded, size: 12, color: Colors.blue.shade700),
-                              const SizedBox(width: 4),
-                              Text("Every ${s.frequencyDays} Days", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade700)),
-                            ],
-                          ),
-                        ),
-                      if (s.preferredTime != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blue.shade100)
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.access_time_rounded, size: 12, color: Colors.blue.shade700),
-                              const SizedBox(width: 4),
-                              Text(s.preferredTime!.name.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade700)),
-                            ],
-                          ),
-                        ),
-                    ],
                   ),
 
                 const SizedBox(height: 20),

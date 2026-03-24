@@ -16,17 +16,13 @@ class AddSupplementScreen extends ConsumerStatefulWidget {
 class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Toggle State
-  SupplementType _selectedType = SupplementType.feedMix;
+  // Toggle State (Always Feed Mix now)
+  final SupplementType _selectedType = SupplementType.feedMix;
 
   // Common Fields
   final _nameController = TextEditingController();
   final _startDocController = TextEditingController();
   final _endDocController = TextEditingController();
-
-  // Water Mix Fields
-  int _selectedFrequency = 7;
-  WaterMixTime _selectedWaterTime = WaterMixTime.afterFeed;
 
   // Items
   final List<MixItem> _items = [];
@@ -45,7 +41,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     super.initState();
     if (widget.supplement != null) {
       final s = widget.supplement!;
-      _selectedType = s.type;
       _nameController.text = s.name;
       _startDocController.text = s.startDoc.toString();
       _endDocController.text = s.endDoc.toString();
@@ -58,11 +53,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         _pondSelectionMode = 'THIS';
       } else {
         _pondSelectionMode = 'MULTIPLE';
-      }
-
-      if (s.type == SupplementType.waterMix) {
-        _selectedFrequency = s.frequencyDays ?? 7;
-        _selectedWaterTime = s.preferredTime ?? WaterMixTime.afterFeed;
       }
     } else {
       if (widget.initialPondId != null) {
@@ -118,14 +108,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       items: List.from(_items),
       
       // Feed Mix defaults
-      feedQty: _selectedType == SupplementType.feedMix ? 1.0 : 0.0,
-      feedingTimes: _selectedType == SupplementType.feedMix 
-          ? ['6 AM', '10 AM', '2 PM', '6 PM'] 
-          : [],
-
-      // Water Mix Data
-      frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
-      preferredTime: _selectedType == SupplementType.waterMix ? _selectedWaterTime : null,
+      feedQty: 1.0,
+      feedingTimes: ['6 AM', '10 AM', '2 PM', '6 PM'], 
       
       // Pond Selection
       pondIds: _pondSelectionMode == 'ALL' 
@@ -146,7 +130,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).primaryColor;
+
 
     return Scaffold(
       appBar: AppBar(
@@ -157,21 +141,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // 1. TYPE TOGGLE
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.all(4),
-              child: Row(
-                children: [
-                  _buildTypeOption(SupplementType.feedMix, "Feed Mix"),
-                  _buildTypeOption(SupplementType.waterMix, "Water Mix"),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
 
             // 2. BASIC INFO
             TextFormField(
@@ -222,42 +192,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
             const SizedBox(height: 24),
 
-            // 3. WATER MIX SPECIFIC
-            if (_selectedType == SupplementType.waterMix) ...[
-              const Text("Frequency", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _frequencyChip(7, "Every 7 days"),
-                  const SizedBox(width: 12),
-                  _frequencyChip(15, "Every 15 days"),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              const Text("Preferred Time", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 10,
-                children: WaterMixTime.values.map((time) {
-                  final isSelected = _selectedWaterTime == time;
-                  return ChoiceChip(
-                    label: Text(_formatTime(time)),
-                    selected: isSelected,
-                    onSelected: (val) {
-                      if (val) setState(() => _selectedWaterTime = time);
-                    },
-                    selectedColor: primaryColor.withOpacity(0.2),
-                    labelStyle: TextStyle(
-                      color: isSelected ? primaryColor : Colors.black,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
 
             // 4. MIX ITEMS
             Row(
@@ -334,41 +269,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     );
   }
 
-  Widget _buildTypeOption(SupplementType type, String label) {
-    final isSelected = _selectedType == type;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedType = type),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)] : null,
-          ),
-          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.black : Colors.grey)),
-        ),
-      ),
-    );
-  }
 
-  Widget _frequencyChip(int days, String label) {
-    final isSelected = _selectedFrequency == days;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (v) => setState(() => _selectedFrequency = days),
-      checkmarkColor: Theme.of(context).primaryColor,
-    );
-  }
-
-  String _formatTime(WaterMixTime t) {
-    switch (t) {
-      case WaterMixTime.morning: return "Morning";
-      case WaterMixTime.evening: return "Evening";
-      case WaterMixTime.afterFeed: return "After Last Feed";
-    }
-  }
 
   Widget _pondModeChip(String mode, String label) {
     final isSelected = _pondSelectionMode == mode;

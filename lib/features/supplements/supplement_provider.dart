@@ -6,13 +6,6 @@ enum SupplementStatus { upcoming, active, completed }
 
 enum SupplementType {
   feedMix,
-  waterMix,
-}
-
-enum WaterMixTime {
-  morning,
-  evening,
-  afterFeed,
 }
 
 /// ---------------------------------------------------
@@ -57,10 +50,6 @@ class Supplement {
   final double feedQty; // default 0 if waterMix
   final List<String> feedingTimes; // empty if waterMix
 
-  /// WATER MIX ONLY
-  final int? frequencyDays;
-  final WaterMixTime? preferredTime;
-
   final List<String> pondIds; // ['pondId1', 'pondId2'] or ['ALL']
 
   final List<MixItem> items;
@@ -70,11 +59,9 @@ class Supplement {
     required this.name,
     required this.startDoc,
     required this.endDoc,
-    this.type = SupplementType.feedMix,
-    this.feedQty = 0.0,
+    required this.type,
+    this.feedQty = 1.0,
     this.feedingTimes = const [],
-    this.frequencyDays,
-    this.preferredTime,
     this.pondIds = const ['ALL'],
     required this.items,
   });
@@ -94,8 +81,6 @@ class Supplement {
         'type': type.name,
         'feedQty': feedQty,
         'feedingTimes': feedingTimes,
-        'frequencyDays': frequencyDays,
-        'preferredTime': preferredTime?.name,
         'pondIds': pondIds,
         'items': items.map((e) => e.toJson()).toList(),
       };
@@ -109,12 +94,8 @@ class Supplement {
       type: json['type'] != null
           ? SupplementType.values.byName(json['type'])
           : SupplementType.feedMix,
-      feedQty: (json['feedQty'] as num?)?.toDouble() ?? 0.0,
+      feedQty: (json['feedQty'] as num?)?.toDouble() ?? 1.0,
       feedingTimes: List<String>.from(json['feedingTimes'] ?? []),
-      frequencyDays: json['frequencyDays'],
-      preferredTime: json['preferredTime'] != null
-          ? WaterMixTime.values.byName(json['preferredTime'])
-          : null,
       pondIds: List<String>.from(json['pondIds'] ?? ['ALL']),
       items: (json['items'] as List)
           .map((e) => MixItem.fromJson(e))

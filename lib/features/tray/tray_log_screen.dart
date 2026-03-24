@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/engines/feed_state_engine.dart';
+import '../../core/enums/tray_status.dart';
 import 'tray_provider.dart';
 import 'tray_model.dart';
 import '../farm/farm_provider.dart';
-import '../../core/enums/tray_status.dart';
 
 class TrayLogScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -21,21 +20,13 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   late final int _totalTrays; 
   
   // Data Collection
-  bool _isSupplementStep = false;
   final List<TrayStatus> _results = [];
   final Map<int, Set<String>> _observations = {}; 
 
   // Current Selection
   TrayStatus? _selectedStatus;
   final Set<String> _selectedObservations = {};
-  final Set<String> _selectedSupplements = {};
 
-  final List<String> _supplementOptions = [
-    'Probiotic',
-    'Mineral Mix',
-    'Vitamin C',
-    'Gut Pro',
-  ];
 
   final List<String> _observationOptions = [
     'Dead shrimp',
@@ -53,18 +44,13 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     for (final farm in farmState.farms) {
       try {
         pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
-        if (pond != null) break;
+        break;
       } catch (_) {}
     }
     _totalTrays = pond?.numTrays ?? 4;
   }
 
   void _handleNext() {
-    if (_isSupplementStep) {
-      _finishAndSave();
-      return;
-    }
-
     if (_selectedStatus == null) return;
 
     // Save current step data
@@ -78,18 +64,8 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
         _selectedStatus = null;
         _selectedObservations.clear();
       });
-    } else { // Last tray has been logged
-      final mode = FeedStateEngine.getMode(widget.doc);
-      if (mode == FeedMode.precision) {
-        // Move to Supplements Step
-        setState(() {
-          _isSupplementStep = true;
-          _selectedStatus = null; 
-          _selectedObservations.clear();
-        });
-      } else {
-        _finishAndSave();
-      }
+    } else {
+      _finishAndSave();
     }
   }
 
@@ -105,7 +81,6 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
       round: widget.round,
       trays: List.from(_results),
       observations: observationMap.isNotEmpty ? observationMap : null,
-      supplements: _selectedSupplements.isNotEmpty ? _selectedSupplements.toList() : null,
     );
 
     ref.read(trayProvider(widget.pondId).notifier).addTrayLog(log);
@@ -116,14 +91,12 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   @override
   Widget build(BuildContext context) {
     final currentTrayNumber = _currentTrayIndex + 1;
-    final isLastTrayStep = currentTrayNumber == _totalTrays && !_isSupplementStep;
-    final canProceed = _isSupplementStep ? true : _selectedStatus != null;
-    final feedMode = FeedStateEngine.getMode(widget.doc);
-    final showSupplements = feedMode == FeedMode.precision;
+    final isLastTrayStep = currentTrayNumber == _totalTrays;
+    final canProceed = _selectedStatus != null;
 
     // Progress bar calculations
-    int totalSteps = _totalTrays + (showSupplements ? 1 : 0);
-    int currentStep = _isSupplementStep ? _totalTrays + 1 : currentTrayNumber;
+    int totalSteps = _totalTrays;
+    int currentStep = currentTrayNumber;
     double progress = currentStep / totalSteps;
 
     return Scaffold(
@@ -155,7 +128,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _isSupplementStep ? "Supplements" : "Tray $currentTrayNumber of $_totalTrays",
+                        "Tray $currentTrayNumber of $_totalTrays",
                         style: TextStyle(fontWeight: FontWeight.w800, color: Theme.of(context).primaryColor, fontSize: 16),
                       ),
                       Text(
@@ -183,7 +156,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _isSupplementStep ? _buildSupplementView() : [
+                  children: [
                     const Text(
                       "What is the feed status in this tray?",
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
@@ -282,11 +255,9 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                     ),
                   ),
                   child: Text(
-                    _isSupplementStep
-                        ? 'Save All & Finish'
-                        : (isLastTrayStep
-                            ? (showSupplements ? 'Next: Add Supplements →' : 'Save & Finish')
-                            : 'Next: Tray ${currentTrayNumber + 1} →'),
+                    isLastTrayStep
+                        ? 'Save & Finish'
+                        : 'Next: Tray ${currentTrayNumber + 1} →',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -301,76 +272,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     );
   }
 
-  List<Widget> _buildSupplementView() {
-    return [
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
-          ]
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.purple.shade50, shape: BoxShape.circle),
-                  child: Icon(Icons.medical_services_rounded, color: Colors.purple.shade400, size: 24),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Did you apply any supplements?',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _supplementOptions.map((option) {
-                final isSelected = _selectedSupplements.contains(option);
-                return FilterChip(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  label: Text(option),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedSupplements.add(option);
-                      } else {
-                        _selectedSupplements.remove(option);
-                      }
-                    });
-                  },
-                  backgroundColor: Colors.grey.shade50,
-                  selectedColor: Colors.purple.shade50,
-                  checkmarkColor: Colors.purple,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: isSelected ? Colors.purple.shade200 : Colors.grey.shade200,
-                    )
-                  ),
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.purple.shade700 : Colors.black87,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      )
-    ];
-  }
+
 
   Widget _buildStatusCard(TrayStatus status, bool isSelected) {
     return GestureDetector(
