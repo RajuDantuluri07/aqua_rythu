@@ -13,7 +13,6 @@ import '../harvest/harvest_provider.dart';
 import '../supplements/supplement_mix_screen.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
-import '../../shared/constants/feed_phase.dart';
 import '../feed/feed_round_card.dart';
 import '../feed/completed_round_card.dart';
 import '../water/water_test_screen.dart';
@@ -192,7 +191,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final currentFarm = farmState.currentFarm;
     final ponds = currentFarm?.ponds ?? [];
 
-    final supplements = ref.watch(supplementProvider);
+    final allSupplements = ref.watch(supplementProvider);
+    final supplements = allSupplements
+        .where((s) => s.pondIds.contains(selectedPond) || s.pondIds.contains('ALL'))
+        .toList();
 
     /// ✅ TRAY DATA
     final trayLogs = ref.watch(trayProvider(selectedPond));
@@ -237,9 +239,31 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       );
     }
 
-    /// ✅ NEW: FEED PLAN
+    /// ✅ NEW: FEED PLAN (Auto-generate if missing)
     final planMap = ref.watch(feedPlanProvider);
-    final plan = planMap[selectedPond];
+    var plan = planMap[selectedPond];
+
+    // Auto-create plan if no plan exists for this pond
+    if (plan == null) {
+      Pond? pondObj;
+      for (var farm in farmState.farms) {
+        for (var p in farm.ponds) {
+          if (p.id == selectedPond) {
+            pondObj = p;
+            break;
+          }
+        }
+      }
+      if (pondObj != null) {
+        Future.microtask(() {
+          ref.read(feedPlanProvider.notifier).createPlan(
+            pondId: selectedPond,
+            seedCount: pondObj!.seedCount,
+            plSize: pondObj!.plSize,
+          );
+        });
+      }
+    }
 
     final currentDoc = ref.watch(docProvider(selectedPond));
     final dayPlan = plan?.days.firstWhere(

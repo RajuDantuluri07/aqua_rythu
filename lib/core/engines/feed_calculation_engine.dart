@@ -13,31 +13,62 @@ class FeedCalculationEngine {
     return biomass * feedPct;
   }
 
-  /// SURVIVAL CURVE
+  /// SURVIVAL CURVE (Smooth Interpolation)
   static double _survivalRate(int doc) {
-    if (doc < 30) return 0.95;
-    if (doc < 60) return 0.90;
-    if (doc < 90) return 0.85;
-    return 0.80;
+    return _interpolate(doc, {
+      1: 0.98,
+      15: 0.96,
+      30: 0.93,
+      60: 0.88,
+      90: 0.83,
+      120: 0.80,
+    });
   }
 
-  /// WEIGHT CURVE
+  /// WEIGHT CURVE (Smooth Interpolation — grams)
   static double _avgWeight(int doc) {
-    if (doc <= 15) return 0.02;
-    if (doc <= 30) return 0.2;
-    if (doc <= 60) return 1.5;
-    if (doc <= 90) return 8.0;
-    if (doc <= 120) return 20.0;
-    return 30.0;
+    return _interpolate(doc, {
+      1: 0.01,
+      15: 0.08,
+      30: 0.5,
+      45: 2.0,
+      60: 5.0,
+      75: 10.0,
+      90: 18.0,
+      105: 25.0,
+      120: 32.0,
+    });
   }
 
-  /// FEED %
+  /// FEED % (Smooth Interpolation)
   static double _feedPercent(int doc) {
-    if (doc <= 15) return 0.15;
-    if (doc <= 30) return 0.10;
-    if (doc <= 60) return 0.06;
-    if (doc <= 90) return 0.04;
-    return 0.03;
+    return _interpolate(doc, {
+      1: 0.15,
+      15: 0.12,
+      30: 0.08,
+      60: 0.05,
+      90: 0.035,
+      120: 0.025,
+    });
+  }
+
+  /// Linear interpolation between data points
+  static double _interpolate(int doc, Map<int, double> points) {
+    final keys = points.keys.toList()..sort();
+
+    if (doc <= keys.first) return points[keys.first]!;
+    if (doc >= keys.last) return points[keys.last]!;
+
+    for (int i = 0; i < keys.length - 1; i++) {
+      final x0 = keys[i];
+      final x1 = keys[i + 1];
+      if (doc >= x0 && doc <= x1) {
+        final t = (doc - x0) / (x1 - x0);
+        return points[x0]! + t * (points[x1]! - points[x0]!);
+      }
+    }
+
+    return points[keys.last]!;
   }
 
   /// SPLIT INTO ROUNDS

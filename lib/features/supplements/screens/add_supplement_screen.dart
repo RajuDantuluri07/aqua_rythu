@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../farm/farm_provider.dart';
 import '../supplement_provider.dart';
 
 class AddSupplementScreen extends ConsumerStatefulWidget {
   final Supplement? supplement;
-  const AddSupplementScreen({super.key, this.supplement});
+  final String? initialPondId;
+
+  const AddSupplementScreen({super.key, this.supplement, this.initialPondId});
 
   @override
   ConsumerState<AddSupplementScreen> createState() => _AddSupplementScreenState();
@@ -26,7 +29,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   WaterMixTime _selectedWaterTime = WaterMixTime.afterFeed;
 
   // Items
-  final List<SupplementItem> _items = [];
+  final List<MixItem> _items = [];
+
+  // Pond Selection State
+  List<String> _selectedPondIds = ['ALL'];
+  String _pondSelectionMode = 'ALL'; // 'THIS', 'MULTIPLE', 'ALL'
 
   // Item Input Controllers (Temp)
   final _itemNameController = TextEditingController();
@@ -43,10 +50,27 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       _startDocController.text = s.startDoc.toString();
       _endDocController.text = s.endDoc.toString();
       _items.addAll(s.items);
+      _selectedPondIds = List.from(s.pondIds);
+      
+      if (_selectedPondIds.contains('ALL')) {
+        _pondSelectionMode = 'ALL';
+      } else if (_selectedPondIds.length == 1 && _selectedPondIds.first == widget.initialPondId) {
+        _pondSelectionMode = 'THIS';
+      } else {
+        _pondSelectionMode = 'MULTIPLE';
+      }
 
       if (s.type == SupplementType.waterMix) {
         _selectedFrequency = s.frequencyDays ?? 7;
         _selectedWaterTime = s.preferredTime ?? WaterMixTime.afterFeed;
+      }
+    } else {
+      if (widget.initialPondId != null) {
+        _pondSelectionMode = 'THIS';
+        _selectedPondIds = [widget.initialPondId!];
+      } else {
+        _pondSelectionMode = 'ALL';
+        _selectedPondIds = ['ALL'];
       }
     }
   }
@@ -70,7 +94,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     if (name.isEmpty || dose == null || unit.isEmpty) return;
 
     setState(() {
-      _items.add(SupplementItem(name: name, dosePerKg: dose, unit: unit));
+      _items.add(MixItem(name: name, dosePerKg: dose, unit: unit));
       _itemNameController.clear();
       _itemDoseController.clear();
     });
@@ -102,6 +126,13 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       // Water Mix Data
       frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
       preferredTime: _selectedType == SupplementType.waterMix ? _selectedWaterTime : null,
+      
+      // Pond Selection
+      pondIds: _pondSelectionMode == 'ALL' 
+          ? ['ALL'] 
+          : (_pondSelectionMode == 'THIS' 
+              ? [widget.initialPondId ?? 'Pond 1'] 
+              : _selectedPondIds),
     );
 
     if (widget.supplement != null) {
@@ -170,6 +201,24 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 ),
               ],
             ),
+
+            const SizedBox(height: 24),
+            const Text("Apply to Ponds", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _pondModeChip('THIS', "This Pond"),
+                const SizedBox(width: 8),
+                _pondModeChip('MULTIPLE', "Multiple"),
+                const SizedBox(width: 8),
+                _pondModeChip('ALL', "All Ponds"),
+              ],
+            ),
+            
+            if (_pondSelectionMode == 'MULTIPLE') ...[
+              const SizedBox(height: 12),
+              _buildPondSelector(),
+            ],
 
             const SizedBox(height: 24),
 
@@ -319,5 +368,46 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       case WaterMixTime.evening: return "Evening";
       case WaterMixTime.afterFeed: return "After Last Feed";
     }
+  }
+
+  Widget _pondModeChip(String mode, String label) {
+    final isSelected = _pondSelectionMode == mode;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (val) {
+        if (val) setState(() => _pondSelectionMode = mode);
+      },
+      selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
+      labelStyle: TextStyle(
+        color: isSelected ? Theme.of(context).primaryColor : Colors.black,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
+    );
+  }
+
+  Widget _buildPondSelector() {
+    final farmState = ref.watch(farmProvider);
+    final ponds = farmState.currentFarm?.ponds ?? [];
+
+    return Wrap(
+      spacing: 8,
+      children: ponds.map((p) {
+        final isSelected = _selectedPondIds.contains(p.id);
+        return FilterChip(
+          label: Text(p.name),
+          selected: isSelected,
+          onSelected: (val) {
+            setState(() {
+              if (val) {
+                _selectedPondIds.add(p.id);
+              } else {
+                _selectedPondIds.remove(p.id);
+              }
+            });
+          },
+        );
+      }).toList(),
+    );
   }
 }

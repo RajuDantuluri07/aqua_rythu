@@ -52,6 +52,9 @@ class PondDashboardState {
 class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   final Ref ref;
 
+  /// Per-pond cache to preserve state across pond switches
+  final Map<String, Map<String, dynamic>> _pondCache = {};
+
   PondDashboardNotifier(this.ref)
       : super(PondDashboardState(
           selectedPond: "Pond 1",
@@ -68,19 +71,35 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // 🔁 POND SWITCH
   // =========================================================
 
+  void _saveCurrentPondState() {
+    _pondCache[state.selectedPond] = {
+      'feedDone': Map<int, bool>.from(state.feedDone),
+      'trayResults': Map<int, TrayStatus>.from(state.trayResults),
+      'waterTreatmentLogs': Map<String, String>.from(state.waterTreatmentLogs),
+    };
+  }
+
   void _updateStateForPond(String pondId) {
     final doc = ref.read(docProvider(pondId));
+    final cached = _pondCache[pondId];
 
     state = state.copyWith(
       doc: doc,
-      feedDone: {},
-      currentFeed: 15.0, // Default baseline, UI overrides this per round
-      trayResults: <int, TrayStatus>{},
-      waterTreatmentLogs: {},
+      feedDone: cached != null
+          ? Map<int, bool>.from(cached['feedDone'])
+          : {},
+      currentFeed: 15.0,
+      trayResults: cached != null
+          ? Map<int, TrayStatus>.from(cached['trayResults'])
+          : <int, TrayStatus>{},
+      waterTreatmentLogs: cached != null
+          ? Map<String, String>.from(cached['waterTreatmentLogs'])
+          : {},
     );
   }
 
   void selectPond(String pondId) {
+    _saveCurrentPondState();
     state = state.copyWith(selectedPond: pondId);
     _updateStateForPond(pondId);
   }

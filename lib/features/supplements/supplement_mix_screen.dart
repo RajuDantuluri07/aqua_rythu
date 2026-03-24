@@ -14,11 +14,16 @@ class SupplementMixScreen extends ConsumerWidget {
     final currentDoc = ref.watch(docProvider(pondId));
 
     final active = supplements
-        .where((s) => currentDoc >= s.startDoc && currentDoc <= s.endDoc)
+        .where((s) => (s.pondIds.contains(pondId) || s.pondIds.contains('ALL')) && currentDoc >= s.startDoc && currentDoc <= s.endDoc)
         .toList();
 
-    final completed = supplements.where((s) => currentDoc > s.endDoc).toList();
-    final upcoming = supplements.where((s) => currentDoc < s.startDoc).toList();
+    final completed = supplements
+        .where((s) => (s.pondIds.contains(pondId) || s.pondIds.contains('ALL')) && currentDoc > s.endDoc)
+        .toList();
+
+    final upcoming = supplements
+        .where((s) => (s.pondIds.contains(pondId) || s.pondIds.contains('ALL')) && currentDoc < s.startDoc)
+        .toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -57,7 +62,7 @@ class SupplementMixScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          "POND 1 • DOC $currentDoc",
+                          "${pondId.toUpperCase()} • DOC $currentDoc",
                           style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       )
@@ -123,7 +128,7 @@ class SupplementMixScreen extends ConsumerWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const AddSupplementScreen(),
+              builder: (_) => AddSupplementScreen(initialPondId: pondId),
             ),
           );
         },
@@ -301,7 +306,7 @@ class _SupplementCard extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => AddSupplementScreen(supplement: s),
+                          builder: (_) => AddSupplementScreen(supplement: s, initialPondId: pondId),
                         ),
                       );
                     } else if (value == 'delete') {

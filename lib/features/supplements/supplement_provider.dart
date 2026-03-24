@@ -61,6 +61,8 @@ class Supplement {
   final int? frequencyDays;
   final WaterMixTime? preferredTime;
 
+  final List<String> pondIds; // ['pondId1', 'pondId2'] or ['ALL']
+
   final List<MixItem> items;
 
   Supplement({
@@ -73,6 +75,7 @@ class Supplement {
     this.feedingTimes = const [],
     this.frequencyDays,
     this.preferredTime,
+    this.pondIds = const ['ALL'],
     required this.items,
   });
 
@@ -93,6 +96,7 @@ class Supplement {
         'feedingTimes': feedingTimes,
         'frequencyDays': frequencyDays,
         'preferredTime': preferredTime?.name,
+        'pondIds': pondIds,
         'items': items.map((e) => e.toJson()).toList(),
       };
 
@@ -111,6 +115,7 @@ class Supplement {
       preferredTime: json['preferredTime'] != null
           ? WaterMixTime.values.byName(json['preferredTime'])
           : null,
+      pondIds: List<String>.from(json['pondIds'] ?? ['ALL']),
       items: (json['items'] as List)
           .map((e) => MixItem.fromJson(e))
           .toList(),

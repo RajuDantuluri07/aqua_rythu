@@ -186,7 +186,45 @@ class WaterTreatmentCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: onSkip,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+                              const SizedBox(width: 8),
+                              const Text("Skip Treatment?"),
+                            ],
+                          ),
+                          content: const Text(
+                            "Skipping water treatment may cause:\n\n"
+                            "• Water quality drop\n"
+                            "• Risk of oxygen depletion\n"
+                            "• Increased disease chance\n\n"
+                            "Are you sure you want to skip?",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text("CANCEL"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                onSkip();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text("YES, SKIP"),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.grey.shade700,
                       side: BorderSide(color: Colors.grey.shade400),
