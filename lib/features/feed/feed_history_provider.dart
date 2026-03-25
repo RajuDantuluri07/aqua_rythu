@@ -56,6 +56,7 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
       ));
     }
     
+   
     // Add Today as an empty placeholder or partially filled if needed
     // But better to add it on the fly from Dashboard
     

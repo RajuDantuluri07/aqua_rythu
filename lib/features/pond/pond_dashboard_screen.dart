@@ -526,7 +526,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 children: [
                   _OperationButton(
                     label: "Sampling",
-                    icon: Icons.grid_4x4, // Changed to "Net" icon representation
+                    icon: Icons.texture, // Fishnet/mesh icon representation
                     color: Colors.purple,
                     onTap: () {
                       if (isCompleted) {
@@ -721,6 +721,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         round: round,
                         time: time,
                         feedQty: qty,
+                        originalQty: isAutoAdjusted ? baseQty : null,
                         trayStatuses: thisRoundLog?.trays,
                         supplements: supplementStrings,
                         showTraySummary: feedMode != FeedMode.beginner,

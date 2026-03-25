@@ -23,6 +23,14 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier() : super(AuthState());
 
+  Future<bool> signInWithOtp(String phone) async {
+  // TEMP MOCK LOGIC (Phase 1: UI only)
+  await Future.delayed(Duration(seconds: 1));
+
+  // Always succeed for now
+  return true;
+}
+
   /// Simulate checking local storage/session on app start
   Future<void> checkSession() async {
     state = state.copyWith(isLoading: true);

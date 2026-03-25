@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'water_provider.dart';
 import 'package:intl/intl.dart';
+import '../../core/theme/app_theme.dart';
 
 class WaterTestScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -76,246 +77,239 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
   @override
   Widget build(BuildContext context) {
     final doc = ref.watch(docProvider(widget.pondId));
-    final logs = ref.watch(waterProvider(widget.pondId)); // Watch logs for ledger
+    final logs = ref.watch(waterProvider(widget.pondId));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("Water Quality Test", style: TextStyle(fontWeight: FontWeight.w800)),
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        elevation: 0,
+        title: const Text("Water Quality Test", style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Container(
-              padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 56, bottom: 40, left: 24, right: 24),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.base),
+        child: Column(
+          children: [
+            // KPI Card
+            Container(
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.teal.shade600, Colors.cyan.shade800],
+                  colors: [Colors.teal.shade700, Colors.teal.shade500],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
+                borderRadius: AppRadius.rBase,
+                boxShadow: [
+                  BoxShadow(color: Colors.teal.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
               ),
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.water_drop_rounded, size: 48, color: Colors.white),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("CURRENT STATUS", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                        child: const Text("OPTIMAL", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "POND 1 • DOC $doc",
+                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      "POND 1 • DOC $doc",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: logs.take(3).map((log) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Chip(
+                        label: Text("pH ${log.ph}"),
+                        backgroundColor: Colors.white24,
+                        labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        side: BorderSide.none,
+                      ),
+                    )).toList(),
                   ),
                 ],
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-            sliver: SliverToBoxAdapter(
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(left: 8, bottom: 16),
-                      child: Text(
-                        "Test Parameters",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          _buildInput("pH Level", _phController, Icons.opacity_rounded, hint: "e.g. 7.5", target: "7.5 - 8.5"),
-                          const SizedBox(height: 24),
-                          _buildInput("Dissolved Oxygen", _doController, Icons.water, suffix: "ppm", hint: "e.g. 5.2", target: "> 4.0 ppm"),
-                          const SizedBox(height: 24),
-                          _buildInput("Temperature", _tempController, Icons.thermostat_rounded, suffix: "°C", hint: "e.g. 28", target: "28 - 32 °C"),
-                          const SizedBox(height: 24),
-                          _buildInput("Salinity", _salinityController, Icons.blur_on_rounded, suffix: "ppt", hint: "e.g. 15", target: "10 - 25 ppt"),
-                          const SizedBox(height: 24),
-                          _buildInput("Alkalinity", _alkalinityController, Icons.science_outlined, suffix: "ppm", hint: "e.g. 120", target: "100 - 150 ppm"),
-                          const SizedBox(height: 24),
-                          _buildInput("Ammonia", _ammoniaController, Icons.warning_amber_rounded, suffix: "ppm", hint: "e.g. 0.1", required: false, target: "< 0.1 ppm"),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _saveWaterTest,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal.shade600,
-                          foregroundColor: Colors.white,
-                          elevation: 4,
-                          shadowColor: Colors.teal.shade300,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          "Save Record",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // RECENT LOGS LEDGER
-          if (logs.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+
+            const SizedBox(height: 24),
+
+            Form(
+              key: _formKey,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Recent Water Logs", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Row(
+                    children: [
+                      Expanded(child: _buildInput(label: "pH Level", controller: _phController, icon: Icons.opacity_rounded, hint: "7.5",
+                        validator: (val) {
+                          if (val < 6.0 || val > 9.5) return 'pH should be 6.0-9.5';
+                          return null;
+                        },
+                      )),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildInput(label: "Dissolved Oxygen", controller: _doController, icon: Icons.water, hint: "5.0", suffix: "ppm",
+                        validator: (val) {
+                          if (val < 2.0 || val > 20.0) return 'DO should be 2.0-20.0 ppm';
+                          return null;
+                        },
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(child: _buildInput(label: "Temperature", controller: _tempController, icon: Icons.thermostat_rounded, hint: "28", suffix: "°C",
+                        validator: (val) {
+                          if (val < 15.0 || val > 40.0) return 'Temp should be 15.0-40.0 °C';
+                          return null;
+                        },
+                      )),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildInput(label: "Salinity", controller: _salinityController, icon: Icons.blur_on_rounded, hint: "15", suffix: "ppt",
+                        validator: (val) {
+                          if (val < 0.0 || val > 45.0) return 'Salinity should be 0.0-45.0 ppt';
+                          return null;
+                        },
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(child: _buildInput(label: "Alkalinity", controller: _alkalinityController, icon: Icons.science_outlined, hint: "120", suffix: "ppm",
+                        validator: (val) {
+                          if (val < 50.0 || val > 250.0) return 'Alkalinity should be 50.0-250.0 ppm';
+                          return null;
+                        },
+                      )),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildInput(label: "Ammonia", controller: _ammoniaController, icon: Icons.warning_amber_rounded, hint: "0.1", suffix: "ppm",
+                        validator: (val) {
+                          if (val < 0.0 || val > 2.0) return 'Ammonia should be 0.0-2.0 ppm';
+                          return null;
+                        },
+                      )),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _saveWaterTest,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: AppRadius.rs),
+                      ),
+                      child: const Text("SAVE WATER LOG", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text("Recent Logs", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
                   const SizedBox(height: 12),
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade200),
+                      borderRadius: AppRadius.rs,
+                      border: Border.all(color: AppColors.border),
                     ),
                     child: Column(
-                      children: logs.take(5).map((log) => ListTile(
-                        dense: true,
-                        title: Text(DateFormat('dd MMM').format(log.date), style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("DOC ${log.doc}"),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                             _paramTag("pH", log.ph.toString()),
-                             const SizedBox(width: 8),
-                             _paramTag("DO", log.dissolvedOxygen.toString()),
-                          ],
-                        ),
-                      )).toList(),
+                      children: [
+                        _headerRow(),
+                        ...logs.take(5).map((log) => _logRow(log)),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 40),
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInput({required TextEditingController controller, required String label, required IconData icon, required String hint, String? suffix, String? Function(double?)? validator}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+        const SizedBox(height: 8),
+        TextFormField( // Changed from TextField to TextFormField
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            hintText: hint,
+            suffixText: suffix,
+            prefixIcon: Icon(icon, size: 20, color: Colors.grey),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
+            focusedBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: Colors.teal.shade500, width: 2)), // Added focused border for consistency
           ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Required';
+            }
+            final double? numValue = double.tryParse(value);
+            if (numValue == null) {
+              return 'Invalid number';
+            }
+            return validator?.call(numValue); // Call the custom validator
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _headerRow() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: Color(0xFFF8FAFC),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 2, child: Text("DATE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          Expanded(flex: 1, child: Text("DOC", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          Expanded(flex: 2, child: Text("pH", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          Expanded(flex: 2, child: Text("DO", textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
         ],
       ),
     );
   }
-  
-  Widget _paramTag(String label, String val) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4)),
-      child: Text("$label: $val", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-    );
-  }
 
-  Widget _buildInput(String label, TextEditingController controller, IconData icon, {String? suffix, String? hint, bool required = true, String? target}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Colors.teal.shade600, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                ),
-              ],
-            ),
-            if (target != null)
-              Text(
-                "Ideal: $target",
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade500),
-              )
-          ],
-        ),
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w500),
-            suffixText: suffix,
-            suffixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.teal.shade500, width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          ),
-          validator: required ? (value) {
-            if (value == null || value.isEmpty) return 'Required';
-            if (double.tryParse(value) == null) return 'Invalid number';
-            return null;
-          } : (value) {
-            if (value != null && value.isNotEmpty && double.tryParse(value) == null) {
-              return 'Invalid number';
-            }
-            return null;
-          },
-        ),
-      ],
+  Widget _logRow(dynamic log) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: Text(DateFormat("dd MMM").format(log.date), style: const TextStyle(fontWeight: FontWeight.w500))),
+          Expanded(flex: 1, child: Text("${log.doc}", style: const TextStyle(fontWeight: FontWeight.w500))),
+          Expanded(flex: 2, child: Text("${log.ph}", style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(flex: 2, child: Text("${log.dissolvedOxygen}", textAlign: TextAlign.right, style: const TextStyle(color: AppColors.textSecondary))),
+        ],
+      ),
     );
   }
 }

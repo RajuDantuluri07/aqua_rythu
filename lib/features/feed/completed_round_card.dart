@@ -6,6 +6,7 @@ class CompletedRoundCard extends StatelessWidget {
   final int round;
   final String time;
   final double feedQty;
+  final double? originalQty;
   final List<TrayStatus>? trayStatuses;
   final List<String> supplements;
   final bool showTraySummary;
@@ -16,6 +17,7 @@ class CompletedRoundCard extends StatelessWidget {
     required this.round,
     required this.time,
     required this.feedQty,
+    this.originalQty,
     this.trayStatuses,
     this.supplements = const [],
     this.showTraySummary = true,
@@ -60,6 +62,17 @@ class CompletedRoundCard extends StatelessWidget {
                         ),
                         child: const Text("COMPLETED", style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
+                      if (originalQty != null && feedQty < originalQty!) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7), // Amber-100
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text("PARTIAL", style: TextStyle(color: Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
