@@ -80,7 +80,7 @@ class FeedScheduleScreen extends ConsumerWidget {
                   Container(
                     decoration: BoxDecoration(
                       color: AppColors.cardBg,
-                      borderRadius: BorderRadius.circular(AppRadius.rBase),
+                      borderRadius: AppRadius.rBase,
                       border: Border.all(color: AppColors.border),
                       boxShadow: [
                         BoxShadow(
@@ -108,7 +108,7 @@ class FeedScheduleScreen extends ConsumerWidget {
 
                   // Total Summary Card
                   _buildTotalSummaryCard(plan?.totalProjected ?? 0),
-                  SizedBox(height: AppSpacing.hXxl * 3), // Spacing for bottom button
+                  SizedBox(height: AppSpacing.hXxl * 3), // Fixed: wrapped in SizedBox
                 ],
               ),
             ),
@@ -155,7 +155,7 @@ class FeedScheduleScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7ED),
-        borderRadius: BorderRadius.circular(AppRadius.rBase),
+        borderRadius: AppRadius.rBase,
         border: Border.all(color: const Color(0xFFFFEED9)),
       ),
       child: Row(
@@ -164,7 +164,7 @@ class FeedScheduleScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.s),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(AppRadius.rs),
+              borderRadius: AppRadius.rs,
             ),
             child: const Icon(Icons.bar_chart, color: Colors.orange, size: 24),
           ),
@@ -210,7 +210,7 @@ class FeedScheduleScreen extends ConsumerWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF22C55E),
           minimumSize: const Size(double.infinity, 56),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.rm)),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
         ),
       ),
     );

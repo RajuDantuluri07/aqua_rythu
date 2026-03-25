@@ -124,6 +124,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       if (round > 1) {
          final prevTray = state.trayResults[round - 1];
          if (prevTray != null) {
+            // ✅ VERIFIED: Passing single aggregated tray as list to satisfy engine signature
             final mode = FeedStateEngine.getMode(state.doc);
             qty = FeedStateEngine.applyTrayAdjustment(
               [prevTray],

@@ -1,30 +1,5 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/utils/logger.dart';
-import '../farm/farm_provider.dart';
-import '../feed/feed_plan_provider.dart';
-import '../growth/growth_provider.dart';
-
-class FarmDashboardConstants {
-  static const double defaultBiomassFactor = 0.005;
-  static const double defaultFeedFactor = 0.0005;
-}
-
-class FarmDashboardState {
-  final double totalFeed;
-  final double totalBiomass;
-  final double avgGrowth;
-  final double fcr;
-
-  const FarmDashboardState({
-    this.totalFeed = 0,
-    this.totalBiomass = 0,
-    this.avgGrowth = 0,
-    this.fcr = 0,
-  });
-}
-
 final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
-  AppLogger.debug("🔥 FARM DASHBOARD PROVIDER RUNNING 🔥");
+  print("🔥 FARM DASHBOARD PROVIDER RUNNING 🔥");
 
   final farmState = ref.watch(farmProvider);
   final currentFarm = farmState.currentFarm;
@@ -42,33 +17,33 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
 
   // ✅ SINGLE CLEAN LOOP
   for (var pond in currentFarm.ponds) {
-    final growthState = ref.watch(growthProvider(pond.id));
-    final lastSample = growthState.lastSample;
+    final growthLogs = ref.watch(growthProvider(pond.id));
 
-    // Biomass and Growth
-    if (lastSample != null) {
-      // Biomass = (Seed Count * ABW in grams) / 1000 => kg
-      final biomass = (pond.seedCount * lastSample.abw) / 1000;
-      totalBiomass += biomass;
+    // Biomass
+    if (growthLogs.isNotEmpty) {
+      final lastLog = growthLogs.first; // Newest first
+      // Estimate biomass: SeedCount * Survival * ABW / 1000
+      // Assuming simple survival decay for dashboard view
+      double survival = 1.0; 
+      if (pond.doc > 30) survival = 0.95;
+      if (pond.doc > 60) survival = 0.90;
+      
+      totalBiomass += (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
 
+      // Growth
       if (pond.doc > 0) {
-        // Growth rate = ABW / DOC
-        totalGrowthRate += (lastSample.abw / pond.doc);
+        totalGrowthRate += (lastLog.averageBodyWeight / pond.doc);
       }
-    } else {
-       // Placeholder if no sampling yet (FCR usually calculated from expected biomass)
-       // totalBiomass += pond.seedCount * FarmDashboardConstants.defaultBiomassFactor; // Dummy estimate
     }
 
     // Feed
     final plan = planMap[pond.id];
-
     if (plan != null && plan.days.isNotEmpty) {
       totalFeed += plan.days
           .where((d) => d.doc <= pond.doc)
           .fold(0.0, (sum, day) => sum + day.total);
     } else {
-      totalFeed += pond.seedCount * FarmDashboardConstants.defaultFeedFactor * pond.doc;
+      totalFeed += pond.seedCount * 0.0005 * pond.doc;
     }
   }
 
@@ -78,7 +53,7 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   final double fcr =
       totalBiomass > 0 ? totalFeed / totalBiomass : 0;
 
-  AppLogger.debug("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass");
+  print("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass");
 
   return FarmDashboardState(
     totalFeed: totalFeed,

@@ -31,7 +31,7 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
 
   /// 📏 ADD SAMPLING LOG
   /// Also triggers feed plan recalculation (PRD 3.6)
-  void addSampling({
+  void addLog({
     required int doc,
     required int sampleCount,
     required double totalWeight,

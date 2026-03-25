@@ -52,6 +52,7 @@ Indian shrimp farmers lose 20–30% of potential profit every crop because of po
 
 ---
 
+
 ## 2. MVP Scope — What's IN and OUT
 
 **RULE:** If a feature doesn't directly help the farmer log feed faster or make a better feed decision — it is OUT of V1.
@@ -72,8 +73,12 @@ Indian shrimp farmers lose 20–30% of potential profit every crop because of po
 | Water Quality Log | ✅ IN | Operational completeness. Health score on save. |
 | Harvest Hub (Partial + Final) | ✅ IN | Revenue tracking. Required for Pro upsell. |
 | Farm Dashboard (KPI + Weather) | ✅ IN | Daily overview. Perceived-value feature for farmers. |
-| Profile + Logout | ✅ IN | Basic account management. |
+| Profile + Logout | ✅ IN | Basic account management. 
 | Supplement Mix | ✅ IN | end to end as planned
+| PDF Export | ⬜ IN | once final harvest done - share complete feed used - suppmimantes - all tanks detailes of that Tank
+
+
+
 | WhatsApp Alerts | ⬜ V2 | Requires WhatsApp Business API approval. Complex. |
 | PDF Export | ⬜ V2 | Not blocking beta. Farmers don't need PDFs to log feed. |
 | Telugu Language UI | ⬜ V2 | Significant i18n effort. English sufficient for beta. |

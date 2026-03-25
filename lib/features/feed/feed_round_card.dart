@@ -100,7 +100,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       decoration: BoxDecoration(
         color: widget.isLocked ? Colors.grey.shade100 : (widget.isCurrent ? AppColors.success.withOpacity(0.05) : Colors.white),
-        borderRadius: BorderRadius.circular(AppRadius.rBase),
+        borderRadius: AppRadius.rBase,
         border: widget.isLocked
             ? Border.all(color: AppColors.border)
             : (widget.isPendingTray 
@@ -129,7 +129,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.error,
-                              borderRadius: BorderRadius.circular(AppRadius.rs / 2),
+                              borderRadius: BorderRadius.circular(4), // Fixed: Explicit value
                             ),
                             child: const Text("NOW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
@@ -140,7 +140,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(AppRadius.rs / 2),
+                              borderRadius: BorderRadius.circular(4), // Fixed: Explicit value
                               border: Border.all(color: const Color(0xFFDBEafe)),
                             ),
                             child: const Text("AUTO ADJUSTED", style: TextStyle(color: Color(0xFF3B82F6), fontSize: 10, fontWeight: FontWeight.bold)),
@@ -164,7 +164,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.warning,
-                          borderRadius: BorderRadius.circular(AppRadius.rs - 2),
+                          borderRadius: BorderRadius.circular(6), // Fixed: Explicit value
                         ),
                         child: const Text(
                           "RECOMMENDED ACTION",
@@ -244,7 +244,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
               margin: const EdgeInsets.only(bottom: AppSpacing.m, top: AppSpacing.s),
               decoration: BoxDecoration(
                 color: const Color(0xFFFEFCE8),
-                borderRadius: BorderRadius.circular(AppRadius.rm),
+                borderRadius: AppRadius.rm,
                 border: Border.all(color: const Color(0xFFFEF08A)),
               ),
               child: Row(
