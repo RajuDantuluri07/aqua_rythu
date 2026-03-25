@@ -39,12 +39,22 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
-  final List<Map<String, dynamic>> feedRoundsData = [
-    {"round": 1, "time": "06:00 AM"},
-    {"round": 2, "time": "10:00 AM"},
-    {"round": 3, "time": "02:00 PM"},
-    {"round": 4, "time": "06:00 PM"},
-  ];
+  // 🔄 Dynamic Rounds based on DOC (PRD 5.5)
+  // Note: Data model currently limited to 4 rounds. 
+  // PRD requires 6 rounds for DOC 1-15.
+  List<Map<String, dynamic>> _getFeedRounds(int doc) {
+    // Default / Precision / Habit (4 rounds)
+    // 6 AM, 10 AM, 2 PM, 6 PM
+    return [
+      {"round": 1, "time": "06:00 AM"},
+      {"round": 2, "time": "10:00 AM"},
+      {"round": 3, "time": "02:00 PM"},
+      {"round": 4, "time": "06:00 PM"},
+    ];
+    
+    // TODO: When DB supports 6 rounds, add:
+    // if (doc <= 15) return 6 rounds configuration...
+  }
 
   void openTray(int round, bool isLocked) async {
     if (isLocked) return;
@@ -287,7 +297,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final currentDoc = ref.watch(docProvider(selectedPond));
     final dayPlan = plan?.days.firstWhere(
       (d) => d.doc == currentDoc,
-      orElse: () => FeedDayPlan(doc: 0, r1: 0, r2: 0, r3: 0, r4: 0),
+      orElse: () => FeedDayPlan(doc: 0, rounds: [0, 0, 0, 0]),
     );
 
     /// SAFE VALUES
@@ -299,7 +309,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       for (int i = 1; i <= 4; i++) {
         if (dashboardState.feedDone[i] == true) {
            // Calculate what was actually fed in that round
-           consumedFeed += _calculateAdjustedQty(dayPlan, i, todayTrayMap);
+           consumedFeed += _calculateAdjustedQty(dayPlan, i, todayTrayMap, currentDoc);
         }
       }
     }
@@ -308,6 +318,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final feedMode = FeedStateEngine.getMode(currentDoc);
     
 
+    // Get Rounds
+    final feedRoundsData = _getFeedRounds(currentDoc);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -661,7 +673,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
                     // 🧠 CALCULATE QTY (Centralized Logic)
                     final double baseQty = _getFeedQty(dayPlan, round);
-                    final double qty = _calculateAdjustedQty(dayPlan, round, todayTrayMap);
+                    final double qty = _calculateAdjustedQty(dayPlan, round, todayTrayMap, currentDoc);
                     
                     final bool isAutoAdjusted = (qty - baseQty).abs() > 0.01;
                     
@@ -692,7 +704,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     final bool isActuallyDoneInPrecision = roundState.isDone && !roundState.showTrayCTA;
 
                     if (isDoneInHabitOrBeginner || isActuallyDoneInPrecision) {
-                      final feedingTime = mapRoundToTimeKey(round);
+                      final feedingTime = mapRoundToTimeKey(round, currentDoc);
                       
                       // ... Calculate supplements (existing logic preserved)
                       final supplementResults = SupplementCalculator.calculate(
@@ -824,16 +836,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
   }
 
   /// 🧠 CORE LOGIC: Calculates feed quantity for a round, applying tray adjustments if needed.
-  double _calculateAdjustedQty(FeedDayPlan? plan, int round, Map<int, TrayLog> todayTrayMap) {
+  double _calculateAdjustedQty(FeedDayPlan? plan, int round, Map<int, TrayLog> todayTrayMap, int doc) {
     double qty = _getFeedQty(plan, round);
     
     // Adjustment Logic: Round N is adjusted by Tray N-1
     if (round > 1) {
       final prevLog = todayTrayMap[round - 1];
       if (prevLog != null) {
+        final mode = FeedStateEngine.getMode(doc);
         qty = FeedStateEngine.applyTrayAdjustment(
-          plannedQty: qty,
-          trayResults: prevLog.trays,
+          prevLog.trays,
+          qty,
+          mode
         );
       }
     }
@@ -842,18 +856,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
   double _getFeedQty(FeedDayPlan? plan, int round) {
     if (plan == null) return 0;
-    switch (round) {
-      case 1:
-        return plan.r1;
-      case 2:
-        return plan.r2;
-      case 3:
-        return plan.r3;
-      case 4:
-        return plan.r4;
-      default:
-        return 0;
+    final index = round - 1;
+    if (index >= 0 && index < plan.rounds.length) {
+      return plan.rounds[index];
     }
+    return 0;
   }
   
   Widget _statusBadge(bool isDone, bool isCurrent) {

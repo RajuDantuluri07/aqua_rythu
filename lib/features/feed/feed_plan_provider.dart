@@ -1,124 +1,144 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aqua_rythu/core/engines/feed_calculation_engine.dart';
-import '../../core/utils/logger.dart';
-
-/// =======================
-/// MODELS
-/// =======================
+import '../../core/engines/feed_calculation_engine.dart';
 
 class FeedDayPlan {
   final int doc;
-  double r1;
-  double r2;
-  double r3;
-  double r4;
+  final List<double> rounds;
 
   FeedDayPlan({
     required this.doc,
-    required this.r1,
-    required this.r2,
-    required this.r3,
-    required this.r4,
+    required this.rounds,
   });
 
-  double get total => r1 + r2 + r3 + r4;
+  double get total => rounds.fold(0.0, (sum, qty) => sum + qty);
+
+  // Getters for backward compatibility in strictly typed UIs (optional, but clean to use list access)
+  double get r1 => rounds.isNotEmpty ? rounds[0] : 0.0;
+  double get r2 => rounds.length > 1 ? rounds[1] : 0.0;
+  double get r3 => rounds.length > 2 ? rounds[2] : 0.0;
+  double get r4 => rounds.length > 3 ? rounds[3] : 0.0;
 }
 
 class FeedPlan {
   final String pondId;
   final List<FeedDayPlan> days;
 
-  FeedPlan({
-    required this.pondId,
-    required this.days,
-  });
+  FeedPlan({required this.pondId, required this.days});
 
-  double get totalProjected =>
-      days.fold(0, (sum, d) => sum + d.total);
+  double get totalProjected => days.fold(0.0, (sum, day) => sum + day.total);
 }
-
-/// =======================
-/// NOTIFIER
-/// =======================
 
 class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
   FeedPlanNotifier() : super({});
 
-  /// ✅ CLEAN PLAN GENERATION
   void createPlan({
     required String pondId,
     required int seedCount,
     required int plSize,
   }) {
+    if (state.containsKey(pondId)) return;
+
+    // Generate 30 days of Standard Blind Plan using Engine
     final List<FeedDayPlan> days = [];
-
-    for (int day = 1; day <= 30; day++) {
-      final totalFeed = FeedCalculationEngine.calculateFeed(
+    for (int i = 1; i <= 30; i++) {
+      final dailyTotal = FeedCalculationEngine.calculateFeed(
         seedCount: seedCount,
-        doc: day,
+        doc: i,
       );
-
-      final splits = FeedCalculationEngine.distributeFeed(totalFeed, 4);
-
-      days.add(
-        FeedDayPlan(
-          doc: day,
-          r1: splits[0],
-          r2: splits[1],
-          r3: splits[2],
-          r4: splits[3],
-        ),
-      );
+      
+      // Distribute logic from Engine
+      final rounds = FeedCalculationEngine.distributeFeed(dailyTotal, 4);
+      
+      days.add(FeedDayPlan(
+        doc: i,
+        rounds: rounds,
+      ));
     }
 
     state = {
       ...state,
-      pondId: FeedPlan(
-        pondId: pondId,
-        days: days,
-      ),
+      pondId: FeedPlan(pondId: pondId, days: days),
     };
   }
 
-  /// ✏️ UPDATE FEED
+  /// 🔄 RECALCULATE PLAN BASED ON SAMPLING (PRD 3.6)
+  /// Call this when Sampling is saved
+  void recalculatePlan({
+    required String pondId,
+    required int currentDoc,
+    required double sampledAbw,
+    required int seedCount,
+  }) {
+    final oldPlan = state[pondId];
+    if (oldPlan == null) return;
+
+    // Keep past days as is, recalculate future days
+    final updatedDays = oldPlan.days.map((day) {
+      if (day.doc <= currentDoc) return day; // Past/Today remains locked
+
+      // Project future ABW (Simple linear growth of 0.2g/day for projection)
+      // In V2 this should be a smarter curve
+      final docDiff = day.doc - currentDoc;
+      final projectedAbw = sampledAbw + (docDiff * 0.2); 
+
+      final newTotal = FeedCalculationEngine.calculateFeed(
+        seedCount: seedCount,
+        doc: day.doc,
+        currentAbw: projectedAbw,
+      );
+
+      final newRounds = FeedCalculationEngine.distributeFeed(newTotal, 4);
+      
+      return FeedDayPlan(doc: day.doc, rounds: newRounds);
+    }).toList();
+
+    state = {
+      ...state,
+      pondId: FeedPlan(pondId: pondId, days: updatedDays),
+    };
+  }
+
   void updateFeed({
     required String pondId,
     required int doc,
-    double? r1,
-    double? r2,
-    double? r3,
-    double? r4,
+    required int roundIndex,
+    required double qty,
   }) {
     final plan = state[pondId];
     if (plan == null) return;
 
-    final dayPlanIndex = plan.days.indexWhere((d) => d.doc == doc);
-    if (dayPlanIndex == -1) return;
-    final dayPlan = plan.days[dayPlanIndex];
+    final updatedDays = plan.days.map((day) {
+      if (day.doc == doc) {
+        // Create new rounds list with updated value
+        if (roundIndex >= 0 && roundIndex < day.rounds.length) {
+           final newRounds = List<double>.from(day.rounds);
+           newRounds[roundIndex] = qty;
+           return FeedDayPlan(doc: doc, rounds: newRounds);
+        }
+      }
+      return day;
+    }).toList();
 
-    if (r1 != null) dayPlan.r1 = r1;
-    if (r2 != null) dayPlan.r2 = r2;
-    if (r3 != null) dayPlan.r3 = r3;
-    if (r4 != null) dayPlan.r4 = r4;
-
-    state = {...state};
+    state = {
+      ...state,
+      pondId: FeedPlan(pondId: pondId, days: updatedDays),
+    };
   }
 
-  /// 💾 SAVE PLAN
   void savePlan(String pondId) {
-    final plan = state[pondId];
-    if (plan == null) return;
+    // In a real app, this would write to Supabase
+    // For now, state is already updated in memory
+  }
 
-    AppLogger.info("✅ Feed Plan Saved for $pondId");
-    AppLogger.debug("Total: ${plan.totalProjected}");
+  // Helper to get today's plan safely
+  FeedDayPlan? getDayPlan(String pondId, int doc) {
+    final plan = state[pondId];
+    if (plan == null) return null;
+    return plan.days.firstWhere((d) => d.doc == doc, 
+      orElse: () => FeedDayPlan(doc: doc, rounds: [0.0, 0.0, 0.0, 0.0]));
   }
 }
 
-/// =======================
-/// PROVIDER
-/// =======================
-
-final feedPlanProvider =
-    StateNotifierProvider<FeedPlanNotifier, Map<String, FeedPlan>>(
-  (ref) => FeedPlanNotifier(),
-);
+final feedPlanProvider = StateNotifierProvider<FeedPlanNotifier, Map<String, FeedPlan>>((ref) {
+  return FeedPlanNotifier();
+});

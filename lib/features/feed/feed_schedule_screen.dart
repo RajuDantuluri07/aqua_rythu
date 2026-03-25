@@ -80,7 +80,7 @@ class FeedScheduleScreen extends ConsumerWidget {
                   Container(
                     decoration: BoxDecoration(
                       color: AppColors.cardBg,
-                      borderRadius: AppRadius.rBase,
+                      borderRadius: BorderRadius.circular(AppRadius.rBase),
                       border: Border.all(color: AppColors.border),
                       boxShadow: [
                         BoxShadow(
@@ -108,7 +108,7 @@ class FeedScheduleScreen extends ConsumerWidget {
 
                   // Total Summary Card
                   _buildTotalSummaryCard(plan?.totalProjected ?? 0),
-                  AppSpacing.hXxl * 3, // Spacing for bottom button
+                  SizedBox(height: AppSpacing.hXxl * 3), // Spacing for bottom button
                 ],
               ),
             ),
@@ -139,21 +139,23 @@ class FeedScheduleScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildEllipsisRow(int count) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
       alignment: Alignment.center,
-      child: const Text(
-        "... Days 10 to X ...", // Note: This could be dynamic based on totalCount
-        style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+      child: Text(
+        "... Days 10 to ${count - 1} ...",
+        style: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
       ),
     );
+  }
 
   Widget _buildTotalSummaryCard(double total) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7ED),
-        borderRadius: AppRadius.rBase,
+        borderRadius: BorderRadius.circular(AppRadius.rBase),
         border: Border.all(color: const Color(0xFFFFEED9)),
       ),
       child: Row(
@@ -162,7 +164,7 @@ class FeedScheduleScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.s),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: AppRadius.rs,
+              borderRadius: BorderRadius.circular(AppRadius.rs),
             ),
             child: const Icon(Icons.bar_chart, color: Colors.orange, size: 24),
           ),
@@ -208,7 +210,7 @@ class FeedScheduleScreen extends ConsumerWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF22C55E),
           minimumSize: const Size(double.infinity, 56),
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.rm)),
         ),
       ),
     );
@@ -249,39 +251,28 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   @override
   void initState() {
     super.initState();
-    _controllers = [
-      TextEditingController(text: widget.day.r1.toStringAsFixed(1)),
-      TextEditingController(text: widget.day.r2.toStringAsFixed(1)),
-      TextEditingController(text: widget.day.r3.toStringAsFixed(1)),
-      TextEditingController(text: widget.day.r4.toStringAsFixed(1)),
-    ];
+    _controllers = widget.day.rounds
+        .map((r) => TextEditingController(text: r.toStringAsFixed(1)))
+        .toList();
   }
 
   @override
   void didUpdateWidget(_FeedRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.day != widget.day) {
-      // Update controllers if the day data changes externally
-      _controllers[0].text = widget.day.r1.toStringAsFixed(1);
-      _controllers[1].text = widget.day.r2.toStringAsFixed(1);
-      _controllers[2].text = widget.day.r3.toStringAsFixed(1);
-      _controllers[3].text = widget.day.r4.toStringAsFixed(1);
+      for (int i = 0; i < _controllers.length && i < widget.day.rounds.length; i++) {
+        _controllers[i].text = widget.day.rounds[i].toStringAsFixed(1);
+      }
     }
   }
 
-  void _onChanged() {
-    final r1 = double.tryParse(_controllers[0].text) ?? 0;
-    final r2 = double.tryParse(_controllers[1].text) ?? 0;
-    final r3 = double.tryParse(_controllers[2].text) ?? 0;
-    final r4 = double.tryParse(_controllers[3].text) ?? 0;
-
+  void _onChanged(int index) {
+    final val = double.tryParse(_controllers[index].text) ?? 0;
     ref.read(feedPlanProvider.notifier).updateFeed(
           pondId: widget.pondId,
           doc: widget.day.doc,
-          r1: r1,
-          r2: r2,
-          r3: r3,
-          r4: r4,
+          roundIndex: index,
+          qty: val,
         );
   }
 
@@ -321,10 +312,9 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
               ),
             ),
           ),
-          _buildInputCell(_controllers[0]),
-          _buildInputCell(_controllers[1]),
-          _buildInputCell(_controllers[2]),
-          _buildInputCell(_controllers[3]),
+          // Dynamically build cells based on controllers (rounds)
+          for (int i = 0; i < _controllers.length; i++)
+             _buildInputCell(_controllers[i], i),
           Expanded(
             flex: 2,
             child: Text(
@@ -342,7 +332,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     );
   }
 
-  Widget _buildInputCell(TextEditingController controller) {
+  Widget _buildInputCell(TextEditingController controller, int index) {
     return Expanded(
       flex: 3,
       child: Padding(
@@ -353,7 +343,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textAlign: TextAlign.center,
-            onChanged: (val) => _onChanged(),
+            onChanged: (val) => _onChanged(index),
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               contentPadding: EdgeInsets.zero,

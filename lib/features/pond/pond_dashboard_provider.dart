@@ -114,19 +114,21 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final plan = planMap[state.selectedPond];
     if (plan != null) {
       final dayPlan = plan.days.firstWhere((d) => d.doc == state.doc, 
-        orElse: () => FeedDayPlan(doc: state.doc, r1: 1.0, r2: 1.0, r3: 1.0, r4: 1.0));
+        orElse: () => FeedDayPlan(doc: state.doc, rounds: [1.0, 1.0, 1.0, 1.0]));
       
-      double qty = round == 1 ? dayPlan.r1 : 
-                 (round == 2 ? dayPlan.r2 : 
-                 (round == 3 ? dayPlan.r3 : dayPlan.r4));
+      // Access round index (0-based)
+      final roundIdx = round - 1;
+      double qty = (dayPlan.rounds.length > roundIdx) ? dayPlan.rounds[roundIdx] : 0.0;
 
       // Apply adjustment if round > 1
       if (round > 1) {
          final prevTray = state.trayResults[round - 1];
          if (prevTray != null) {
+            final mode = FeedStateEngine.getMode(state.doc);
             qty = FeedStateEngine.applyTrayAdjustment(
-              plannedQty: qty, 
-              trayResult: prevTray
+              [prevTray],
+              qty,
+              mode
             );
          }
       }

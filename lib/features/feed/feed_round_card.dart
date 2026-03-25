@@ -8,8 +8,20 @@ import '../../core/theme/app_theme.dart';
 import 'widgets/supplement_chip.dart';
 
 /// 🔁 Round → Feeding Time
-String mapRoundToTimeKey(int round) {
-    switch (round) {
+/// UPDATED: Basic mapping. For full PRD compliance (6 rounds),
+/// the underlying data model needs to support r5/r6.
+String mapRoundToTimeKey(int round, int doc) {
+  // PRD 5.5: DOC 1-15 (6 rounds) - 6, 8:30, 11, 1:30, 4, 6:30
+  // Since we only have 4 slots in DB, we map the 4 most critical times for now.
+  if (doc <= 15) {
+     // Temporary mapping for Beginner mode until DB migration
+     if (round == 1) return "6:00 AM";
+     if (round == 2) return "10:00 AM"; // merged
+     if (round == 3) return "2:00 PM";  // merged
+     if (round == 4) return "6:00 PM";
+  }
+  
+  switch (round) {
     case 1:
       return "6 AM";
     case 2:
@@ -73,7 +85,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
     final currentDoc = dashboardState.doc;
 
     /// 🔁 Map round
-    final feedingTime = mapRoundToTimeKey(widget.round);
+    final feedingTime = mapRoundToTimeKey(widget.round, currentDoc);
 
     /// 🧠 Calculate supplements
     final supplementResults = SupplementCalculator.calculate(
@@ -88,7 +100,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       decoration: BoxDecoration(
         color: widget.isLocked ? Colors.grey.shade100 : (widget.isCurrent ? AppColors.success.withOpacity(0.05) : Colors.white),
-        borderRadius: AppRadius.rBase,
+        borderRadius: BorderRadius.circular(AppRadius.rBase),
         border: widget.isLocked
             ? Border.all(color: AppColors.border)
             : (widget.isPendingTray 
@@ -117,7 +129,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.error,
-                              borderRadius: AppRadius.rs / 2,
+                              borderRadius: BorderRadius.circular(AppRadius.rs / 2),
                             ),
                             child: const Text("NOW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
@@ -128,7 +140,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: const Color(0xFFEFF6FF),
-                              borderRadius: AppRadius.rs / 2,
+                              borderRadius: BorderRadius.circular(AppRadius.rs / 2),
                               border: Border.all(color: const Color(0xFFDBEafe)),
                             ),
                             child: const Text("AUTO ADJUSTED", style: TextStyle(color: Color(0xFF3B82F6), fontSize: 10, fontWeight: FontWeight.bold)),
@@ -152,7 +164,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.warning,
-                          borderRadius: AppRadius.rs - 2,
+                          borderRadius: BorderRadius.circular(AppRadius.rs - 2),
                         ),
                         child: const Text(
                           "RECOMMENDED ACTION",
@@ -232,7 +244,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
               margin: const EdgeInsets.only(bottom: AppSpacing.m, top: AppSpacing.s),
               decoration: BoxDecoration(
                 color: const Color(0xFFFEFCE8),
-                borderRadius: AppRadius.rm,
+                borderRadius: BorderRadius.circular(AppRadius.rm),
                 border: Border.all(color: const Color(0xFFFEF08A)),
               ),
               child: Row(

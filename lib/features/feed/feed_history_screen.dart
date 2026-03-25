@@ -72,7 +72,7 @@ class FeedHistoryScreen extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.border),
-                    borderRadius: AppRadius.rs / 2,
+                    borderRadius: BorderRadius.circular(AppRadius.rs / 2),
                   ),
                   child: Row(
                     children: [
@@ -260,8 +260,6 @@ class FeedHistoryScreen extends ConsumerWidget {
             fontSize: 12,
             fontWeight: bold ? FontWeight.w900 : FontWeight.w500,
             color: color ?? Colors.black87,
-          ),
-            color: color ?? AppColors.textPrimary,
           ),
         ),
       ),
