@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'water_provider.dart';
+import 'package:intl/intl.dart';
 
 class WaterTestScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -75,6 +76,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
   @override
   Widget build(BuildContext context) {
     final doc = ref.watch(docProvider(widget.pondId));
+    final logs = ref.watch(waterProvider(widget.pondId)); // Watch logs for ledger
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -201,8 +203,54 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
               ),
             ),
           ),
+          
+          // RECENT LOGS LEDGER
+          if (logs.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Recent Water Logs", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      children: logs.take(5).map((log) => ListTile(
+                        dense: true,
+                        title: Text(DateFormat('dd MMM').format(log.date), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text("DOC ${log.doc}"),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                             _paramTag("pH", log.ph.toString()),
+                             const SizedBox(width: 8),
+                             _paramTag("DO", log.dissolvedOxygen.toString()),
+                          ],
+                        ),
+                      )).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+  
+  Widget _paramTag(String label, String val) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4)),
+      child: Text("$label: $val", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 

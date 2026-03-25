@@ -36,7 +36,7 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     required int seedCount,
     required int plSize,
   }) {
-    if (state.containsKey(pondId)) return;
+    // if (state.containsKey(pondId)) return; // Allow overwrite for New Cycle
 
     // Generate 30 days of Standard Blind Plan using Engine
     final List<FeedDayPlan> days = [];
@@ -72,25 +72,29 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     final oldPlan = state[pondId];
     if (oldPlan == null) return;
 
-    // Keep past days as is, recalculate future days
-    final updatedDays = oldPlan.days.map((day) {
-      if (day.doc <= currentDoc) return day; // Past/Today remains locked
+    // 1. Keep past/today days as is (locked)
+    final updatedDays = oldPlan.days.where((day) => day.doc <= currentDoc).toList();
 
-      // Project future ABW (Simple linear growth of 0.2g/day for projection)
-      // In V2 this should be a smarter curve
-      final docDiff = day.doc - currentDoc;
+    // 2. Project future days up to DOC 120 (Standard Harvest Cycle)
+    // Extends the plan if it was short (e.g. only 30 days) and updates existing future days
+    const int projectionLimit = 120;
+
+    for (int d = currentDoc + 1; d <= projectionLimit; d++) {
+      // Project future ABW (Simple linear growth of 0.2g/day)
+      final docDiff = d - currentDoc;
       final projectedAbw = sampledAbw + (docDiff * 0.2); 
 
       final newTotal = FeedCalculationEngine.calculateFeed(
         seedCount: seedCount,
-        doc: day.doc,
+        doc: d,
         currentAbw: projectedAbw,
       );
 
+      // Distribute into 4 rounds (V1 standard)
       final newRounds = FeedCalculationEngine.distributeFeed(newTotal, 4);
       
-      return FeedDayPlan(doc: day.doc, rounds: newRounds);
-    }).toList();
+      updatedDays.add(FeedDayPlan(doc: d, rounds: newRounds));
+    }
 
     state = {
       ...state,

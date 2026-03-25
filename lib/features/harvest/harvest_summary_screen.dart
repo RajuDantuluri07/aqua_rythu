@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
 import 'harvest_provider.dart';
+import '../feed/feed_history_provider.dart';
 
 class HarvestSummaryScreen extends ConsumerWidget {
   final String pondId;
@@ -14,21 +15,19 @@ class HarvestSummaryScreen extends ConsumerWidget {
     final notifier = ref.read(harvestProvider(pondId).notifier);
     final pond = ref.watch(farmProvider).farms
         .expand((f) => f.ponds)
-        .firstWhere(
-          (p) => p.id == pondId,
-          orElse: () => Pond(
-            id: pondId,
-            name: "Unknown Pond",
-            area: 0,
-            stockingDate: DateTime.now(),
-          ),
-        );
+        .firstWhere((p) => p.id == pondId);
 
     final totalYield = harvests.fold(0.0, (sum, h) => sum + h.quantity);
     final totalRevenue = harvests.fold(0.0, (sum, h) => sum + h.revenue);
     final totalExpenses = harvests.fold(0.0, (sum, h) => sum + h.expenses);
     final totalProfit = totalRevenue - totalExpenses;
     
+    // Calculate FCR
+    final historyMap = ref.watch(feedHistoryProvider);
+    final feedLogs = historyMap[pondId] ?? [];
+    final totalFeed = feedLogs.fold(0.0, (sum, log) => sum + log.total);
+    final fcr = totalYield > 0 ? totalFeed / totalYield : 0.0;
+
     // Calculate survival % (est)
     final survivingCount = harvests.fold(0.0, (sum, h) => sum + (h.quantity * h.countPerKg));
     final survivalRate = (survivingCount / pond.seedCount * 100).clamp(0.0, 100.0);
@@ -67,7 +66,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
                    const SizedBox(height: 24),
                    const Text("Performance Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                    const SizedBox(height: 12),
-                   _buildDetailsGrid(pond, survivalRate, totalExpenses),
+                   _buildDetailsGrid(pond, survivalRate, totalExpenses, fcr),
                    const SizedBox(height: 32),
                    _buildActionButtons(context),
                 ],
@@ -119,7 +118,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailsGrid(Pond pond, double survival, double expenses) {
+  Widget _buildDetailsGrid(Pond pond, double survival, double expenses, double fcr) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -128,10 +127,10 @@ class HarvestSummaryScreen extends ConsumerWidget {
       crossAxisSpacing: 16,
       childAspectRatio: 1.5,
       children: [
+        _detailCard("FCR", fcr.toStringAsFixed(2), Icons.trending_up_rounded, Colors.blue),
         _detailCard("Duration", "${pond.doc} Days", Icons.calendar_today_rounded, Colors.orange),
         _detailCard("Survival", "${survival.toStringAsFixed(1)}%", Icons.health_and_safety_rounded, Colors.green),
         _detailCard("Expenses", "₹${NumberFormat('#,###').format(expenses)}", Icons.money_off_rounded, Colors.red),
-        _detailCard("Status", "Completed", Icons.check_circle_rounded, Colors.teal),
       ],
     );
   }

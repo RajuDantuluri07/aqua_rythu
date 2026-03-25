@@ -338,17 +338,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   // LEFT: Logo + App Name
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(AppSpacing.s + 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
-                          ]
-                        ),
-                        child: Icon(Icons.water_drop_rounded,
-                            color: Theme.of(context).primaryColor, size: 22),
+                      // Replaced Icon with Real Logo Asset
+                      Image.asset(
+                        'assets/images/logo.png',
+                        height: 40,
+                        errorBuilder: (c, o, s) => Icon(Icons.water_drop, color: Theme.of(context).primaryColor, size: 32),
                       ),
                       AppSpacing.wM,
                       const Text(
@@ -515,7 +509,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _kpi("SPECIES", "L. vannamei", Icons.pets_rounded, Colors.orange),
+                    _kpi("SPECIES", "L. vannamei", Icons.water, Colors.blue), // Changed from set_meal_rounded (dog foot lookalike)
                     _divider(),
                     _kpi("DOC", "${currentDoc} Days", Icons.calendar_month_rounded, Colors.blue),
                     _divider(),
@@ -532,7 +526,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 children: [
                   _OperationButton(
                     label: "Sampling",
-                    icon: Icons.science_rounded,
+                    icon: Icons.grid_4x4, // Changed to "Net" icon representation
                     color: Colors.purple,
                     onTap: () {
                       if (isCompleted) {
@@ -824,6 +818,42 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   }).toList(),
 
 
+                  /// 2. MINERALS & PROBIOTICS (New Section)
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.shade100),
+                      boxShadow: [
+                         BoxShadow(color: Colors.blue.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                         Row(
+                           children: [
+                             Icon(Icons.science_rounded, color: Colors.blue.shade700, size: 20),
+                             const SizedBox(width: 8),
+                             Text("Daily Care: Minerals & Probiotics", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
+                           ],
+                         ),
+                         const SizedBox(height: 8),
+                         const Text("Apply daily minerals and soil probiotics as per supplement plan.", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                         const SizedBox(height: 12),
+                         SizedBox(
+                           width: double.infinity,
+                           child: OutlinedButton(
+                             onPressed: () {}, // TODO: Link to Supplement Mark Done
+                             style: OutlinedButton.styleFrom(foregroundColor: Colors.blue.shade700),
+                             child: const Text("MARK AS APPLIED"),
+                           ),
+                         )
+                      ],
+                    ),
+                  ),
                 ],
               ),
               ],

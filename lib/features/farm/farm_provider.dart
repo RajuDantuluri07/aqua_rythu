@@ -207,6 +207,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
     required int seedCount,
     required int plSize,
     required DateTime stockingDate,
+    int numTrays = 4,
   }) {
     state = state.copyWith(
       farms: state.farms.map((f) {
@@ -221,6 +222,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
                 seedCount: seedCount,
                 plSize: plSize,
                 stockingDate: stockingDate,
+                numTrays: numTrays,
               );
             }
             return p;

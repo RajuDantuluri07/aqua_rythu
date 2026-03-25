@@ -96,13 +96,20 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
       }
       newRounds[round - 1] = qty;
 
+      // Recalculate Cumulative
+      double prevCum = 0.0;
+      if (todayIdx + 1 < pondLogs.length) {
+        prevCum = pondLogs[todayIdx + 1].cumulative;
+      }
+      final newTotal = newRounds.fold(0.0, (sum, val) => sum + val);
+
       pondLogs[todayIdx] = FeedHistoryLog(
         date: existing.date,
         doc: doc,
         rounds: newRounds,
         trayStatuses: newTrays,
         expected: existing.expected,
-        cumulative: existing.cumulative, // We should update this too, but let's keep it simple for now
+        cumulative: prevCum + newTotal,
       );
     } else {
       // Create new today log

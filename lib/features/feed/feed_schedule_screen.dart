@@ -81,7 +81,7 @@ class FeedScheduleScreen extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: AppColors.cardBg,
                       borderRadius: AppRadius.rBase,
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: Colors.grey.shade200),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.03),
@@ -94,13 +94,8 @@ class FeedScheduleScreen extends ConsumerWidget {
                       children: [
                         // Table Header
                         _buildTableHeader(),
-                        // Data Rows (Limited to showing first 9 and last 1 for ellipsis effect как в картинке)
-                        if (days.length > 10) ...[
-                          ...days.take(9).map((d) => _FeedRow(pondId: pondId, day: d)),
-                          _buildEllipsisRow(days.length),
-                          _FeedRow(pondId: pondId, day: days.last),
-                        ] else
-                          ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
+                        // Data Rows (Show all days for full reference)
+                        ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
                       ],
                     ),
                   ),
@@ -118,7 +113,7 @@ class FeedScheduleScreen extends ConsumerWidget {
 
   Widget _buildTableHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: const BoxDecoration(
         color: Color(0xFFF8FAFB),
         borderRadius: BorderRadius.only(
@@ -128,24 +123,13 @@ class FeedScheduleScreen extends ConsumerWidget {
       ),
       child: const Row(
         children: [
-          Expanded(flex: 2, child: _HeaderCell("DOC")),
-          Expanded(flex: 3, child: _HeaderCell("R1 (KG)")),
-          Expanded(flex: 3, child: _HeaderCell("R2 (KG)")),
-          Expanded(flex: 3, child: _HeaderCell("R3 (KG)")),
-          Expanded(flex: 3, child: _HeaderCell("R4 (KG)")),
-          Expanded(flex: 2, child: _HeaderCell("TOTAL", align: TextAlign.right)),
+          Expanded(flex: 2, child: _HeaderCell("DOC", align: TextAlign.center)),
+          Expanded(flex: 3, child: _HeaderCell("R1", align: TextAlign.center)),
+          Expanded(flex: 3, child: _HeaderCell("R2", align: TextAlign.center)),
+          Expanded(flex: 3, child: _HeaderCell("R3", align: TextAlign.center)),
+          Expanded(flex: 3, child: _HeaderCell("R4", align: TextAlign.center)),
+          Expanded(flex: 3, child: _HeaderCell("TOTAL", align: TextAlign.right)),
         ],
-      ),
-    );
-  }
-
-  Widget _buildEllipsisRow(int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
-      alignment: Alignment.center,
-      child: Text(
-        "... Days 10 to ${count - 1} ...",
-        style: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
       ),
     );
   }
@@ -172,7 +156,7 @@ class FeedScheduleScreen extends ConsumerWidget {
           const Text(
             "Total Projected Feed",
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Color(0xFF1E293B),
             ),
@@ -261,7 +245,12 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.day != widget.day) {
       for (int i = 0; i < _controllers.length && i < widget.day.rounds.length; i++) {
-        _controllers[i].text = widget.day.rounds[i].toStringAsFixed(1);
+        // 🔒 Prevent overwriting user input while typing unless value changed externally
+        // This avoids cursor jumping or "1." becoming "1.0" immediately
+        final currentVal = double.tryParse(_controllers[i].text) ?? 0;
+        if ((currentVal - widget.day.rounds[i]).abs() > 0.01) {
+          _controllers[i].text = widget.day.rounds[i].toStringAsFixed(1);
+        }
       }
     }
   }
@@ -286,12 +275,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
 
   @override
   Widget build(BuildContext context) {
-    // Re-watch for total updates if needed, but since updateFeed triggers state change,
-    // and this is a ConsumerStatefulWidget, it should work fine if we watch something or if the parent rebuilds.
-    // However, for efficiency, widget.day is already updated in the provider since it's a reference (mostly).
-    // Let's ensure the total updates accurately.
-    final currentDay = ref.watch(feedPlanProvider)[widget.pondId]?.days.firstWhere((d) => d.doc == widget.day.doc);
-    final total = currentDay?.total ?? 0;
+    // Optimized: widget.day is already the updated object from parent
+    final total = widget.day.total;
 
     return Container(
       decoration: const BoxDecoration(
@@ -304,11 +289,11 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
             flex: 2,
             child: Text(
               "${widget.day.doc}",
-              textAlign: TextAlign.center,
+              textAlign: TextAlign.left,
               style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: Colors.grey,
               ),
             ),
           ),
@@ -321,9 +306,9 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
               total.toStringAsFixed(1),
               textAlign: TextAlign.right,
               style: const TextStyle(
-                color: Colors.orange,
+                color: Colors.black87,
                 fontWeight: FontWeight.bold,
-                fontSize: 15,
+                fontSize: 13,
               ),
             ),
           ),
@@ -338,7 +323,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: SizedBox(
-          height: 48,
+          height: 36,
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -347,16 +332,18 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               contentPadding: EdgeInsets.zero,
+              filled: true,
+              fillColor: Colors.white,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 borderSide: const BorderSide(color: Colors.blue, width: 1.5),
               ),
             ),

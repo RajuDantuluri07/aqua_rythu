@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
       title: 'Aqua Rythu',
 
       theme: AppTheme.lightTheme,
-      initialRoute: AppRoutes.dashboard,
+      initialRoute: AppRoutes.splash,
 
       routes: AppRoutes.routes,
     );

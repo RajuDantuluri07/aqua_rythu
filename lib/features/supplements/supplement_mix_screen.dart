@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'supplement_provider.dart';
-import 'screens/add_supplement_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 class SupplementMixScreen extends ConsumerWidget {
   final String pondId;
@@ -10,187 +10,92 @@ class SupplementMixScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final supplements = ref.watch(supplementProvider);
-    final currentDoc = ref.watch(docProvider(pondId));
+    // 1. Get Current Context (DOC)
+    final doc = ref.watch(docProvider(pondId));
+    final allSupplements = ref.watch(supplementProvider);
 
-    final active = supplements
-        .where((s) => (s.pondIds.contains(pondId) || s.pondIds.contains('ALL')) && currentDoc >= s.startDoc && currentDoc <= s.endDoc)
-        .toList();
+    // 2. Filter by Pond
+    final pondSupplements = allSupplements.where((s) => 
+      s.pondIds.contains(pondId) || s.pondIds.contains('ALL')
+    ).toList();
 
-    final completed = supplements
-        .where((s) => (s.pondIds.contains(pondId) || s.pondIds.contains('ALL')) && currentDoc > s.endDoc)
-        .toList();
+    // 3. Filter by DOC Logic
+    final active = pondSupplements.where((s) => 
+      doc >= s.startDoc && doc <= s.endDoc
+    ).toList();
 
-    final upcoming = supplements
-        .where((s) => (s.pondIds.contains(pondId) || s.pondIds.contains('ALL')) && currentDoc < s.startDoc)
-        .toList();
+    final upcoming = pondSupplements.where((s) => 
+      doc < s.startDoc
+    ).toList();
+    
+    final expired = pondSupplements.where((s) =>
+      doc > s.endDoc
+    ).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: CustomScrollView(
-        slivers: [
-          // Premium Header
-          SliverAppBar(
-            backgroundColor: Theme.of(context).primaryColor,
-            foregroundColor: Colors.white,
-            expandedHeight: 120,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 50, bottom: 16),
-              title: const Text(
-                "Supplement Mix",
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Theme.of(context).primaryColor, Colors.indigo.shade700],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          "${pondId.toUpperCase()} • DOC $currentDoc",
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          if (supplements.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _buildEmptyState(context),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  // 🟢 ACTIVE SECTION
-                  if (active.isNotEmpty) ...[
-                    _buildSectionTitle("ACTIVE NOW", Colors.green, Icons.play_circle_fill_rounded),
-                    ...active.map((e) => _SupplementCard(
-                          supplement: e, 
-                          isActive: true, 
-                          ref: ref,
-                          currentDoc: currentDoc,
-                          pondId: pondId,
-                        )),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // 🟠 UPCOMING SECTION
-                  if (upcoming.isNotEmpty) ...[
-                    _buildSectionTitle("UPCOMING", Colors.orange, Icons.schedule_rounded),
-                    ...upcoming.map((e) => _SupplementCard(
-                          supplement: e, 
-                          isActive: false, 
-                          ref: ref,
-                          currentDoc: currentDoc,
-                          pondId: pondId,
-                        )),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // ⚫ COMPLETED SECTION
-                  if (completed.isNotEmpty) ...[
-                    _buildSectionTitle("COMPLETED", Colors.grey.shade600, Icons.check_circle_rounded),
-                    ...completed.map((e) => _SupplementCard(
-                          supplement: e, 
-                          isActive: false, 
-                          isCompleted: true,
-                          ref: ref,
-                          currentDoc: currentDoc,
-                          pondId: pondId,
-                        )),
-                  ],
-                ]),
-              ),
-            ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddSupplementScreen(initialPondId: pondId),
-            ),
-          );
-        },
-        backgroundColor: Theme.of(context).primaryColor,
-        elevation: 4,
-        highlightElevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        label: const Text(
-          "Add Mix",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+      backgroundColor: AppColors.cardBg,
+      appBar: AppBar(
+        title: const Text("Supplement Mix", style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
         ),
-        icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.base),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionHeader("ACTIVE TODAY (DOC $doc)"),
+            if (active.isEmpty) 
+              _buildEmptyState("No active supplements for today."),
+            ...active.map((s) => _SupplementCard(supplement: s, isActive: true)),
+
+            if (upcoming.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _buildSectionHeader("UPCOMING"),
+              ...upcoming.map((s) => _SupplementCard(supplement: s, isActive: false)),
+            ],
+
+            if (expired.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _buildSectionHeader("COMPLETED / EXPIRED"),
+              ...expired.map((s) => _SupplementCard(supplement: s, isActive: false, isExpired: true)),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title, Color color, IconData icon) {
+  Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16, left: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Text(title,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                  letterSpacing: 1.0)),
-        ],
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w900,
+          color: AppColors.textSecondary,
+          fontSize: 12,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.science_outlined, size: 64, color: Colors.indigo.shade300),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            "No Supplements Yet",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.grey.shade800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Add supplements to track feeding mixes",
-            style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.w500),
-          ),
-        ],
+  Widget _buildEmptyState(String msg) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
       ),
+      child: Text(msg, style: TextStyle(color: Colors.grey.shade500)),
     );
   }
 }
@@ -198,247 +103,83 @@ class SupplementMixScreen extends ConsumerWidget {
 class _SupplementCard extends StatelessWidget {
   final Supplement supplement;
   final bool isActive;
-  final bool isCompleted;
-  final WidgetRef ref;
-  final int currentDoc;
-  final String pondId;
+  final bool isExpired;
 
   const _SupplementCard({
     required this.supplement,
     required this.isActive,
-    this.isCompleted = false,
-    required this.ref,
-    required this.currentDoc,
-    required this.pondId,
+    this.isExpired = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final s = supplement;
-    
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isActive ? Colors.green.withOpacity(0.3) : Colors.grey.shade200,
-            width: isActive ? 2 : 1),
-        boxShadow: [
+          color: isActive ? Theme.of(context).primaryColor.withOpacity(0.5) : Colors.grey.shade200,
+          width: isActive ? 1.5 : 1,
+        ),
+        boxShadow: isActive ? [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 4))
-        ],
+            color: Theme.of(context).primaryColor.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          )
+        ] : [],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
-            decoration: BoxDecoration(
-              color: isActive ? Colors.green.shade50.withOpacity(0.5) : (isCompleted ? Colors.grey.shade50 : Colors.white),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isActive ? Colors.green.shade100 : (isCompleted ? Colors.grey.shade200 : Colors.orange.shade100),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isActive ? "ACTIVE" : (isCompleted ? "COMPLETED" : "UPCOMING"),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          color: isActive ? Colors.green.shade800 : (isCompleted ? Colors.grey.shade700 : Colors.orange.shade800),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.grain_rounded, 
-                            size: 12, 
-                            color: Colors.purple.shade800
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            "FEED MIX",
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.purple.shade800,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      "${s.startDoc} - ${s.endDoc} DOC",
-                      style: TextStyle(
-                        fontSize: 13, 
-                        fontWeight: FontWeight.w700, 
-                        color: Colors.grey.shade600
-                      ),
-                    ),
-                  ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                supplement.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isExpired ? Colors.grey : Colors.black87,
                 ),
-                
-                // MENU
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert_rounded, color: Colors.grey.shade400),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AddSupplementScreen(supplement: s, initialPondId: pondId),
-                        ),
-                      );
-                    } else if (value == 'delete') {
-                       ref.read(supplementProvider.notifier).deleteSupplement(s.id);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit', 
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_rounded, size: 18), 
-                          SizedBox(width: 8), 
-                          Text("Edit")
-                        ]
-                      )
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete', 
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_rounded, size: 18, color: Colors.red), 
-                          SizedBox(width: 8), 
-                          Text("Delete", style: TextStyle(color: Colors.red))
-                        ]
-                      )
-                    ),
-                  ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive ? Colors.green.shade50 : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isActive ? Colors.green.shade200 : Colors.grey.shade300),
                 ),
-              ],
-            ),
-          ),
-          
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // TITLE & TIMES
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        s.name,
-                        style: TextStyle(
-                          fontSize: 20, 
-                          fontWeight: FontWeight.w900,
-                          color: isCompleted ? Colors.grey.shade600 : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                
-                if (s.feedingTimes.isNotEmpty)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: s.feedingTimes.map((e) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.shade100)
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.access_time_rounded, size: 12, color: Colors.blue.shade700),
-                          const SizedBox(width: 4),
-                          Text(e, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade700)),
-                        ],
-                      ),
-                    )).toList(),
-                  ),
-
-                const SizedBox(height: 20),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-
-                // ITEMS
-                Text(
-                  "MIX COMPONENTS",
+                child: Text(
+                  "DOC ${supplement.startDoc} - ${supplement.endDoc}",
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.grey.shade500,
-                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.bold,
+                    color: isActive ? Colors.green.shade700 : Colors.grey.shade600,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Column(
-                  children: s.items.map((e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Row(
-                          children: [
-                            Icon(Icons.science, size: 16, color: isCompleted ? Colors.grey.shade400 : Theme.of(context).primaryColor),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                e.name, 
-                                style: TextStyle(
-                                  color: isCompleted ? Colors.grey.shade600 : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 15
-                                )
-                              )
-                            ),
-                            Text(
-                              "${e.dosePerKg} ${e.unit}", 
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 14,
-                                color: isCompleted ? Colors.grey.shade500 : Colors.black87
-                              )
-                            ),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-                )
-              ],
-            ),
-          )
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: supplement.items.map((item) => Chip(
+              label: Text("${item.name}: ${item.dosePerKg} ${item.unit}"),
+              backgroundColor: Colors.grey.shade50,
+              labelStyle: const TextStyle(fontSize: 11),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            )).toList(),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Schedule: ${supplement.feedingTimes.join(', ')}",
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
         ],
       ),
     );

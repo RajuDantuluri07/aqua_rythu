@@ -95,6 +95,10 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
       feedQty: widget.feedQty, // ✅ Uses passed qty (plan-based), not static state
     );
 
+    // Determine adjustment direction
+    final bool isIncreased = widget.isAutoAdjusted && widget.originalQty != null && widget.feedQty > widget.originalQty!;
+    final bool isDecreased = widget.isAutoAdjusted && widget.originalQty != null && widget.feedQty < widget.originalQty!;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s + 2),
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
@@ -139,11 +143,11 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6FF),
+                              color: isIncreased ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB), // Green for up, Amber for down
                               borderRadius: BorderRadius.circular(4), // Fixed: Explicit value
-                              border: Border.all(color: const Color(0xFFDBEafe)),
+                              border: Border.all(color: isIncreased ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A)),
                             ),
-                            child: const Text("AUTO ADJUSTED", style: TextStyle(color: Color(0xFF3B82F6), fontSize: 10, fontWeight: FontWeight.bold)),
+                            child: Text("AUTO ADJUSTED", style: TextStyle(color: isIncreased ? const Color(0xFF059669) : const Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ],
@@ -236,8 +240,8 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
 
           const SizedBox(height: 8),
 
-          /// ⚠️ ADJUSTMENT WARNING
-          if (widget.isAutoAdjusted && widget.originalQty != null && widget.originalQty! > widget.feedQty) ...[
+          /// ⚠️ ADJUSTMENT INFO (Reduced)
+          if (isDecreased) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(AppSpacing.m),
@@ -262,6 +266,41 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                         Text(
                           "Previous: ${widget.originalQty!.toStringAsFixed(1)} kg → Now: ${widget.feedQty.toStringAsFixed(1)} kg",
                           style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          /// 📈 ADJUSTMENT INFO (Increased)
+          if (isIncreased) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.m),
+              margin: const EdgeInsets.only(bottom: AppSpacing.m, top: AppSpacing.s),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: AppRadius.rm,
+                border: Border.all(color: const Color(0xFF6EE7B7)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.trending_up_rounded, size: 20, color: Color(0xFF047857)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Feed increased (Good appetite)",
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF047857), fontSize: 13),
+                        ),
+                        Text(
+                          "Previous: ${widget.originalQty!.toStringAsFixed(1)} kg → Now: ${widget.feedQty.toStringAsFixed(1)} kg",
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF059669)),
                         ),
                       ],
                     ),

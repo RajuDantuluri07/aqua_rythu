@@ -367,7 +367,32 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          
+          if (isFinal) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "This ends the current crop cycle. Feeding & sampling will be disabled.",
+                      style: TextStyle(color: Colors.orange.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ] else 
+            const SizedBox(height: 32),
 
           // Inputs
           Row(
