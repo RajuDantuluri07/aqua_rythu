@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:aqua_rythu/features/pond/pond_dashboard_provider.dart';
-import 'package:aqua_rythu/features/supplements/supplement_provider.dart' hide SupplementItem;
 import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -299,9 +298,10 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
             const SizedBox(height: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: widget.supplements.map((s) {
+              children: widget.supplements.map<Widget>((s) {
+                final item = s as SupplementItem;
                 return Text(
-                  "${s.name} - ${s.quantity}${s.unit}",
+                  "${item.name} - ${item.quantity}${item.unit}",
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 );
               }).toList(),

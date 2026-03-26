@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'supplement_provider.dart';
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'screens/add_supplement_screen.dart';
@@ -278,7 +279,7 @@ class _SupplementCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 4,
             children: supplement.items.map<Widget>((item) => Chip(
-              label: Text("${item.name}: ${item.dosePerKg} ${item.unit}"),
+              label: Text("${item.name}: ${item.quantity} ${item.unit}"),
               backgroundColor: Colors.grey.shade50,
               labelStyle: const TextStyle(fontSize: 11),
               visualDensity: VisualDensity.compact,

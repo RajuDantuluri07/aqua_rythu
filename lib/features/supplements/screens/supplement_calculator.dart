@@ -1,4 +1,5 @@
 import '../supplement_provider.dart';
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 
 /// -----------------------------------------------------------------
 /// 📦 FRD ALIGNED MODELS
@@ -66,11 +67,12 @@ class SupplementCalculator {
     required double feedKg,
   }) {
     return items.map((item) {
-      final calculatedDose = item.dosePerKg * feedKg;
+      final calculatedDose = item.quantity * feedKg;
       return SupplementItem(
         name: item.name,
-        dosePerKg: calculatedDose,
+        quantity: calculatedDose,
         unit: item.unit,
+        type: item.type,
       );
     }).toList();
   }
@@ -112,8 +114,8 @@ class SupplementCalculator {
       for (final item in supplement.items) {
         // Normalize rate: If recipe is defined for X kg (feedQty), calculate per-kg rate first.
         final double rate = (supplement.type == SupplementType.feedMix && supplement.feedQty > 0)
-            ? item.dosePerKg / supplement.feedQty
-            : item.dosePerKg;
+            ? item.quantity / supplement.feedQty
+            : item.quantity;
 
         final totalDose = rate * feedQty;
 
@@ -178,7 +180,7 @@ class SupplementCalculator {
 
       for (final item in supplement.items) {
         // Logic: X kg / acre OR X ml / acre
-        final totalDose = item.dosePerKg * pondArea;
+        final totalDose = item.quantity * pondArea;
 
         itemResults.add(
           SupplementDoseResult(

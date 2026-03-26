@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../supplement_provider.dart';
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
@@ -91,7 +92,12 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     }
 
     setState(() {
-      _items.add(SupplementItem(name: name, dosePerKg: dose, unit: unit));
+      _items.add(SupplementItem(
+        name: name,
+        quantity: dose,
+        unit: unit,
+        type: _selectedType == SupplementType.feedMix ? 'feed' : 'water',
+      ));
       _itemNameController.clear();
       _itemDoseController.clear();
     });
@@ -433,7 +439,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               child: ListTile(
                 dense: true,
                 title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("${item.dosePerKg} ${item.unit}"),
+                subtitle: Text("${item.quantity} ${item.unit}"),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
                   onPressed: () => setState(() => _items.remove(item)),

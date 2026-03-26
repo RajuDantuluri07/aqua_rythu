@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../supplements/supplement_provider.dart';
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../../core/theme/app_theme.dart';
 
 class SupplementChip extends StatelessWidget {
@@ -11,7 +11,7 @@ class SupplementChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text(
-        "${item.name}: ${item.dosePerKg.toStringAsFixed(1)}${item.unit}",
+        "${item.name}: ${item.quantity.toStringAsFixed(1)}${item.unit}",
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,

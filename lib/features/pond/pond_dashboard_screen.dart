@@ -18,7 +18,7 @@ import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
-import '../../features/supplements/supplement_provider.dart' hide SupplementItem;
+import '../../features/supplements/supplement_provider.dart';
 import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';

@@ -1,6 +1,7 @@
 // lib/features/supplements/supplement_provider.dart
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 
 enum SupplementStatus { upcoming, active, completed }
 
@@ -34,33 +35,6 @@ class CalculatedItem {
   final String unit;
 
   const CalculatedItem({required this.name, required this.quantity, required this.unit});
-}
-
-class SupplementItem {
-  final String name;
-  final double dosePerKg;
-  final String unit;
-
-  SupplementItem({
-    required this.name,
-    required this.dosePerKg,
-    required this.unit,
-  });
-  
-  // Ready for JSON serialization
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'dosePerKg': dosePerKg,
-        'unit': unit,
-      };
-
-  factory SupplementItem.fromJson(Map<String, dynamic> json) {
-    return SupplementItem(
-      name: json['name'],
-      dosePerKg: (json['dosePerKg'] as num? ?? 0.0).toDouble(),
-      unit: json['unit'],
-    );
-  }
 }
 
 class Supplement {
