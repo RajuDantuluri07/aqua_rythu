@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:aqua_rythu/features/pond/pond_dashboard_provider.dart';
-import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 
 /// 🔁 Round → Feeding Time
 /// 🔁 Round → Feeding Time
@@ -163,7 +162,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        "${widget.feedQty.toStringAsFixed(1)}",
+                        widget.feedQty.toStringAsFixed(1),
                         style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
@@ -199,13 +198,13 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
              ),
 
           if (widget.isPendingTray)
-             Padding(
-               padding: const EdgeInsets.only(top: AppSpacing.m),
+             const Padding(
+               padding: EdgeInsets.only(top: AppSpacing.m),
                child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
+                  Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
                   AppSpacing.wS,
-                  const Text("TRAY CHECK PENDING", style: TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.bold)),
+                  Text("TRAY CHECK PENDING", style: TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.bold)),
                 ],
               ),
              ),
@@ -293,20 +292,17 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
             ),
 
           /// 🧠 SUPPLEMENTS (COMPACT)
-          if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
-            AppSpacing.hS,
-            const SizedBox(height: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: widget.supplements.map<Widget>((s) {
-                final item = s as SupplementItem;
-                return Text(
-                  "${item.name} - ${item.quantity}${item.unit}",
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                );
-              }).toList(),
-            ),
-          ],
+if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
+  AppSpacing.hS,
+  const SizedBox(height: 8),
+  Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+              children: widget.supplements.map<Widget>((s) => Text(
+                "${s.name} - ${s.quantity}${s.unit}",
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              )).toList(),
+  ),
+],
 
           AppSpacing.hS,
 
@@ -330,12 +326,12 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                 ),
                 child: _isSubmitting 
                   ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                  : Row(
+                  : const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.check_circle_outline, size: 20),
+                        Icon(Icons.check_circle_outline, size: 20),
                         AppSpacing.wS,
-                        const Text("MARK AS FED", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        Text("MARK AS FED", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                       ],
                     ),
               ),
@@ -343,11 +339,11 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
 
 
           else if (widget.isDone && !widget.isPendingTray)
-            Row( // Only show simple "Feeding Completed" if tray is also done (or not needed)
+            const Row( // Only show simple "Feeding Completed" if tray is also done (or not needed)
               children: [
-                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                Icon(Icons.check_circle, color: AppColors.success, size: 20),
                 AppSpacing.wS,
-                const Text("Feeding Completed", style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
+                Text("Feeding Completed", style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
               ],
             ),
 

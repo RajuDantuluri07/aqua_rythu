@@ -34,7 +34,13 @@ class TrayLog {
       time: DateTime.parse(json['time']),
       doc: json['doc'] ?? 0,
       round: json['round'] ?? 1,
-      trays: (json['trays'] as List).map((e) => TrayStatus.values.byName(e)).toList(),
+      trays: (json['trays'] as List).map((e) {
+        try {
+          return TrayStatus.values.byName(e);
+        } catch (_) {
+          return TrayStatus.partial;
+        }
+      }).toList(),
       observations: (json['observations'] as Map<String, dynamic>?)?.map(
         (k, v) => MapEntry(int.parse(k), List<String>.from(v)),
       ),

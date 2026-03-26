@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../supplement_provider.dart';
-import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
@@ -19,7 +19,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   // Toggle State
   SupplementType _selectedType = SupplementType.feedMix;
-  String _applyTo = "This Pond"; // PRD 4.1: This Pond, Multiple, All Ponds
+  String _applyTo = "This Pond";
   SupplementGoal _selectedGoal = SupplementGoal.growthBoost;
 
   // Common Fields
@@ -40,14 +40,18 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   // Items
   final List<SupplementItem> _items = [];
 
-  // Item Input Controllers (Temp)
+  // Item Input Controllers (Temp) – no initial text
   final _itemNameController = TextEditingController();
   final _itemDoseController = TextEditingController();
-  final _itemUnitController = TextEditingController(text: 'ml');
+  final _itemUnitController = TextEditingController();  // 🔧 removed 'ml' default
 
   @override
   void initState() {
     super.initState();
+
+    // Set initial unit based on selected type (Feed Mix or Water Mix)
+    _itemUnitController.text = _selectedType == SupplementType.feedMix ? 'g/kg' : 'kg/acre';
+
     if (widget.supplement != null) {
       final s = widget.supplement!;
       _selectedType = s.type;
@@ -63,6 +67,16 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         _selectedFrequency = s.frequencyDays ?? 7;
         _selectedWaterTime = s.preferredTime ?? WaterMixTime.afterFeed;
       }
+
+      // For edit mode, set unit based on first item if available
+      if (_items.isNotEmpty) {
+        _itemUnitController.text = _items.first.unit;
+      } else {
+        _itemUnitController.text = _selectedType == SupplementType.feedMix ? 'g/kg' : 'kg/acre';
+      }
+    } else {
+      // For new supplement, ensure unit is valid
+      _itemUnitController.text = _selectedType == SupplementType.feedMix ? 'g/kg' : 'kg/acre';
     }
   }
 
@@ -97,6 +111,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         quantity: dose,
         unit: unit,
         type: _selectedType == SupplementType.feedMix ? 'feed' : 'water',
+        isMandatory: true,
+        dosePerKg: 0.0,
       ));
       _itemNameController.clear();
       _itemDoseController.clear();
@@ -120,9 +136,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       return;
     }
 
-    // PRD: In a real implementation, 'Apply To' logic would determine 
-    // which pond IDs get saved. For MVP, we use the specific pond or 'ALL'.
-
     final newSupplement = Supplement(
       id: widget.supplement?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameController.text.trim(),
@@ -132,13 +145,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       goal: _selectedGoal,
       items: List.from(_items),
       
-      // Feed Mix defaults
       feedQty: _selectedType == SupplementType.feedMix ? 1.0 : 0.0, 
       feedingTimes: _selectedType == SupplementType.feedMix 
           ? List.from(_selectedFeedingTimes) 
           : [],
 
-      // Water Mix Data
       frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
       preferredTime: _selectedType == SupplementType.waterMix ? _selectedWaterTime : null,
       pondIds: _applyTo == "All Ponds" 
@@ -159,8 +170,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).primaryColor;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.supplement != null ? "Edit Supplement" : "Add Supplement"),
@@ -271,8 +280,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                         selected: isSelected,
                         onSelected: (val) {
                           setState(() {
-                            if (val) _selectedFeedingTimes.add(label);
-                            else _selectedFeedingTimes.remove(label);
+                            if (val) {
+                              _selectedFeedingTimes.add(label);
+                            } else {
+                              _selectedFeedingTimes.remove(label);
+                            }
                           });
                         },
                       ),
@@ -340,8 +352,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                         selected: isSelected,
                         onSelected: (val) {
                           setState(() {
-                            if (val) _selectedFeedingTimes.add(time);
-                            else _selectedFeedingTimes.remove(time);
+                            if (val) {
+                              _selectedFeedingTimes.add(time);
+                            } else {
+                              _selectedFeedingTimes.remove(time);
+                            }
                           });
                         },
                       ),
@@ -433,7 +448,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                  child: Center(child: Text("At least 1 item required", style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
                ),
 
-            
             // List Items
             ..._items.map<Widget>((item) => Card(
               child: ListTile(
@@ -495,7 +509,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         onTap: () {
           setState(() {
             _selectedType = type;
-            // Reset unit selection to prevent Dropdown value conflict
             _itemUnitController.text = type == SupplementType.feedMix 
                 ? 'g/kg' 
                 : 'kg/acre';

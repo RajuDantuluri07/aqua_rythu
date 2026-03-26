@@ -3,7 +3,8 @@ import '../supplements/supplement_provider.dart';
 import '../supplements/water_task_engine.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_plan_provider.dart';
-import '../pond/growth_provider.dart';
+import '../growth/growth_provider.dart';
+import '../../core/utils/logger.dart';
 
 /// State for the Farm Dashboard Metrics
 class FarmDashboardState {
@@ -21,7 +22,7 @@ class FarmDashboardState {
 }
 
 final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
-  print("🔥 FARM DASHBOARD PROVIDER RUNNING 🔥");
+  AppLogger.debug("🔥 FARM DASHBOARD PROVIDER RUNNING 🔥");
 
   final farmState = ref.watch(farmProvider);
   final currentFarm = farmState.currentFarm;
@@ -75,7 +76,7 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   final double fcr =
       totalBiomass > 0 ? totalFeed / totalBiomass : 0;
 
-  print("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass");
+  AppLogger.debug("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass");
 
   return FarmDashboardState(
     totalFeed: totalFeed,

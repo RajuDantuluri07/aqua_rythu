@@ -1,5 +1,5 @@
 import '../supplement_provider.dart';
-import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 
 /// -----------------------------------------------------------------
 /// 📦 FRD ALIGNED MODELS

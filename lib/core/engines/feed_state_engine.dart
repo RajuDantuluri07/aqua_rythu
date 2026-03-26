@@ -1,5 +1,4 @@
 import '../enums/tray_status.dart';
-import 'package:aqua_rythu/features/tray/tray_model.dart';
 
 enum FeedMode {
   beginner,

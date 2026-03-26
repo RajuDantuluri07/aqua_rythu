@@ -13,7 +13,6 @@ class HarvestScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final harvests = ref.watch(harvestProvider(pondId));
     final doc = ref.watch(docProvider(pondId));
-    final notifier = ref.read(harvestProvider(pondId).notifier);
 
     final totalYield = notifier.totalHarvest;
     final totalRevenue = notifier.totalRevenue;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/enums/tray_status.dart';
 import 'widgets/supplement_chip.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 
 class CompletedRoundCard extends StatelessWidget {
   final int round;
@@ -90,7 +91,7 @@ class CompletedRoundCard extends StatelessWidget {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        "${feedQty.toStringAsFixed(1)}",
+                        feedQty.toStringAsFixed(1),
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
@@ -137,8 +138,8 @@ class CompletedRoundCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        status?.label ?? "EMPTY",
+                      Text( // Fix #1: Removed unnecessary string interpolation
+                        status?.label ?? "EMPTY", 
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -169,6 +170,7 @@ class CompletedRoundCard extends StatelessWidget {
                   unit: "",
                   quantity: 0,
                   isMandatory: false,
+                  type: 'feed', // Fix #2: Added missing 'type' parameter
                 ),
               )).toList(),
             ),

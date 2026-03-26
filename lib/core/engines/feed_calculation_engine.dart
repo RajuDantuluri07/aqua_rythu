@@ -1,3 +1,5 @@
+import 'engine_constants.dart';
+
 class FeedCalculationEngine {
   /// MAIN CALCULATION
   static double calculateFeed({
@@ -17,20 +19,25 @@ class FeedCalculationEngine {
 
   /// SURVIVAL CURVE
   static double _survivalRate(int doc) {
-    if (doc < 30) return 0.95;
-    if (doc < 60) return 0.90;
-    if (doc < 90) return 0.85;
-    return 0.80;
+    if (doc >= 120) return FeedEngineConstants.survivalRates[120]!;
+    if (doc >= 90) return FeedEngineConstants.survivalRates[90]!;
+    if (doc >= 60) return FeedEngineConstants.survivalRates[60]!;
+    if (doc >= 30) return FeedEngineConstants.survivalRates[30]!;
+    if (doc >= 15) return FeedEngineConstants.survivalRates[15]!;
+    return FeedEngineConstants.survivalRates[1]!;
   }
 
   /// STANDARD WEIGHT CURVE (Blind Mode fallback)
   static double _avgWeight(int doc) {
-    if (doc <= 15) return 0.02;
-    if (doc <= 30) return 0.2;
-    if (doc <= 60) return 1.5;
-    if (doc <= 90) return 8.0;
-    if (doc <= 120) return 20.0;
-    return 30.0;
+    if (doc >= 120) return FeedEngineConstants.abwTargets[120]!;
+    if (doc >= 105) return FeedEngineConstants.abwTargets[105]!;
+    if (doc >= 90) return FeedEngineConstants.abwTargets[90]!;
+    if (doc >= 75) return FeedEngineConstants.abwTargets[75]!;
+    if (doc >= 60) return FeedEngineConstants.abwTargets[60]!;
+    if (doc >= 45) return FeedEngineConstants.abwTargets[45]!;
+    if (doc >= 30) return FeedEngineConstants.abwTargets[30]!;
+    if (doc >= 15) return FeedEngineConstants.abwTargets[15]!;
+    return FeedEngineConstants.abwTargets[1]!;
   }
 
   /// FEED % TABLE (PRD 5.3) based on ABW
@@ -50,8 +57,8 @@ class FeedCalculationEngine {
     final base = totalFeed / meals;
 
     return List.generate(meals, (i) {
-      if (i == 0) return base * 0.8;
-      if (i == meals - 1) return base * 1.2;
+      if (i == 0) return base * FeedEngineConstants.firstMealFactor;
+      if (i == meals - 1) return base * FeedEngineConstants.lastMealFactor;
       return base;
     });
   }

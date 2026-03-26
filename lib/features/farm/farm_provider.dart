@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/utils/logger.dart';
 
 enum PondStatus { active, completed }
 

@@ -103,7 +103,7 @@ class FeedScheduleScreen extends ConsumerWidget {
 
                   // Total Summary Card
                   _buildTotalSummaryCard(plan?.totalProjected ?? 0),
-                  SizedBox(height: AppSpacing.hXxl * 3), // Fixed: wrapped in SizedBox
+                  const SizedBox(height: AppSpacing.hXxl * 3), // Fixed: wrapped in SizedBox
                 ],
               ),
             ),

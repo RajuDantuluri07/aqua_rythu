@@ -48,7 +48,7 @@ class FeedHistoryScreen extends ConsumerWidget {
           // Summary Strip
           Container(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.m),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.cardBg,
               border: Border(bottom: BorderSide(color: AppColors.border)),
             ),

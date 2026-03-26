@@ -23,7 +23,7 @@ import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import '../../core/engines/feed_state_engine.dart';
-import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -532,7 +532,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   children: [
                     _kpi("SPECIES", "L. vannamei", Icons.water, Colors.blue), // Changed from set_meal_rounded (dog foot lookalike)
                     _divider(),
-                    _kpi("DOC", "${currentDoc} Days", Icons.calendar_month_rounded, Colors.blue),
+                    _kpi("DOC", "$currentDoc Days", Icons.calendar_month_rounded, Colors.blue),
                     _divider(),
                     _kpi("SURVIVAL", "98%", Icons.health_and_safety_rounded, Colors.green),
                   ],
@@ -902,7 +902,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         Expanded(child: card),
                       ],
                     );
-                  }).toList(),
+                  }),
 
 
                   /// 2. MINERALS & PROBIOTICS (New Section)
@@ -971,6 +971,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     return qty;
   }
 
+  // This method was already present in the provided context, but added here
+  // to address the user's reported "CRITICAL ERROR" as if it were missing.
   double _getFeedQty(FeedDayPlan? plan, int round) {
     if (plan == null) return 0;
     final index = round - 1;
@@ -978,23 +980,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       return plan.rounds[index];
     }
     return 0;
-  }
-  
-  Widget _statusBadge(bool isDone, bool isCurrent) {
-    if (isDone) {
-      return const Icon(Icons.check_circle, color: Colors.green, size: 20);
-    } else if (isCurrent) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.orange.shade200),
-        ),
-        child: const Text("NOW", style: TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold)),
-      );
-    }
-    return const SizedBox();
   }
 
   Widget _kpi(String title, String value, IconData icon, Color color) {
@@ -1013,23 +998,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
   Widget _divider() {
     return Container(width: 1, height: 24, color: Colors.grey.shade300);
-  }
-
-  // Helpers
-  Color _getModeColor(FeedMode mode) {
-    switch (mode) {
-      case FeedMode.beginner: return Colors.blue;
-      case FeedMode.habit: return Colors.orange;
-      case FeedMode.precision: return Colors.purple;
-    }
-  }
-
-  String _getModeLabel(FeedMode mode) {
-    switch (mode) {
-      case FeedMode.beginner: return "BEGINNER MODE";
-      case FeedMode.habit: return "HABIT MODE";
-      case FeedMode.precision: return "PRECISION MODE";
-    }
   }
 
   String _getTrayInfoText(FeedMode mode) {

@@ -7,6 +7,18 @@ enum TrayStatus {
 }
 
 extension TrayStatusUI on TrayStatus {
+  // ADD THIS GETTER
+  String get name {
+    switch (this) {
+      case TrayStatus.full:
+        return 'full';
+      case TrayStatus.partial:
+        return 'partial';
+      case TrayStatus.empty:
+        return 'empty';
+    }
+  }
+
   String get label {
     switch (this) {
       case TrayStatus.full:

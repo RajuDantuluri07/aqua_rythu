@@ -3,12 +3,16 @@ class SupplementItem {
   final double quantity;
   final String unit;
   final String type; // "feed" or "water"
+  final bool isMandatory;
+  final double dosePerKg;
 
   SupplementItem({
     required this.name,
     required this.quantity,
     required this.unit,
     required this.type,
+    this.isMandatory = true,
+    this.dosePerKg = 0,
   });
 
   factory SupplementItem.fromJson(Map<String, dynamic> json) {
@@ -17,6 +21,8 @@ class SupplementItem {
       quantity: (json['quantity'] ?? 0).toDouble(),
       unit: json['unit'] ?? '',
       type: json['type'] ?? 'feed',
+      isMandatory: json['isMandatory'] ?? true,
+      dosePerKg: (json['dosePerKg'] ?? 0).toDouble(),
     );
   }
 
@@ -26,6 +32,8 @@ class SupplementItem {
       'quantity': quantity,
       'unit': unit,
       'type': type,
+      'isMandatory': isMandatory,
+      'dosePerKg': dosePerKg,
     };
   }
 }

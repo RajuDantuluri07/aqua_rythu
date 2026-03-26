@@ -96,7 +96,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
 
     // Provider prepends new logs, so first is latest
     final currentAbw = logs.isNotEmpty ? logs.first.averageBodyWeight : 0.0;
-    final targetAbw = 5.0; // Mock target for now or look up from table
+    const targetAbw = 5.0; // Mock target for now or look up from table
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -133,7 +133,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
-                        child: Text("TARGET ${targetAbw}g", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: const Text("TARGET ${targetAbw}g", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -277,8 +277,8 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
             prefixIcon: Icon(icon, size: 20, color: Colors.grey),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
+            border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: const BorderSide(color: AppColors.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: const BorderSide(color: AppColors.border)),
             focusedBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2)),
           ),
           validator: (value) {

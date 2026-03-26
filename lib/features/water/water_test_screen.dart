@@ -263,8 +263,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
             prefixIcon: Icon(icon, size: 20, color: Colors.grey),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
+            border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: const BorderSide(color: AppColors.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: const BorderSide(color: AppColors.border)),
             focusedBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: Colors.teal.shade500, width: 2)), // Added focused border for consistency
           ),
           validator: (value) {

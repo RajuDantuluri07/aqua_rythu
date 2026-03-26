@@ -94,7 +94,7 @@ class ProfileScreen extends ConsumerWidget {
                       active: isActive,
                     ),
                   );
-                }).toList(),
+                }),
 
                 const SizedBox(height: 10),
 

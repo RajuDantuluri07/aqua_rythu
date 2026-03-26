@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
-import '../../../core/theme/app_theme.dart';
+import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 
 class SupplementChip extends StatelessWidget {
   final SupplementItem item;

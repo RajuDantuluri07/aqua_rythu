@@ -25,7 +25,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<bool> signInWithOtp(String phone) async {
   // TEMP MOCK LOGIC (Phase 1: UI only)
-  await Future.delayed(Duration(seconds: 1));
+  await Future.delayed(const Duration(seconds: 1));
 
   // Always succeed for now
   return true;

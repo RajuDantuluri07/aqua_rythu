@@ -134,7 +134,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               decoration: BoxLooseDecoration(
                 textStyle: const TextStyle(fontSize: 20, color: Colors.black, fontWeight: FontWeight.bold),
                 strokeColorBuilder: FixedColorBuilder(Theme.of(context).primaryColor),
-                bgColorBuilder: FixedColorBuilder(Colors.white),
+                bgColorBuilder: const FixedColorBuilder(Colors.white),
                 radius: const Radius.circular(8),
                 gapSpace: 12,
                 strokeWidth: 1.5,

@@ -12,7 +12,6 @@ class HarvestSummaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final harvests = ref.watch(harvestProvider(pondId));
-    final notifier = ref.read(harvestProvider(pondId).notifier);
     final pond = ref.watch(farmProvider).farms
         .expand((f) => f.ponds)
         .firstWhere((p) => p.id == pondId);
@@ -164,7 +163,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
           height: 56,
           child: ElevatedButton(
             onPressed: () {
-               Navigator.pop(context); // Go back to pond dashboard
+               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.purple.shade700,

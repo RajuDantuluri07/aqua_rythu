@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../routes/app_routes.dart';
@@ -425,7 +424,7 @@ class DashboardScreen extends ConsumerWidget {
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
       childAspectRatio: 1.15,
-      children: [
+      children: const [
         _StatCard(
           title: "TOTAL BIOMASS",
           value: "2,180",

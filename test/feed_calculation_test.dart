@@ -5,7 +5,7 @@ import 'package:aqua_rythu/core/engines/engine_constants.dart';
 void main() {
   group('FeedCalculationEngine Tests', () {
     test('Survival Rate Interpolation - Day 1', () {
-      final rate = FeedCalculationEngine.calculateFeed(
+      FeedCalculationEngine.calculateFeed(
         seedCount: 100000,
         doc: 1,
       );

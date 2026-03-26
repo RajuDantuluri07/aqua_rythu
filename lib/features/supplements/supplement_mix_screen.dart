@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'supplement_provider.dart';
-import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'screens/add_supplement_screen.dart';
@@ -147,12 +146,6 @@ class SupplementMixScreen extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-
-  void _showAddSupplementMessage(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Define your first supplement plan to see it here.")),
     );
   }
 }

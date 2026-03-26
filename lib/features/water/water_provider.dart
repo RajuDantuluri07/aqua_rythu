@@ -30,16 +30,25 @@ class WaterLog {
   // Health Score calculation as per PRD 4.8
   int get healthScore {
     int score = 100;
-    if (dissolvedOxygen < 4) score -= 20;
-    else if (dissolvedOxygen < 5) score -= 10;
+    if (dissolvedOxygen < 4) {
+      score -= 20;
+    } else if (dissolvedOxygen < 5) {
+      score -= 10;
+    }
 
     if (ph < 7.5 || ph > 8.5) score -= 10;
 
-    if (ammonia > 0.3) score -= 20;
-    else if (ammonia > 0.1) score -= 10;
+    if (ammonia > 0.3) {
+      score -= 20;
+    } else if (ammonia > 0.1) {
+      score -= 10;
+    }
 
-    if (nitrite > 0.3) score -= 20;
-    else if (nitrite > 0.1) score -= 10;
+    if (nitrite > 0.3) {
+      score -= 20;
+    } else if (nitrite > 0.1) {
+      score -= 10;
+    }
     return score;
   }
 }

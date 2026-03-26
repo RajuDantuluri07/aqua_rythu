@@ -67,7 +67,7 @@ class UpcomingRoundCard extends StatelessWidget {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      "${feedQty.toStringAsFixed(1)}",
+                      feedQty.toStringAsFixed(1),
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
