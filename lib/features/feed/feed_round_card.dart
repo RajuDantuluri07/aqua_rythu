@@ -3,35 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:aqua_rythu/features/pond/pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/supplements/supplement_provider.dart';
-import 'package:aqua_rythu/features/supplements/feed_mix_engine.dart';
 import '../../core/theme/app_theme.dart';
 import 'widgets/supplement_chip.dart';
 
 /// 🔁 Round → Feeding Time
-/// UPDATED: Basic mapping. For full PRD compliance (6 rounds),
-/// the underlying data model needs to support r5/r6.
-String mapRoundToTimeKey(int round, int doc) {
-  // PRD 5.5: DOC 1-15 (6 rounds) - 6, 8:30, 11, 1:30, 4, 6:30
-  // Since we only have 4 slots in DB, we map the 4 most critical times for now.
-  if (doc <= 15) {
-     // Temporary mapping for Beginner mode until DB migration
-     if (round == 1) return "6:00 AM";
-     if (round == 2) return "10:00 AM"; // merged
-     if (round == 3) return "2:00 PM";  // merged
-     if (round == 4) return "6:00 PM";
-  }
-  
+/// 🔁 Round → Feeding Time
+String mapRoundToTimeKey(int round) {
   switch (round) {
     case 1:
-      return "6 AM";
+      return "R1";
     case 2:
-      return "10 AM";
+      return "R2";
     case 3:
-      return "2 PM";
+      return "R3";
     case 4:
-      return "6 PM";
+      return "R4";
     default:
-      return "6 AM";
+      return "R1";
   }
 
 }
@@ -48,6 +36,7 @@ class FeedRoundCard extends ConsumerStatefulWidget {
   final bool isPendingTray;
   final bool isAutoAdjusted;
   final Function(int) onOpenTray;
+  final List<SupplementItem> supplements;
   final VoidCallback? onMarkDone;
 
   const FeedRoundCard({
@@ -63,6 +52,7 @@ class FeedRoundCard extends ConsumerStatefulWidget {
     this.isPendingTray = false,
     this.isAutoAdjusted = false,
     required this.onOpenTray,
+    this.supplements = const [],
     this.onMarkDone,
   });
 
@@ -76,24 +66,9 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
   @override
   Widget build(BuildContext context) {
     final dashboardState = ref.watch(pondDashboardProvider);
-    final supplements = ref.watch(supplementProvider);
 
     final trayStatus = dashboardState.trayResults[widget.round];
     final tray = trayStatus?.name;
-
-    /// ✅ FROM PROVIDER
-    final currentDoc = dashboardState.doc;
-
-    /// 🔁 Map round
-    final feedingTime = mapRoundToTimeKey(widget.round, currentDoc);
-
-    /// 🧠 Calculate supplements
-    final supplementResults = SupplementCalculator.calculate(
-      supplements: supplements,
-      currentDoc: currentDoc,
-      currentFeedingTime: feedingTime,
-      feedQty: widget.feedQty, // ✅ Uses passed qty (plan-based), not static state
-    );
 
     // Determine adjustment direction
     final bool isIncreased = widget.isAutoAdjusted && widget.originalQty != null && widget.feedQty > widget.originalQty!;
@@ -128,7 +103,6 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                     Row(
                       children: [
                         if (widget.isCurrent) ...[
-                          const SizedBox(width: AppSpacing.s),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -137,9 +111,9 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             ),
                             child: const Text("NOW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
+                          const SizedBox(width: AppSpacing.s),
                         ],
                         if (widget.isAutoAdjusted) ...[
-                          const SizedBox(width: AppSpacing.s),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -149,6 +123,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             ),
                             child: Text("AUTO ADJUSTED", style: TextStyle(color: isIncreased ? const Color(0xFF059669) : const Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
+                          const SizedBox(width: AppSpacing.s),
                         ],
                       ],
                     ),
@@ -319,9 +294,9 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
             ),
 
           /// 🧠 SUPPLEMENTS (COMPACT)
-          if (!widget.isLocked && supplementResults.isNotEmpty) ...[
+          if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
             AppSpacing.hS,
-            _buildCompactSupplements(context, supplementResults),
+            _buildCompactSupplements(context, widget.supplements),
           ],
 
           AppSpacing.hS,
@@ -382,13 +357,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
     );
   }
 
-  Widget _buildCompactSupplements(BuildContext context, List<CalculatedItem> results) {
-    final List<SupplementItem> items = results.map((item) => SupplementItem(
-          name: item.name,
-          unit: item.unit,
-          dosePerKg: item.quantity,
-        )).toList();
-
+  Widget _buildCompactSupplements(BuildContext context, List<SupplementItem> items) {
     if (items.isEmpty) return const SizedBox.shrink();
 
     if (items.length <= 2) {

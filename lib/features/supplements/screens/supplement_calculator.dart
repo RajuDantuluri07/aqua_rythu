@@ -111,7 +111,7 @@ class SupplementCalculator {
 
       for (final item in supplement.items) {
         // Normalize rate: If recipe is defined for X kg (feedQty), calculate per-kg rate first.
-        final double rate = (supplement.feedQty > 0)
+        final double rate = (supplement.type == SupplementType.feedMix && supplement.feedQty > 0)
             ? item.dosePerKg / supplement.feedQty
             : item.dosePerKg;
 
@@ -211,6 +211,7 @@ class SupplementCalculator {
 
   /// Round to 2 decimal places (consistent UI + calculation)
   static double _round(double value) {
-    return double.parse(value.toStringAsFixed(2));
+    if (value.isInfinite || value.isNaN) return 0.0;
+    return (value * 100).round() / 100.0;
   }
 }

@@ -57,7 +57,7 @@ class SupplementItem {
   factory SupplementItem.fromJson(Map<String, dynamic> json) {
     return SupplementItem(
       name: json['name'],
-      dosePerKg: (json['dosePerKg'] as num).toDouble(),
+      dosePerKg: (json['dosePerKg'] as num? ?? 0.0).toDouble(),
       unit: json['unit'],
     );
   }
@@ -145,7 +145,7 @@ class Supplement {
       preferredTime: json['preferredTime'] != null
           ? WaterMixTime.values.byName(json['preferredTime'])
           : null,
-      date: json['date'] != null ? DateTime.parse(json['date']) : null,
+      date: json['date'] != null ? DateTime.tryParse(json['date']) : null,
       items: (json['items'] as List)
           .map((e) => SupplementItem.fromJson(e))
           .toList(),
@@ -182,7 +182,7 @@ class SupplementLogNotifier extends StateNotifier<List<SupplementLog>> {
     required List<CalculatedItem> items,
   }) {
     final log = SupplementLog(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: '${DateTime.now().millisecondsSinceEpoch}_$pondId',
       supplementId: supplementId,
       pondId: pondId,
       timestamp: DateTime.now(),
@@ -211,15 +211,19 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
   // 🔹 CREATE
   void addSupplement(Supplement supplement) {
     // In a real app, this would be: await repository.add(supplement);
-    state = [...state, supplement]..sort((a, b) => a.startDoc.compareTo(b.startDoc));
+    final newState = [...state, supplement];
+    newState.sort((a, b) => a.startDoc.compareTo(b.startDoc));
+    state = newState;
   }
 
   // 🔹 UPDATE
   void editSupplement(Supplement updated) {
-    state = [
+    final newState = [
       for (final s in state)
         if (s.id == updated.id) updated else s
-    ]..sort((a, b) => a.startDoc.compareTo(b.startDoc));
+    ];
+    newState.sort((a, b) => a.startDoc.compareTo(b.startDoc));
+    state = newState;
   }
 
   // 🔹 DELETE

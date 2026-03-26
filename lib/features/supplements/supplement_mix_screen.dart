@@ -4,6 +4,7 @@ import '../farm/farm_provider.dart';
 import 'supplement_provider.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
+import 'screens/add_supplement_screen.dart';
 
 class SupplementMixScreen extends ConsumerWidget {
   final String pondId;
@@ -57,7 +58,7 @@ class SupplementMixScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
-            onPressed: () => _showAddSupplementMessage(context),
+            onPressed: () => _navigateToAdd(context),
           ),
         ],
       ),
@@ -72,19 +73,19 @@ class SupplementMixScreen extends ConsumerWidget {
             ...active.map((s) => _SupplementCard(supplement: s, isActive: true)),
 
             if (upcoming.isNotEmpty) ...[
-              const SizedBox(height: 24),
+              AppSpacing.hBase,
               _buildSectionHeader("UPCOMING"),
               ...upcoming.map((s) => _SupplementCard(supplement: s, isActive: false)),
             ],
 
             if (expired.isNotEmpty) ...[
-              const SizedBox(height: 24),
+              AppSpacing.hBase,
               _buildSectionHeader("COMPLETED / EXPIRED"),
               ...expired.map((s) => _SupplementCard(supplement: s, isActive: false, isExpired: true)),
             ],
 
             if (logs.isNotEmpty) ...[
-              const SizedBox(height: 32),
+              AppSpacing.hXl,
               _buildSectionHeader("APPLICATION HISTORY"),
               ...logs.map((log) => _HistoryCard(
                 log: log,
@@ -95,7 +96,7 @@ class SupplementMixScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddSupplementMessage(context),
+        onPressed: () => _navigateToAdd(context),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("ADD NEW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
@@ -103,9 +104,10 @@ class SupplementMixScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddSupplementMessage(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Add Supplement feature coming soon")),
+  void _navigateToAdd(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AddSupplementScreen(pondId: pondId)),
     );
   }
 
@@ -138,12 +140,18 @@ class SupplementMixScreen extends ConsumerWidget {
           Text(msg, style: TextStyle(color: Colors.grey.shade500)),
           const SizedBox(height: 12),
           TextButton.icon(
-            onPressed: () => _showAddSupplementMessage(context),
+            onPressed: () => _navigateToAdd(context),
             icon: const Icon(Icons.add),
             label: const Text("Add First Supplement"),
           ),
         ],
       ),
+    );
+  }
+
+  void _showAddSupplementMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Define your first supplement plan to see it here.")),
     );
   }
 }
@@ -190,7 +198,7 @@ class _HistoryCard extends StatelessWidget {
               children: [
                 Text(item.name, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
                 Text(
-                  "${item.quantity}${item.unit}",
+                  "${item.quantity.toStringAsFixed(1)}${item.unit}",
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 ),
               ],

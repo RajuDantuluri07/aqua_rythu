@@ -46,7 +46,12 @@ class Pond {
     );
   }
 
-  int get doc => DateTime.now().difference(stockingDate).inDays + 1;
+  int get doc {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(stockingDate.year, stockingDate.month, stockingDate.day);
+    return today.difference(start).inDays + 1;
+  }
 }
 
 class Farm {
@@ -241,15 +246,15 @@ final farmProvider =
 final docProvider = Provider.family<int, String>((ref, pondId) {
   final farmState = ref.watch(farmProvider);
 
+  // Optimization: Check current farm first
+  final currentPonds = farmState.currentFarm?.ponds ?? [];
+  final currentIdx = currentPonds.indexWhere((p) => p.id == pondId);
+  if (currentIdx != -1) return currentPonds[currentIdx].doc;
+
+  // Fallback: Check all other farms
   for (var farm in farmState.farms) {
-    try {
-      final pondIndex = farm.ponds.indexWhere((p) => p.id == pondId);
-      if (pondIndex != -1) {
-        return farm.ponds[pondIndex].doc;
-      }
-    } catch (e, stack) {
-      AppLogger.error("Error in docProvider for pondId: $pondId", e, stack);
-    }
+    final pondIndex = farm.ponds.indexWhere((p) => p.id == pondId);
+    if (pondIndex != -1) return farm.ponds[pondIndex].doc;
   }
 
   return 1;

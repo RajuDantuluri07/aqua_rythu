@@ -39,21 +39,13 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
-  // 🔄 Dynamic Rounds based on DOC (PRD 5.5)
-  // Note: Data model currently limited to 4 rounds. 
-  // PRD requires 6 rounds for DOC 1-15.
-  List<Map<String, dynamic>> _getFeedRounds(int doc) {
-    // Default / Precision / Habit (4 rounds)
-    // 6 AM, 10 AM, 2 PM, 6 PM
+  List<Map<String, dynamic>> _getFeedRounds() {
     return [
-      {"round": 1, "time": "06:00 AM"},
-      {"round": 2, "time": "10:00 AM"},
-      {"round": 3, "time": "02:00 PM"},
-      {"round": 4, "time": "06:00 PM"},
+      {"round": 1, "time": "06:00 AM", "key": "R1"},
+      {"round": 2, "time": "10:00 AM", "key": "R2"},
+      {"round": 3, "time": "02:00 PM", "key": "R3"},
+      {"round": 4, "time": "06:00 PM", "key": "R4"},
     ];
-    
-    // TODO: When DB supports 6 rounds, add:
-    // if (doc <= 15) return 6 rounds configuration...
   }
 
   void openTray(int round, bool isLocked) async {
@@ -155,15 +147,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
           children: [
             TextField(
               controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 labelText: "Farm Name",
                 hintText: "e.g. Sri Rama Farm",
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 16),
+                AppSpacing.hBase,
             TextField(
               controller: locCtrl,
+                  textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 labelText: "Location",
                 hintText: "e.g. Nellore",
@@ -200,23 +194,29 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final dashboardState = ref.watch(pondDashboardProvider);
-    
-    // 🎯 NEW: Read pondId from arguments if provided
-    String selectedPond = dashboardState.selectedPond;
-    final args = ModalRoute.of(context)?.settings.arguments as String?;
-    if (args != null && args != selectedPond) {
-       // Sync provider with arguments
-       Future.microtask(() {
-         ref.read(pondDashboardProvider.notifier).selectPond(args);
-       });
-       selectedPond = args;
-    }
+    final selectedPond = dashboardState.selectedPond;
+
+    // Safe argument handling
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      final args = route?.settings.arguments as String?;
+      if (args != null && args.isNotEmpty && args != selectedPond) {
+        ref.read(pondDashboardProvider.notifier).selectPond(args);
+      }
+    });
 
     final farmState = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
     final ponds = currentFarm?.ponds ?? [];
     
-    final currentPond = ponds.firstWhere((p) => p.id == selectedPond, orElse: () => ponds.isNotEmpty ? ponds.first : Pond(id: "Dummy", name: "No Pond", area: 0, stockingDate: DateTime.now()));
+    final currentPond = ponds.firstWhere(
+      (p) => p.id == selectedPond, 
+      orElse: () => ponds.isNotEmpty 
+          ? ponds.first 
+          : Pond(id: "Dummy", name: "No Pond", area: 1.0, stockingDate: DateTime.now())
+    );
+    
     final isCompleted = currentPond.status == PondStatus.completed;
 
     final allSupplements = ref.watch(supplementProvider);
@@ -250,11 +250,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
               children: [
                 const Icon(Icons.water_drop_outlined,
                     size: 64, color: Colors.grey),
-                const SizedBox(height: 20),
+                AppSpacing.hBase,
                 Text("No Ponds in ${currentFarm.name}",
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
+                AppSpacing.hM,
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pushNamed(context, AppRoutes.addPond);
@@ -319,7 +319,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     
 
     // Get Rounds
-    final feedRoundsData = _getFeedRounds(currentDoc);
+    final feedRoundsData = _getFeedRounds();
 
     // 💧 WATER SUPPLEMENTS
     final waterSupplementResults = SupplementCalculator.calculateWater(
@@ -404,7 +404,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ],
               ),
 
-              const SizedBox(height: 20),
+              AppSpacing.hBase,
 
               /// POND TABS
               SingleChildScrollView(
@@ -507,7 +507,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              AppSpacing.hBase,
 
               /// 📊 POND STATUS SUMMARY
               // KPI Row
@@ -532,7 +532,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              AppSpacing.hBase,
 
               /// TANK OPERATIONS
               Row(
@@ -598,7 +598,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ],
               ),
 
-              const SizedBox(height: 20),
+              AppSpacing.hBase,
 
               if (isCompleted) 
                 _buildCompletedDashboard(context, ref, currentPond)
@@ -632,7 +632,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ],
               ),
 
-              const SizedBox(height: 12),
+              AppSpacing.hM,
 
               /// 💧 TODAY'S WATER ACTIONS
               if (waterSupplementResults.isNotEmpty) ...[
@@ -664,7 +664,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                             ...group.items.map<Widget>((item) => Padding(
                               padding: const EdgeInsets.only(bottom: 4),
                               child: Text(
-                                "• ${item.supplementName}: ${item.totalDose}${item.unit}",
+                                "• ${item.supplementName}: ${item.totalDose.toStringAsFixed(1)}${item.unit}",
                                 style: TextStyle(
                                   fontSize: 14, 
                                   fontWeight: FontWeight.w600,
@@ -714,7 +714,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
               /// COMPACT PROGRESS BAR
               CompactProgressBar(
                 progress: plannedFeed == 0 ? 0 : (consumedFeed / plannedFeed).clamp(0, 1),
-                totalText: "${consumedFeed.toStringAsFixed(1)} / ${plannedFeed.toStringAsFixed(2)} kg",
+                totalText: "${consumedFeed.toStringAsFixed(1)} / ${plannedFeed.toStringAsFixed(1)} kg",
               ),
 
               const SizedBox(height: 8),
@@ -734,7 +734,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ),
               ),
 
-              const SizedBox(height: 4),
+              AppSpacing.hS,
 
               /// DAILY TASKS TIMELINE
               Column(
@@ -743,6 +743,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   ...feedRoundsData.map<Widget>((data) {
                     final round = data['round'] as int;
                     final time = data['time'] as String;
+                    final timeKey = data['key'] as String;
 
                     // 🧠 CALCULATE QTY (Centralized Logic)
                     final double baseQty = _getFeedQty(dayPlan, round);
@@ -777,13 +778,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     final bool isActuallyDoneInPrecision = roundState.isDone && !roundState.showTrayCTA;
 
                     if (isDoneInHabitOrBeginner || isActuallyDoneInPrecision) {
-                      final feedingTime = mapRoundToTimeKey(round, currentDoc);
-                      
-                      // ... Calculate supplements (existing logic preserved)
                       final supplementResults = SupplementCalculator.calculateActive(
                         supplements: supplements,
                         currentDoc: currentDoc,
-                        currentFeedingTime: feedingTime,
+                        currentFeedingTime: timeKey,
                         feedQty: qty,
                       );
 
@@ -836,6 +834,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     // ✅ RENDER CURRENT/ACTIVE CARD
                     else {
                       card = FeedRoundCard(
+                        key: ValueKey("round_$round"),
                         round: round,
                         time: time,
                         feedQty: qty,
@@ -995,11 +994,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     return Expanded(
       child: Column(
         children: [
-          Icon(icon, size: 20, color: color.withOpacity(0.7)),
+          Icon(icon, size: 18, color: color.withOpacity(0.7)),
           const SizedBox(height: 6),
-          Text(title, style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(title, style: TextStyle(color: Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.black87)),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Colors.black87))),
         ],
       ),
     );
@@ -1194,13 +1193,16 @@ class CompactProgressBar extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                totalText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  color: Colors.black87,
-                ),
+                Flexible(
+                  child: Text(
+                    totalText,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                      color: Colors.black87,
+                    ),
+                  ),
               ),
               Text(
                 "Blind Plan",

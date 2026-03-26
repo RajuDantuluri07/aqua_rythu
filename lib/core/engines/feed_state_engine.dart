@@ -161,7 +161,7 @@ class FeedStateEngine {
   /// Aggregates a list of tray statuses into a single representative status.
   /// Logic: Weighted Average (Full=3, Partial=2, Empty=0)
   static TrayStatus aggregateTrayStatus(List<TrayStatus> statuses) {
-    if (statuses.isEmpty) return TrayStatus.empty; // Default fallback
+    if (statuses.isEmpty) return TrayStatus.partial; // Default to partial (no change) for safety
 
     int totalScore = 0;
 

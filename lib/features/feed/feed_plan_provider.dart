@@ -38,9 +38,9 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
   }) {
     // if (state.containsKey(pondId)) return; // Allow overwrite for New Cycle
 
-    // Generate 30 days of Standard Blind Plan using Engine
+    // Generate 120 days of Standard Blind Plan using Engine (PRD Harvest Cycle)
     final List<FeedDayPlan> days = [];
-    for (int i = 1; i <= 30; i++) {
+    for (int i = 1; i <= 120; i++) {
       final dailyTotal = FeedCalculationEngine.calculateFeed(
         seedCount: seedCount,
         doc: i,

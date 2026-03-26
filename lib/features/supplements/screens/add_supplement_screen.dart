@@ -6,7 +6,8 @@ import 'package:intl/intl.dart';
 
 class AddSupplementScreen extends ConsumerStatefulWidget {
   final Supplement? supplement;
-  const AddSupplementScreen({super.key, this.supplement});
+  final String? pondId;
+  const AddSupplementScreen({super.key, this.supplement, this.pondId});
 
   @override
   ConsumerState<AddSupplementScreen> createState() => _AddSupplementScreenState();
@@ -82,7 +83,12 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     final dose = double.tryParse(_itemDoseController.text);
     final unit = _itemUnitController.text.trim();
 
-    if (name.isEmpty || dose == null || unit.isEmpty) return;
+    if (name.isEmpty || dose == null || unit.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid item name and quantity")),
+      );
+      return;
+    }
 
     setState(() {
       _items.add(SupplementItem(name: name, dosePerKg: dose, unit: unit));
@@ -114,8 +120,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     final newSupplement = Supplement(
       id: widget.supplement?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameController.text.trim(),
-      startDoc: int.parse(_startDocController.text),
-      endDoc: int.parse(_endDocController.text),
+      startDoc: int.tryParse(_startDocController.text) ?? 1,
+      endDoc: int.tryParse(_endDocController.text) ?? 30,
       type: _selectedType,
       goal: _selectedGoal,
       items: List.from(_items),
@@ -129,7 +135,9 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       // Water Mix Data
       frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
       preferredTime: _selectedType == SupplementType.waterMix ? _selectedWaterTime : null,
-      pondIds: _applyTo == "All Ponds" ? ['ALL'] : [], // Dummy logic for pond assignment
+      pondIds: _applyTo == "All Ponds" 
+          ? ['ALL'] 
+          : (widget.pondId != null ? [widget.pondId!] : (widget.supplement?.pondIds ?? [])),
       date: _selectedType == SupplementType.waterMix ? _selectedDate : null,
       notes: _notesController.text.trim(),
     );
@@ -170,7 +178,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            AppSpacing.hBase,
 
             // GOAL SELECTOR
             const Text("What problem are you solving?", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
@@ -186,7 +194,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 );
               }).toList(),
             ),
-            const SizedBox(height: 24),
+            AppSpacing.hBase,
 
             // 2. BASIC INFO
             TextFormField(
@@ -196,9 +204,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 hintText: "e.g. Gut Health Mix / Mineral Mix",
                 prefixIcon: Icon(Icons.label_outline_rounded),
               ),
+              textCapitalization: TextCapitalization.words,
               validator: (v) => v!.isEmpty ? "Required" : null,
             ),
-            const SizedBox(height: 20),
+            AppSpacing.hBase,
 
             // Apply To selection
             const Text("Apply To", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
@@ -215,7 +224,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 ),
               )).toList(),
             ),
-            const SizedBox(height: 24),
+            AppSpacing.hBase,
 
             // 3. DOC RANGE (Feed Only)
             if (_selectedType == SupplementType.feedMix) ...[
@@ -240,7 +249,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              AppSpacing.hBase,
               
               const Text("Select Feeding Rounds", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
               const SizedBox(height: 8),
@@ -284,7 +293,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   child: Text(DateFormat('dd MMM yyyy').format(_selectedDate)),
                 ),
               ),
-              const SizedBox(height: 24),
+              AppSpacing.hBase,
 
               const Text("Frequency", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -310,7 +319,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   onChanged: (v) => _selectedFrequency = int.tryParse(v) ?? 1,
                 ),
               ],
-              const SizedBox(height: 24),
+              AppSpacing.hBase,
 
               const Text("Apply At Time Slots", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
               const SizedBox(height: 8),
@@ -334,7 +343,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 24),
+              AppSpacing.hBase,
 
               const Text("Preferred Time", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -358,7 +367,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             ],
 
-            const SizedBox(height: 24),
+            AppSpacing.hBase,
 
             // 5. MIX ITEMS
             Row(
@@ -379,7 +388,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   child: TextField(
                     style: const TextStyle(fontSize: 13),
                     controller: _itemNameController,
-                    decoration: const InputDecoration(hintText: "Item Name", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+                    decoration: const InputDecoration(hintText: "Mix Item", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -389,7 +398,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                     style: const TextStyle(fontSize: 13),
                     controller: _itemDoseController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: "Val", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+                    decoration: const InputDecoration(hintText: "Qty", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -432,7 +441,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             )),
 
-            const SizedBox(height: 24),
+            AppSpacing.hBase,
 
             // 6. NOTES
             TextFormField(
@@ -445,7 +454,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             ),
 
-            const SizedBox(height: 40),
+            AppSpacing.hXl,
 
             // 7. FOOTER
             SizedBox(
@@ -477,7 +486,15 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     final isSelected = _selectedType == type;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _selectedType = type),
+        onTap: () {
+          setState(() {
+            _selectedType = type;
+            // Reset unit selection to prevent Dropdown value conflict
+            _itemUnitController.text = type == SupplementType.feedMix 
+                ? 'g/kg' 
+                : 'kg/acre';
+          });
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
