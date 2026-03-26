@@ -1,3 +1,25 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../supplements/supplement_provider.dart';
+import '../supplements/water_task_engine.dart';
+import '../farm/farm_provider.dart';
+import '../feed/feed_plan_provider.dart';
+import '../pond/growth_provider.dart';
+
+/// State for the Farm Dashboard Metrics
+class FarmDashboardState {
+  final double totalFeed;
+  final double totalBiomass;
+  final double avgGrowth;
+  final double fcr;
+
+  const FarmDashboardState({
+    this.totalFeed = 0,
+    this.totalBiomass = 0,
+    this.avgGrowth = 0,
+    this.fcr = 0,
+  });
+}
+
 final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   print("🔥 FARM DASHBOARD PROVIDER RUNNING 🔥");
 
@@ -60,5 +82,15 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
     totalBiomass: totalBiomass,
     avgGrowth: avgGrowth,
     fcr: fcr,
+  );
+});
+
+/// 💧 Water Task Provider for Daily Tasks UI
+final waterTasksProvider = Provider<List<WaterTask>>((ref) {
+  final plans = ref.watch(supplementProvider);
+  
+  return WaterTaskEngine.generateWaterTasks(
+    today: DateTime.now(),
+    plans: plans,
   );
 });

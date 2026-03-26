@@ -1,60 +1,30 @@
 import 'package:flutter/material.dart';
-
-class SupplementItem {
-  final String name;
-  final String unit;
-  final double quantity;
-  final bool isMandatory;
-
-  SupplementItem({
-    required this.name,
-    required this.unit,
-    required this.quantity,
-    this.isMandatory = true,
-  });
-}
+import '../../supplements/supplement_provider.dart';
+import '../../../core/theme/app_theme.dart';
 
 class SupplementChip extends StatelessWidget {
   final SupplementItem item;
 
-  const SupplementChip({
-    super.key,
-    required this.item,
-  });
+  const SupplementChip({super.key, required this.item});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      margin: const EdgeInsets.only(right: 8, bottom: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
+    return Chip(
+      label: Text(
+        "${item.name}: ${item.dosePerKg.toStringAsFixed(1)}${item.unit}",
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.indigo,
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (item.isMandatory) ...[
-            const Icon(
-              Icons.warning_amber_rounded,
-              size: 12,
-              color: Colors.orange,
-            ),
-            const SizedBox(width: 4),
-          ],
-          Flexible(
-            child: Text(
-              "${item.name} ${item.quantity.toStringAsFixed(1)}${item.unit}",
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF1E293B),
-              ),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: Colors.indigo.shade50,
+      side: BorderSide(color: Colors.indigo.shade100),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 }

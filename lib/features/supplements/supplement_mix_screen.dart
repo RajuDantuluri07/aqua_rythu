@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import 'supplement_provider.dart';
 import '../../core/theme/app_theme.dart';
+import 'package:intl/intl.dart';
 
 class SupplementMixScreen extends ConsumerWidget {
   final String pondId;
@@ -13,6 +14,8 @@ class SupplementMixScreen extends ConsumerWidget {
     // 1. Get Current Context (DOC)
     final doc = ref.watch(docProvider(pondId));
     final allSupplements = ref.watch(supplementProvider);
+    final logs = ref.watch(supplementLogProvider).where((l) => l.pondId == pondId).toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     // 2. Filter by Pond
     final pondSupplements = allSupplements.where((s) => 
@@ -31,6 +34,14 @@ class SupplementMixScreen extends ConsumerWidget {
     final expired = pondSupplements.where((s) =>
       doc > s.endDoc
     ).toList();
+
+    String getPlanName(String id) {
+      try {
+        return allSupplements.firstWhere((s) => s.id == id).name;
+      } catch (_) {
+        return "Manual Application";
+      }
+    }
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -70,6 +81,15 @@ class SupplementMixScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               _buildSectionHeader("COMPLETED / EXPIRED"),
               ...expired.map((s) => _SupplementCard(supplement: s, isActive: false, isExpired: true)),
+            ],
+
+            if (logs.isNotEmpty) ...[
+              const SizedBox(height: 32),
+              _buildSectionHeader("APPLICATION HISTORY"),
+              ...logs.map((log) => _HistoryCard(
+                log: log,
+                planName: getPlanName(log.supplementId),
+              )),
             ],
           ],
         ),
@@ -122,6 +142,60 @@ class SupplementMixScreen extends ConsumerWidget {
             icon: const Icon(Icons.add),
             label: const Text("Add First Supplement"),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryCard extends StatelessWidget {
+  final SupplementLog log;
+  final String? planName;
+
+  const _HistoryCard({required this.log, this.planName});
+
+  @override
+  Widget build(BuildContext context) {
+    final dateStr = DateFormat('dd MMM, hh:mm a').format(log.timestamp);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                planName ?? "Supplement Applied",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              Text(
+                dateStr,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const Divider(height: 20),
+          ...log.appliedItems.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(item.name, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                Text(
+                  "${item.quantity}${item.unit}",
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ],
+            ),
+          )),
         ],
       ),
     );
@@ -195,7 +269,7 @@ class _SupplementCard extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 4,
-            children: supplement.items.map((item) => Chip(
+            children: supplement.items.map<Widget>((item) => Chip(
               label: Text("${item.name}: ${item.dosePerKg} ${item.unit}"),
               backgroundColor: Colors.grey.shade50,
               labelStyle: const TextStyle(fontSize: 11),

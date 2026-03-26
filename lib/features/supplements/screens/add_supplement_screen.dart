@@ -18,6 +18,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   // Toggle State
   SupplementType _selectedType = SupplementType.feedMix;
   String _applyTo = "This Pond"; // PRD 4.1: This Pond, Multiple, All Ponds
+  SupplementGoal _selectedGoal = SupplementGoal.growthBoost;
 
   // Common Fields
   final _nameController = TextEditingController();
@@ -48,6 +49,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     if (widget.supplement != null) {
       final s = widget.supplement!;
       _selectedType = s.type;
+      _selectedGoal = s.goal ?? SupplementGoal.growthBoost;
       _nameController.text = s.name;
       _startDocController.text = s.startDoc.toString();
       _endDocController.text = s.endDoc.toString();
@@ -115,6 +117,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       startDoc: int.parse(_startDocController.text),
       endDoc: int.parse(_endDocController.text),
       type: _selectedType,
+      goal: _selectedGoal,
       items: List.from(_items),
       
       // Feed Mix defaults
@@ -166,6 +169,22 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   _buildTypeOption(SupplementType.waterMix, "Water Mix"),
                 ],
               ),
+            ),
+            const SizedBox(height: 24),
+
+            // GOAL SELECTOR
+            const Text("What problem are you solving?", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: SupplementGoal.values.map((goal) {
+                final isSelected = _selectedGoal == goal;
+                return ChoiceChip(
+                  label: Text(_formatGoal(goal), style: const TextStyle(fontSize: 12)),
+                  selected: isSelected,
+                  onSelected: (val) => setState(() => _selectedGoal = goal),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 24),
 
@@ -380,7 +399,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                     value: _itemUnitController.text,
                     style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8)),
-                    items: (_selectedType == SupplementType.feedMix ? ["g/kg", "ml/kg"] : ["ml/acre", "L/acre", "kg/acre", "g/m3"])
+                    items: (_selectedType == SupplementType.feedMix ? ["g/kg", "ml/kg"] : ["kg/acre", "ml/acre", "L/acre", "g/m3"])
                         .map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                     onChanged: (v) => _itemUnitController.text = v ?? "ml",
                   ),
@@ -401,7 +420,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
             
             // List Items
-            ..._items.map((item) => Card(
+            ..._items.map<Widget>((item) => Card(
               child: ListTile(
                 dense: true,
                 title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -470,6 +489,15 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         ),
       ),
     );
+  }
+
+  String _formatGoal(SupplementGoal goal) {
+    switch (goal) {
+      case SupplementGoal.growthBoost: return "Growth Boost";
+      case SupplementGoal.diseasePrevention: return "Disease Prevention";
+      case SupplementGoal.waterCorrection: return "Water Correction";
+      case SupplementGoal.stressRecovery: return "Stress Recovery";
+    }
   }
 
   Widget _frequencyChip(int days, String label) {

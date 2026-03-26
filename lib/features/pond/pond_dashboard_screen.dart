@@ -321,6 +321,20 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     // Get Rounds
     final feedRoundsData = _getFeedRounds(currentDoc);
 
+    // 💧 WATER SUPPLEMENTS
+    final waterSupplementResults = SupplementCalculator.calculateWater(
+      supplements: supplements,
+      currentDoc: currentDoc,
+      pondArea: currentPond.area,
+    );
+
+    // 🕒 TODAY'S LOGS
+    final supplementLogs = ref.watch(supplementLogProvider);
+    final appliedTodayIds = supplementLogs
+        .where((l) => l.pondId == selectedPond && 
+                      l.timestamp.day == today.day && l.timestamp.month == today.month && l.timestamp.year == today.year)
+        .map((l) => l.supplementId).toSet();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       bottomNavigationBar: const AppBottomBar(currentIndex: 1),
@@ -549,6 +563,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     },
                   ),
                   _OperationButton(
+                    label: "Supplement",
+                    icon: Icons.science_rounded,
+                    color: Colors.indigo,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => SupplementMixScreen(pondId: selectedPond)),
+                      );
+                    },
+                  ),
+                  _OperationButton(
                     label: "Harvest",
                     icon: Icons.agriculture_rounded,
                     color: AppColors.warning,
@@ -604,33 +629,87 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       child: const Text("Feed Schedule"),
                     ),
                   ),
-                  AppSpacing.wM,
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SupplementMixScreen(
-                                pondId: selectedPond),
-                          ),
-                        );
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).primaryColor,
-                        side: BorderSide(color: Theme.of(context).primaryColor),
-                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: AppRadius.rm,
-                        ),
-                      ),
-                      child: const Text("Supplement Mix"),
-                    ),
-                  ),
                 ],
               ),
 
               const SizedBox(height: 12),
+
+              /// 💧 TODAY'S WATER ACTIONS
+              if (waterSupplementResults.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: AppRadius.rl,
+                    border: Border.all(color: Colors.blue.shade100),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.opacity, color: Colors.blue.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          const Text("Today's Water Action", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...waterSupplementResults.map<Widget>((group) {
+                        final isApplied = appliedTodayIds.contains(group.supplementId);
+                        
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ...group.items.map<Widget>((item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                "• ${item.supplementName}: ${item.totalDose}${item.unit}",
+                                style: TextStyle(
+                                  fontSize: 14, 
+                                  fontWeight: FontWeight.w600,
+                                  decoration: isApplied ? TextDecoration.lineThrough : null,
+                                  color: isApplied ? Colors.grey : Colors.black87,
+                                ),
+                              ),
+                            )),
+                            if (!isApplied)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: () {
+                                    ref.read(supplementLogProvider.notifier).logApplication(
+                                      supplementId: group.supplementId,
+                                      pondId: selectedPond,
+                                      items: group.items.map((i) => CalculatedItem(name: i.itemName, quantity: i.totalDose, unit: i.unit)).toList(),
+                                    );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("${group.supplementName} marked as applied")),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                                  label: const Text("MARK AS DONE", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                ),
+                              )
+                            else
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.check_circle, color: Colors.green, size: 16),
+                                    SizedBox(width: 4),
+                                    Text("Applied Today", style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                             const Divider(),
+                          ],
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
 
               /// COMPACT PROGRESS BAR
               CompactProgressBar(
@@ -701,7 +780,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       final feedingTime = mapRoundToTimeKey(round, currentDoc);
                       
                       // ... Calculate supplements (existing logic preserved)
-                      final supplementResults = SupplementCalculator.calculate(
+                      final supplementResults = SupplementCalculator.calculateActive(
                         supplements: supplements,
                         currentDoc: currentDoc,
                         currentFeedingTime: feedingTime,
@@ -709,8 +788,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       );
 
                       final List<String> supplementStrings = [];
-                      for (var group in supplementResults) {
-                        for (var item in group.items) {
+                      for (final group in supplementResults) {
+                        for (final item in group.items) {
                           supplementStrings.add(
                             "${item.itemName.toUpperCase()} ${item.totalDose.toInt()}${item.unit}"
                           );
@@ -768,6 +847,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         showTrayCTA: roundState.showTrayCTA,
                         isPendingTray: roundState.isDone && roundState.showTrayCTA,
                         onOpenTray: (r) => openTray(r, false),
+                        supplements: activeSupplementItems,
                         onMarkDone: () {
                           if (!roundState.isLocked) {
                             ref.read(pondDashboardProvider.notifier).markFeedDone(round);

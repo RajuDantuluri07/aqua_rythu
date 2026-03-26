@@ -6,18 +6,42 @@ enum SupplementStatus { upcoming, active, completed }
 
 enum SupplementType {
   feedMix,
+  waterMix,
+}
+
+enum SupplementGoal {
+  growthBoost,
+  diseasePrevention,
+  waterCorrection,
+  stressRecovery,
+}
+
+enum WaterMixTime {
+  morning,
+  evening,
+  afterFeed,
 }
 
 /// ---------------------------------------------------
 /// 📦 MODEL (Backend Ready)
 /// ---------------------------------------------------
 
-class MixItem {
+/// Ticket ID: AQR-SUPPLEMENT-001
+/// Runtime result for UI display
+class CalculatedItem {
+  final String name;
+  final double quantity;
+  final String unit;
+
+  const CalculatedItem({required this.name, required this.quantity, required this.unit});
+}
+
+class SupplementItem {
   final String name;
   final double dosePerKg;
   final String unit;
 
-  MixItem({
+  SupplementItem({
     required this.name,
     required this.dosePerKg,
     required this.unit,
@@ -30,8 +54,8 @@ class MixItem {
         'unit': unit,
       };
 
-  factory MixItem.fromJson(Map<String, dynamic> json) {
-    return MixItem(
+  factory SupplementItem.fromJson(Map<String, dynamic> json) {
+    return SupplementItem(
       name: json['name'],
       dosePerKg: (json['dosePerKg'] as num).toDouble(),
       unit: json['unit'],
@@ -45,25 +69,37 @@ class Supplement {
   final int startDoc;
   final int endDoc;
   final SupplementType type;
+  final SupplementGoal? goal;
+
+  final List<String> pondIds;
 
   /// FEED MIX ONLY
   final double feedQty; // default 0 if waterMix
-  final List<String> feedingTimes; // empty if waterMix
+  final List<String> feedingTimes; // Represents "timeSlots" (R1, R2, etc)
 
-  final List<String> pondIds; // ['pondId1', 'pondId2'] or ['ALL']
-
-  final List<MixItem> items;
+  /// WATER MIX ONLY
+  final int? frequencyDays; // Maps to repeatIntervalDays
+  final WaterMixTime? preferredTime;
+  final DateTime? date; // Start date for water tasks
+  
+  final List<SupplementItem> items;
+  final String notes;
 
   Supplement({
     required this.id,
     required this.name,
     required this.startDoc,
     required this.endDoc,
-    required this.type,
-    this.feedQty = 1.0,
+    this.type = SupplementType.feedMix,
+    this.goal,
+    this.pondIds = const [],
+    this.feedQty = 0.0,
     this.feedingTimes = const [],
-    this.pondIds = const ['ALL'],
+    this.frequencyDays,
+    this.preferredTime,
+    this.date,
     required this.items,
+    this.notes = '',
   });
 
   // Helper to check status
@@ -79,10 +115,15 @@ class Supplement {
         'startDoc': startDoc,
         'endDoc': endDoc,
         'type': type.name,
+        'goal': goal?.name,
+        'pondIds': pondIds,
         'feedQty': feedQty,
         'feedingTimes': feedingTimes,
-        'pondIds': pondIds,
+        'frequencyDays': frequencyDays,
+        'preferredTime': preferredTime?.name,
+        'date': date?.toIso8601String(),
         'items': items.map((e) => e.toJson()).toList(),
+        'notes': notes,
       };
 
   factory Supplement.fromJson(Map<String, dynamic> json) {
@@ -94,15 +135,67 @@ class Supplement {
       type: json['type'] != null
           ? SupplementType.values.byName(json['type'])
           : SupplementType.feedMix,
-      feedQty: (json['feedQty'] as num?)?.toDouble() ?? 1.0,
+      goal: json['goal'] != null
+          ? SupplementGoal.values.byName(json['goal'])
+          : null,
+      pondIds: List<String>.from(json['pondIds'] ?? []),
+      feedQty: (json['feedQty'] as num?)?.toDouble() ?? 0.0,
       feedingTimes: List<String>.from(json['feedingTimes'] ?? []),
-      pondIds: List<String>.from(json['pondIds'] ?? ['ALL']),
+      frequencyDays: json['frequencyDays'],
+      preferredTime: json['preferredTime'] != null
+          ? WaterMixTime.values.byName(json['preferredTime'])
+          : null,
+      date: json['date'] != null ? DateTime.parse(json['date']) : null,
       items: (json['items'] as List)
-          .map((e) => MixItem.fromJson(e))
+          .map((e) => SupplementItem.fromJson(e))
           .toList(),
+      notes: json['notes'] ?? '',
     );
   }
 }
+
+/// ---------------------------------------------------
+/// 📦 LOG MODEL (History Tracking)
+/// ---------------------------------------------------
+class SupplementLog {
+  final String id;
+  final String supplementId;
+  final String pondId;
+  final DateTime timestamp;
+  final List<CalculatedItem> appliedItems;
+
+  SupplementLog({
+    required this.id,
+    required this.supplementId,
+    required this.pondId,
+    required this.timestamp,
+    required this.appliedItems,
+  });
+}
+
+class SupplementLogNotifier extends StateNotifier<List<SupplementLog>> {
+  SupplementLogNotifier() : super([]);
+
+  void logApplication({
+    required String supplementId,
+    required String pondId,
+    required List<CalculatedItem> items,
+  }) {
+    final log = SupplementLog(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      supplementId: supplementId,
+      pondId: pondId,
+      timestamp: DateTime.now(),
+      appliedItems: items,
+    );
+    state = [...state, log];
+  }
+}
+
+final supplementLogProvider =
+    StateNotifierProvider<SupplementLogNotifier, List<SupplementLog>>((ref) {
+  return SupplementLogNotifier();
+});
 
 /// ---------------------------------------------------
 /// 🎮 CONTROLLER / NOTIFIER
@@ -110,6 +203,10 @@ class Supplement {
 
 class SupplementNotifier extends StateNotifier<List<Supplement>> {
   SupplementNotifier() : super([]);
+
+  List<Supplement> getByPond(String pondId) {
+    return state.where((e) => e.pondIds.contains(pondId) || e.pondIds.contains('ALL')).toList();
+  }
 
   // 🔹 CREATE
   void addSupplement(Supplement supplement) {

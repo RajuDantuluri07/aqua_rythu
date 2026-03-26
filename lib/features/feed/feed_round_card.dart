@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:aqua_rythu/features/pond/pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/supplements/supplement_provider.dart';
-import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
+import 'package:aqua_rythu/features/supplements/feed_mix_engine.dart';
 import '../../core/theme/app_theme.dart';
 import 'widgets/supplement_chip.dart';
 
@@ -382,16 +382,12 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
     );
   }
 
-  Widget _buildCompactSupplements(BuildContext context, List<SupplementGroupResult> results) {
-    // Flatten results to individual items
-    final List<SupplementItem> items = results.expand((group) {
-      return group.items.map((item) => SupplementItem(
-            name: item.itemName,
-            unit: item.unit,
-            quantity: item.totalDose,
-            isMandatory: true, // Defaulting to true as per current logic
-          ));
-    }).toList();
+  Widget _buildCompactSupplements(BuildContext context, List<CalculatedItem> results) {
+    final List<SupplementItem> items = results.map((item) => SupplementItem(
+          name: item.name,
+          unit: item.unit,
+          dosePerKg: item.quantity,
+        )).toList();
 
     if (items.isEmpty) return const SizedBox.shrink();
 
