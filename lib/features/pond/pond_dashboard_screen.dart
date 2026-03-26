@@ -18,11 +18,12 @@ import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
-import '../../features/supplements/supplement_provider.dart';
+import '../../features/supplements/supplement_provider.dart' hide SupplementItem;
 import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import '../../core/engines/feed_state_engine.dart';
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -39,6 +40,12 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
+  /// TASK 3: Add activeSupplementItems Getter
+  List<SupplementItem> get activeSupplementItems {
+    // TEMP: placeholder until logic connected
+    return [];
+  }
+
   List<Map<String, dynamic>> _getFeedRounds() {
     return [
       {"round": 1, "time": "06:00 AM", "key": "R1"},

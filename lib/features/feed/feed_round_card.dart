@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:aqua_rythu/features/pond/pond_dashboard_provider.dart';
-import 'package:aqua_rythu/features/supplements/supplement_provider.dart';
+import 'package:aqua_rythu/features/supplements/supplement_provider.dart' hide SupplementItem;
+import 'package:aqua_rythu/features/supplements/models/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
-import 'widgets/supplement_chip.dart';
 
 /// 🔁 Round → Feeding Time
 /// 🔁 Round → Feeding Time
@@ -296,7 +296,16 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
           /// 🧠 SUPPLEMENTS (COMPACT)
           if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
             AppSpacing.hS,
-            _buildCompactSupplements(context, widget.supplements),
+            const SizedBox(height: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: widget.supplements.map((s) {
+                return Text(
+                  "${s.name} - ${s.quantity}${s.unit}",
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                );
+              }).toList(),
+            ),
           ],
 
           AppSpacing.hS,
@@ -355,42 +364,5 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
         ],
       ),
     );
-  }
-
-  Widget _buildCompactSupplements(BuildContext context, List<SupplementItem> items) {
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    if (items.length <= 2) {
-      // Case A: ≤ 2 items → Horizontal row
-      return Row(
-        children: items.map((s) => SupplementChip(item: s)).toList(),
-      );
-    } else if (items.length <= 4) {
-      // Case B: 3–4 items → 2-column grid
-      return GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: 3.5,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
-        children: items.map((s) => SupplementChip(item: s)).toList(),
-      );
-    } else {
-      // Case C: > 4 items → Show first 2 + “+N more”
-      return Row(
-        children: [
-          SupplementChip(item: items[0]),
-          SupplementChip(item: items[1]),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              "+${items.length - 2} more",
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-            ),
-          ),
-        ],
-      );
-    }
   }
 }
