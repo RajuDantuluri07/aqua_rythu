@@ -14,6 +14,7 @@ class SamplingScreen extends ConsumerStatefulWidget {
 }
 
 class _SamplingScreenState extends ConsumerState<SamplingScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _countCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
 
@@ -49,16 +50,23 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     super.dispose();
   }
 
-  void _saveSampling(int doc) {
-    final count = int.tryParse(_countCtrl.text) ?? 0;
-    final weight = double.tryParse(_weightCtrl.text) ?? 0;
+  String? _validateRange(double? val, double min, double max, String name, [String unit = ""]) {
+    if (val == null) return 'Enter $name';
+    final unitStr = unit.isNotEmpty ? " $unit" : "";
+    if (val < min || val > max) return '$name should be $min-$max$unitStr';
+    return null;
+  }
 
-    if (count > 0 && weight > 0) {
+  void _saveSampling(int doc) {
+    if (_formKey.currentState?.validate() ?? false) {
+      final count = int.tryParse(_countCtrl.text) ?? 0;
+      final weight = double.tryParse(_weightCtrl.text) ?? 0;
+
       ref.read(growthProvider(widget.pondId).notifier).addLog(
-        doc: doc,
-        sampleCount: count,
-        totalWeight: weight,
-      );
+            doc: doc,
+            sampleCount: count,
+            totalWeight: weight,
+          );
       Navigator.pop(context);
     }
   }
@@ -157,26 +165,31 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
             const SizedBox(height: 24),
 
             // Inputs
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInput(
-                    controller: _countCtrl,
-                    label: "Sample Count",
-                    icon: Icons.people_outline_rounded,
-                    hint: "e.g. 50",
+            Form(
+              key: _formKey,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildInput(
+                      controller: _countCtrl,
+                      label: "Sample Count",
+                      icon: Icons.people_outline_rounded,
+                      hint: "e.g. 50",
+                      validator: (val) => _validateRange(val, 1, 1000, "Count"),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildInput(
-                    controller: _weightCtrl,
-                    label: "Total Weight (g)",
-                    icon: Icons.hourglass_empty_rounded,
-                    hint: "e.g. 250",
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildInput(
+                      controller: _weightCtrl,
+                      label: "Total Weight (g)",
+                      icon: Icons.hourglass_empty_rounded,
+                      hint: "e.g. 250",
+                      validator: (val) => _validateRange(val, 1, 10000, "Weight", "g"),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
 
             const SizedBox(height: 20),
@@ -244,13 +257,19 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     );
   }
 
-  Widget _buildInput({required TextEditingController controller, required String label, required IconData icon, required String hint}) {
+  Widget _buildInput({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required String hint,
+    String? Function(double?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
         const SizedBox(height: 8),
-        TextField(
+        TextFormField(
           controller: controller,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
@@ -260,7 +279,13 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
             fillColor: Colors.white,
             border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
             enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: AppColors.border)),
+            focusedBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2)),
           ),
+          validator: (value) {
+            if (value == null || value.isEmpty) return 'Required';
+            final val = double.tryParse(value);
+            return validator?.call(val);
+          },
         ),
       ],
     );

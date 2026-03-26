@@ -43,6 +43,12 @@ class SupplementMixScreen extends ConsumerWidget {
           icon: const Icon(Icons.close, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+            onPressed: () => _showAddSupplementMessage(context),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.base),
@@ -51,7 +57,7 @@ class SupplementMixScreen extends ConsumerWidget {
           children: [
             _buildSectionHeader("ACTIVE TODAY (DOC $doc)"),
             if (active.isEmpty) 
-              _buildEmptyState("No active supplements for today."),
+              _buildEmptyState(context, "No active supplements for today."),
             ...active.map((s) => _SupplementCard(supplement: s, isActive: true)),
 
             if (upcoming.isNotEmpty) ...[
@@ -68,6 +74,18 @@ class SupplementMixScreen extends ConsumerWidget {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddSupplementMessage(context),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("ADD NEW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+  }
+
+  void _showAddSupplementMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Add Supplement feature coming soon")),
     );
   }
 
@@ -86,16 +104,26 @@ class SupplementMixScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState(String msg) {
+  Widget _buildEmptyState(BuildContext context, String msg) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(24),
-      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Text(msg, style: TextStyle(color: Colors.grey.shade500)),
+      child: Column(
+        children: [
+          Text(msg, style: TextStyle(color: Colors.grey.shade500)),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: () => _showAddSupplementMessage(context),
+            icon: const Icon(Icons.add),
+            label: const Text("Add First Supplement"),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../farm/farm_provider.dart';
 import '../supplement_provider.dart';
+import '../../../core/theme/app_theme.dart';
+import 'package:intl/intl.dart';
 
 class AddSupplementScreen extends ConsumerStatefulWidget {
   final Supplement? supplement;
-  final String? initialPondId;
-
-  const AddSupplementScreen({super.key, this.supplement, this.initialPondId});
+  const AddSupplementScreen({super.key, this.supplement});
 
   @override
   ConsumerState<AddSupplementScreen> createState() => _AddSupplementScreenState();
@@ -16,114 +15,50 @@ class AddSupplementScreen extends ConsumerStatefulWidget {
 class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Toggle State (Always Feed Mix now)
-  final SupplementType _selectedType = SupplementType.feedMix;
+  // Toggle State
+  SupplementType _selectedType = SupplementType.feedMix;
+  String _applyTo = "This Pond"; // PRD 4.1: This Pond, Multiple, All Ponds
 
   // Common Fields
   final _nameController = TextEditingController();
   final _startDocController = TextEditingController();
   final _endDocController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  // Water Mix Fields
+  int _selectedFrequency = 7;
+  DateTime _selectedDate = DateTime.now();
+  final _customRepeatController = TextEditingController();
+
+  // Selection Lists
+  final List<String> _selectedFeedingTimes = [];
+  WaterMixTime _selectedWaterTime = WaterMixTime.afterFeed;
 
   // Items
-  final List<MixItem> _items = [];
-
-  // Pond Selection State
-  List<String> _selectedPondIds = ['ALL'];
-  String _pondSelectionMode = 'ALL'; // 'THIS', 'MULTIPLE', 'ALL'
+  final List<SupplementItem> _items = [];
 
   // Item Input Controllers (Temp)
   final _itemNameController = TextEditingController();
   final _itemDoseController = TextEditingController();
   final _itemUnitController = TextEditingController(text: 'ml');
 
-  // New Fields
-  List<String> _selectedFeedingTimes = [];
-  final List<String> _allRounds = ['6 AM', '10 AM', '2 PM', '6 PM'];
-
   @override
   void initState() {
     super.initState();
     if (widget.supplement != null) {
       final s = widget.supplement!;
+      _selectedType = s.type;
       _nameController.text = s.name;
       _startDocController.text = s.startDoc.toString();
       _endDocController.text = s.endDoc.toString();
       _items.addAll(s.items);
-      _selectedFeedingTimes = List.from(s.feedingTimes);
-      _selectedPondIds = List.from(s.pondIds);
-      
-      if (_selectedPondIds.contains('ALL')) {
-        _pondSelectionMode = 'ALL';
-      } else if (_selectedPondIds.length == 1 && _selectedPondIds.first == widget.initialPondId) {
-        _pondSelectionMode = 'THIS';
-      } else {
-        _pondSelectionMode = 'MULTIPLE';
+      _selectedFeedingTimes.addAll(s.feedingTimes);
+      _notesController.text = s.notes;
+
+      if (s.type == SupplementType.waterMix) {
+        _selectedFrequency = s.frequencyDays ?? 7;
+        _selectedWaterTime = s.preferredTime ?? WaterMixTime.afterFeed;
       }
-    } else {
-      _selectedFeedingTimes = List.from(_allRounds);
-      if (widget.initialPondId != null) {
-        _pondSelectionMode = 'THIS';
-        _selectedPondIds = [widget.initialPondId!];
-      } else {
-        _pondSelectionMode = 'ALL';
-        _selectedPondIds = ['ALL'];
-      }
-    }
-  }
-
-  int _calculateDoc(DateTime pickedDate) {
-    final farmState = ref.read(farmProvider);
-    final pondId = widget.initialPondId ?? (_selectedPondIds.firstWhere((p) => p != 'ALL', orElse: () => ''));
-    
-    Pond? primaryPond;
-    for (var farm in farmState.farms) {
-      for (var p in farm.ponds) {
-        if (p.id == pondId) {
-          primaryPond = p;
-          break;
-        }
-      }
-    }
-
-    if (primaryPond == null) return 1;
-    return pickedDate.difference(primaryPond.stockingDate).inDays + 1;
-  }
-
-  void _selectDate(bool isStart) async {
-    final farmState = ref.read(farmProvider);
-    final pondId = widget.initialPondId ?? (_selectedPondIds.firstWhere((p) => p != 'ALL', orElse: () => ''));
-    
-    Pond? primaryPond;
-    for (var farm in farmState.farms) {
-      for (var p in farm.ponds) {
-        if (p.id == pondId) {
-          primaryPond = p;
-          break;
-        }
-      }
-    }
-
-    final initialDate = primaryPond != null 
-        ? primaryPond.stockingDate.add(Duration(days: int.tryParse(isStart ? _startDocController.text : _endDocController.text) ?? 0))
-        : DateTime.now();
-
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate.isAfter(DateTime(1900)) ? initialDate : DateTime.now(),
-      firstDate: primaryPond?.stockingDate ?? DateTime(2000),
-      lastDate: DateTime(2100),
-      helpText: isStart ? "Select Start Date" : "Select End Date",
-    );
-
-    if (picked != null) {
-      final doc = _calculateDoc(picked);
-      setState(() {
-        if (isStart) {
-          _startDocController.text = doc.toString();
-        } else {
-          _endDocController.text = doc.toString();
-        }
-      });
     }
   }
 
@@ -133,6 +68,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     _startDocController.dispose();
     _endDocController.dispose();
     _itemNameController.dispose();
+    _notesController.dispose();
+    _customRepeatController.dispose();
     _itemDoseController.dispose();
     _itemUnitController.dispose();
     super.dispose();
@@ -146,7 +83,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     if (name.isEmpty || dose == null || unit.isEmpty) return;
 
     setState(() {
-      _items.add(MixItem(name: name, dosePerKg: dose, unit: unit));
+      _items.add(SupplementItem(name: name, dosePerKg: dose, unit: unit));
       _itemNameController.clear();
       _itemDoseController.clear();
     });
@@ -154,12 +91,23 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
+    
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please add at least one mix item")),
       );
       return;
     }
+
+    if (_selectedType == SupplementType.feedMix && _selectedFeedingTimes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one feeding round")),
+      );
+      return;
+    }
+
+    // PRD: In a real implementation, 'Apply To' logic would determine 
+    // which pond IDs get saved. For MVP, we use the specific pond or 'ALL'.
 
     final newSupplement = Supplement(
       id: widget.supplement?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -169,16 +117,18 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       type: _selectedType,
       items: List.from(_items),
       
-      // Feed Mix settings
-      feedQty: 1.0,
-      feedingTimes: _selectedFeedingTimes, 
-      
-      // Pond Selection
-      pondIds: _pondSelectionMode == 'ALL' 
-          ? ['ALL'] 
-          : (_pondSelectionMode == 'THIS' 
-              ? [widget.initialPondId ?? 'Pond 1'] 
-              : _selectedPondIds),
+      // Feed Mix defaults
+      feedQty: _selectedType == SupplementType.feedMix ? 1.0 : 0.0, 
+      feedingTimes: _selectedType == SupplementType.feedMix 
+          ? List.from(_selectedFeedingTimes) 
+          : [],
+
+      // Water Mix Data
+      frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
+      preferredTime: _selectedType == SupplementType.waterMix ? _selectedWaterTime : null,
+      pondIds: _applyTo == "All Ponds" ? ['ALL'] : [], // Dummy logic for pond assignment
+      date: _selectedType == SupplementType.waterMix ? _selectedDate : null,
+      notes: _notesController.text.trim(),
     );
 
     if (widget.supplement != null) {
@@ -192,7 +142,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   @override
   Widget build(BuildContext context) {
-
+    final primaryColor = Theme.of(context).primaryColor;
 
     return Scaffold(
       appBar: AppBar(
@@ -203,108 +153,201 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const SizedBox(height: 8),
+            // 1. TYPE TOGGLE
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  _buildTypeOption(SupplementType.feedMix, "Feed Mix"),
+                  _buildTypeOption(SupplementType.waterMix, "Water Mix"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
 
             // 2. BASIC INFO
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: "Supplement Name"),
+              decoration: const InputDecoration(
+                labelText: "Supplement Name",
+                hintText: "e.g. Gut Health Mix / Mineral Mix",
+                prefixIcon: Icon(Icons.label_outline_rounded),
+              ),
               validator: (v) => v!.isEmpty ? "Required" : null,
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _selectDate(true),
-                    child: IgnorePointer(
-                      child: TextFormField(
-                        controller: _startDocController,
-                        decoration: const InputDecoration(
-                          labelText: "Start DOC",
-                          suffixIcon: Icon(Icons.calendar_today, size: 18),
-                        ),
-                        validator: (v) => v!.isEmpty ? "Required" : null,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _selectDate(false),
-                    child: IgnorePointer(
-                      child: TextFormField(
-                        controller: _endDocController,
-                        decoration: const InputDecoration(
-                          labelText: "End DOC",
-                          suffixIcon: Icon(Icons.calendar_today, size: 18),
-                        ),
-                        validator: (v) => v!.isEmpty ? "Required" : null,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            const SizedBox(height: 20),
 
-            const SizedBox(height: 24),
-            const Text("Feeding Rounds", style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: _allRounds.map((round) {
-                final isSelected = _selectedFeedingTimes.contains(round);
-                return FilterChip(
-                  label: Text(round),
-                  selected: isSelected,
-                  onSelected: (val) {
-                    setState(() {
-                      if (val) {
-                        _selectedFeedingTimes.add(round);
-                      } else {
-                        _selectedFeedingTimes.remove(round);
-                      }
-                    });
-                  },
-                  selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected ? Theme.of(context).primaryColor : Colors.black,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                );
-              }).toList(),
-            ),
-
-            const SizedBox(height: 24),
-            const Text("Apply to Ponds", style: TextStyle(fontWeight: FontWeight.bold)),
+            // Apply To selection
+            const Text("Apply To", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
             const SizedBox(height: 8),
             Row(
-              children: [
-                _pondModeChip('THIS', "This Pond"),
-                const SizedBox(width: 8),
-                _pondModeChip('MULTIPLE', "Multiple"),
-                const SizedBox(width: 8),
-                _pondModeChip('ALL', "All Ponds"),
-              ],
+              children: ["This Pond", "Multiple", "All Ponds"].map((opt) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(opt, style: const TextStyle(fontSize: 12)),
+                    selected: _applyTo == opt,
+                    onSelected: (val) => setState(() => _applyTo = opt),
+                  ),
+                ),
+              )).toList(),
             ),
-            
-            if (_pondSelectionMode == 'MULTIPLE') ...[
-              const SizedBox(height: 12),
-              _buildPondSelector(),
+            const SizedBox(height: 24),
+
+            // 3. DOC RANGE (Feed Only)
+            if (_selectedType == SupplementType.feedMix) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _startDocController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: "DOC From", prefixIcon: Icon(Icons.play_arrow_outlined)),
+                      validator: (v) => v!.isEmpty ? "Required" : null,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _endDocController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: "DOC To", prefixIcon: Icon(Icons.stop_outlined)),
+                      validator: (v) => v!.isEmpty ? "Required" : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              
+              const Text("Select Feeding Rounds", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              Row(
+                children: [1, 2, 3, 4].map((round) {
+                  final label = "R$round";
+                  final isSelected = _selectedFeedingTimes.contains(label);
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(label),
+                        selected: isSelected,
+                        onSelected: (val) {
+                          setState(() {
+                            if (val) _selectedFeedingTimes.add(label);
+                            else _selectedFeedingTimes.remove(label);
+                          });
+                        },
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+
+            // 4. DATE & REPEAT (Water Only)
+            if (_selectedType == SupplementType.waterMix) ...[
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                    lastDate: DateTime.now().add(const Duration(days: 90)),
+                  );
+                  if (picked != null) setState(() => _selectedDate = picked);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: "Start Date", prefixIcon: Icon(Icons.calendar_month_outlined)),
+                  child: Text(DateFormat('dd MMM yyyy').format(_selectedDate)),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              const Text("Frequency", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                children: [
+                  _frequencyChip(0, "No Repeat"),
+                  _frequencyChip(7, "7 Days"),
+                  _frequencyChip(15, "15 Days"),
+                  FilterChip(
+                    label: const Text("Custom"),
+                    selected: ![0, 7, 15].contains(_selectedFrequency),
+                    onSelected: (v) => setState(() => _selectedFrequency = 1),
+                  ),
+                ],
+              ),
+              if (![0, 7, 15].contains(_selectedFrequency)) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _customRepeatController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: "Every [__] days"),
+                  onChanged: (v) => _selectedFrequency = int.tryParse(v) ?? 1,
+                ),
+              ],
+              const SizedBox(height: 24),
+
+              const Text("Apply At Time Slots", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              Row(
+                children: ["Morning", "Afternoon", "Evening", "Midnight"].map((time) {
+                  final isSelected = _selectedFeedingTimes.contains(time);
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: FilterChip(
+                        label: Text(time, style: const TextStyle(fontSize: 10)),
+                        selected: isSelected,
+                        onSelected: (val) {
+                          setState(() {
+                            if (val) _selectedFeedingTimes.add(time);
+                            else _selectedFeedingTimes.remove(time);
+                          });
+                        },
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              const Text("Preferred Time", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                children: WaterMixTime.values.map((time) {
+                  final isSelected = _selectedWaterTime == time;
+                  return ChoiceChip(
+                    label: Text(_formatTime(time)),
+                    selected: isSelected,
+                    onSelected: (val) {
+                      if (val) setState(() => _selectedWaterTime = time);
+                    },
+                    selectedColor: AppColors.primary.withOpacity(0.2),
+                    labelStyle: TextStyle(
+                      color: isSelected ? AppColors.primary : Colors.black,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.normal,
+                    ),
+                  );
+                }).toList(),
+              ),
             ],
 
             const SizedBox(height: 24),
 
-            const SizedBox(height: 12),
-
-            // 4. MIX ITEMS
+            // 5. MIX ITEMS
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Mix Items", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Text("Mix Details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 if (_items.isNotEmpty)
-                  Text("${_items.length} items", style: const TextStyle(color: Colors.grey)),
+                  Text("${_items.length} items", style: const TextStyle(color: AppColors.textTertiary, fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 12),
@@ -315,25 +358,31 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 Expanded(
                   flex: 3,
                   child: TextField(
+                    style: const TextStyle(fontSize: 13),
                     controller: _itemNameController,
-                    decoration: const InputDecoration(hintText: "Item Name", contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
+                    decoration: const InputDecoration(hintText: "Item Name", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: TextField(
+                    style: const TextStyle(fontSize: 13),
                     controller: _itemDoseController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: "Dose", contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
+                    decoration: const InputDecoration(hintText: "Val", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
-                  child: TextField(
-                    controller: _itemUnitController,
-                    decoration: const InputDecoration(hintText: "Unit", contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
+                  child: DropdownButtonFormField<String>(
+                    value: _itemUnitController.text,
+                    style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8)),
+                    items: (_selectedType == SupplementType.feedMix ? ["g/kg", "ml/kg"] : ["ml/acre", "L/acre", "kg/acre", "g/m3"])
+                        .map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                    onChanged: (v) => _itemUnitController.text = v ?? "ml",
                   ),
                 ),
                 IconButton(
@@ -343,7 +392,13 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ],
             ),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            if (_items.isEmpty)
+               Padding(
+                 padding: const EdgeInsets.symmetric(vertical: 20),
+                 child: Center(child: Text("At least 1 item required", style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
+               ),
+
             
             // List Items
             ..._items.map((item) => Card(
@@ -358,13 +413,39 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             )),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // 6. NOTES
+            TextFormField(
+              controller: _notesController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: "Notes (Optional)",
+                hintText: "Add any special instructions...",
+                alignLabelWithHint: true,
+              ),
+            ),
+
+            const SizedBox(height: 40),
+
+            // 7. FOOTER
             SizedBox(
               width: double.infinity,
+              height: 56,
               child: ElevatedButton(
                 onPressed: _save,
-                child: const Text("Save Supplement"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
+                ),
+                child: const Text("SAVE SUPPLEMENT", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 0.5)),
               ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CANCEL", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 32),
           ],
@@ -373,46 +454,39 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     );
   }
 
-
-
-  Widget _pondModeChip(String mode, String label) {
-    final isSelected = _pondSelectionMode == mode;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (val) {
-        if (val) setState(() => _pondSelectionMode = mode);
-      },
-      selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
-      labelStyle: TextStyle(
-        color: isSelected ? Theme.of(context).primaryColor : Colors.black,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+  Widget _buildTypeOption(SupplementType type, String label) {
+    final isSelected = _selectedType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedType = type),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)] : null,
+          ),
+          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.black : Colors.grey)),
+        ),
       ),
     );
   }
 
-  Widget _buildPondSelector() {
-    final farmState = ref.watch(farmProvider);
-    final ponds = farmState.currentFarm?.ponds ?? [];
-
-    return Wrap(
-      spacing: 8,
-      children: ponds.map((p) {
-        final isSelected = _selectedPondIds.contains(p.id);
-        return FilterChip(
-          label: Text(p.name),
-          selected: isSelected,
-          onSelected: (val) {
-            setState(() {
-              if (val) {
-                _selectedPondIds.add(p.id);
-              } else {
-                _selectedPondIds.remove(p.id);
-              }
-            });
-          },
-        );
-      }).toList(),
+  Widget _frequencyChip(int days, String label) {
+    final isSelected = _selectedFrequency == days;
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (v) => setState(() => _selectedFrequency = days),
+      checkmarkColor: AppColors.primary,
     );
+  }
+
+  String _formatTime(WaterMixTime t) {
+    switch (t) {
+      case WaterMixTime.morning: return "Morning";
+      case WaterMixTime.evening: return "Evening";
+      case WaterMixTime.afterFeed: return "After Last Feed";
+    }
   }
 }

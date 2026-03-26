@@ -35,7 +35,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() => _isLoading = false);
       if (success) {
         // Navigate to OTP Screen
-        Navigator.pushNamed(context, AppRoutes.otp); 
+        Navigator.pushNamed(context, AppRoutes.otp, arguments: phone); 
       }
     }
   }

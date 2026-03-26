@@ -179,6 +179,13 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
       };
     }
   }
+
+  /// 🗑 CLEAR HISTORY FOR NEW CYCLE
+  void clearHistory(String pondId) {
+    final newState = Map<String, List<FeedHistoryLog>>.from(state);
+    newState.remove(pondId);
+    state = newState;
+  }
 }
 
 final feedHistoryProvider = StateNotifierProvider<FeedHistoryNotifier, Map<String, List<FeedHistoryLog>>>((ref) {

@@ -14,6 +14,7 @@ class OtpScreen extends ConsumerStatefulWidget {
 
 class _OtpScreenState extends ConsumerState<OtpScreen> {
   final TextEditingController _otpController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
 
   int _seconds = 59;
   Timer? _timer;
@@ -24,9 +25,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     super.initState();
     _startTimer();
     _listenForOtp();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
   }
 
   void _startTimer() {
+    _timer?.cancel();
+    setState(() => _seconds = 59);
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_seconds == 0) {
         timer.cancel();
@@ -40,8 +46,22 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     await SmsAutoFill().listenForCode();
   }
 
-  Future<void> _verifyOtp() async {
-    final otp = _otpController.text;
+  void _resendOtp() {
+    final phone = ModalRoute.of(context)?.settings.arguments as String?;
+
+    if (phone != null) {
+      ref.read(authProvider.notifier).signInWithOtp(phone);
+    }
+
+    _startTimer();
+    _listenForOtp();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("OTP Resent Successfully")),
+    );
+  }
+
+  Future<void> _verifyOtp([String? code]) async {
+    final otp = code ?? _otpController.text;
     if (otp.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -52,6 +72,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       return;
     }
 
+    _focusNode.unfocus();
     setState(() => _isLoading = true);
 
     await ref.read(authProvider.notifier).login(otp);
@@ -66,6 +87,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     _timer?.cancel();
     SmsAutoFill().unregisterListener();
     _otpController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -89,36 +111,62 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       }
     });
 
+    final phone = ModalRoute.of(context)?.settings.arguments as String? ?? "";
+
     return Scaffold(
       appBar: AppBar(title: const Text("OTP Verification")),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
+            Text("Enter the code sent to +91 $phone", style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 30),
 
             /// OTP INPUT
             PinFieldAutoFill(
               controller: _otpController,
+              currentCode: _otpController.text,
               codeLength: 6,
+              focusNode: _focusNode,
+              autoFocus: true,
+              keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: false),
+              textInputAction: TextInputAction.done,
               decoration: BoxLooseDecoration(
+                textStyle: const TextStyle(fontSize: 20, color: Colors.black, fontWeight: FontWeight.bold),
                 strokeColorBuilder: FixedColorBuilder(Theme.of(context).primaryColor),
                 bgColorBuilder: FixedColorBuilder(Colors.white),
-                radius: Radius.circular(8),
+                radius: const Radius.circular(8),
                 gapSpace: 12,
                 strokeWidth: 1.5,
               ),
               onCodeChanged: (code) {
+                setState(() {}); // Force rebuild to persist text across timer ticks
                 if (code?.length == 6) {
-                  _verifyOtp();
+                  _verifyOtp(code);
                 }
               },
             ),
 
             const SizedBox(height: 20),
 
-            /// TIMER
-            Text("00:${_seconds.toString().padLeft(2, '0')}"),
+            /// TIMER & RESEND
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "00:${_seconds.toString().padLeft(2, '0')}",
+                  style: TextStyle(
+                    color: _seconds == 0 ? Colors.grey : Colors.black87,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _seconds == 0 ? _resendOtp : null,
+                  child: const Text("Resend OTP"),
+                ),
+              ],
+            ),
 
             const SizedBox(height: 20),
 

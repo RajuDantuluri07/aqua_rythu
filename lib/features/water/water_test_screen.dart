@@ -74,6 +74,13 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     }
   }
 
+  String? _validateRange(double? val, double min, double max, String name, [String unit = ""]) {
+    if (val == null) return 'Enter $name';
+    final unitStr = unit.isNotEmpty ? " $unit" : "";
+    if (val < min || val > max) return '$name should be $min-$max$unitStr';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final doc = ref.watch(docProvider(widget.pondId));
@@ -152,15 +159,13 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                     children: [
                       Expanded(child: _buildInput(label: "pH Level", controller: _phController, icon: Icons.opacity_rounded, hint: "7.5",
                         validator: (val) {
-                          if (val < 6.0 || val > 9.5) return 'pH should be 6.0-9.5';
-                          return null;
+                          return _validateRange(val, 6.0, 9.5, "pH");
                         },
                       )),
                       const SizedBox(width: 16),
                       Expanded(child: _buildInput(label: "Dissolved Oxygen", controller: _doController, icon: Icons.water, hint: "5.0", suffix: "ppm",
                         validator: (val) {
-                          if (val < 2.0 || val > 20.0) return 'DO should be 2.0-20.0 ppm';
-                          return null;
+                          return _validateRange(val, 2.0, 20.0, "DO", "ppm");
                         },
                       )),
                     ],
@@ -170,15 +175,13 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                     children: [
                       Expanded(child: _buildInput(label: "Temperature", controller: _tempController, icon: Icons.thermostat_rounded, hint: "28", suffix: "°C",
                         validator: (val) {
-                          if (val < 15.0 || val > 40.0) return 'Temp should be 15.0-40.0 °C';
-                          return null;
+                          return _validateRange(val, 15.0, 40.0, "Temp", "°C");
                         },
                       )),
                       const SizedBox(width: 16),
                       Expanded(child: _buildInput(label: "Salinity", controller: _salinityController, icon: Icons.blur_on_rounded, hint: "15", suffix: "ppt",
                         validator: (val) {
-                          if (val < 0.0 || val > 45.0) return 'Salinity should be 0.0-45.0 ppt';
-                          return null;
+                          return _validateRange(val, 0.0, 45.0, "Salinity", "ppt");
                         },
                       )),
                     ],
@@ -188,15 +191,13 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                     children: [
                       Expanded(child: _buildInput(label: "Alkalinity", controller: _alkalinityController, icon: Icons.science_outlined, hint: "120", suffix: "ppm",
                         validator: (val) {
-                          if (val < 50.0 || val > 250.0) return 'Alkalinity should be 50.0-250.0 ppm';
-                          return null;
+                          return _validateRange(val, 50.0, 250.0, "Alkalinity", "ppm");
                         },
                       )),
                       const SizedBox(width: 16),
                       Expanded(child: _buildInput(label: "Ammonia", controller: _ammoniaController, icon: Icons.warning_amber_rounded, hint: "0.1", suffix: "ppm",
                         validator: (val) {
-                          if (val < 0.0 || val > 2.0) return 'Ammonia should be 0.0-2.0 ppm';
-                          return null;
+                          return _validateRange(val, 0.0, 2.0, "Ammonia", "ppm");
                         },
                       )),
                     ],
