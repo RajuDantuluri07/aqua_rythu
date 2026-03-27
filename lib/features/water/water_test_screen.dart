@@ -18,59 +18,136 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
   final TextEditingController _ammoniaController = TextEditingController();
   final TextEditingController _phController = TextEditingController();
   final TextEditingController _doController = TextEditingController();
-  final TextEditingController _tempController = TextEditingController();
   final TextEditingController _salinityController = TextEditingController();
   final TextEditingController _alkalinityController = TextEditingController();
+  final TextEditingController _nitriteController = TextEditingController();
+
+  // Validation ranges
+  static const Map<String, Map<String, dynamic>> _ranges = {
+    'ph': {'min': 0.0, 'max': 14.0, 'optimalMin': 7.5, 'optimalMax': 8.5, 'unit': '', 'name': 'pH'},
+    'do': {'min': 0.0, 'max': 25.0, 'optimalMin': 4.0, 'optimalMax': 8.0, 'unit': 'ppm', 'name': 'DO'},
+    'salinity': {'min': 0.0, 'max': 100.0, 'optimalMin': 10.0, 'optimalMax': 25.0, 'unit': 'ppt', 'name': 'Salinity'},
+    'alkalinity': {'min': 0.0, 'max': 1000.0, 'optimalMin': 100.0, 'optimalMax': 200.0, 'unit': 'ppm', 'name': 'Alkalinity'},
+    'ammonia': {'min': 0.0, 'max': 10.0, 'optimalMin': 0.0, 'optimalMax': 0.1, 'unit': 'ppm', 'name': 'Ammonia'},
+    'nitrite': {'min': 0.0, 'max': 10.0, 'optimalMin': 0.0, 'optimalMax': 0.1, 'unit': 'ppm', 'name': 'Nitrite'},
+  };
 
   @override
   void dispose() {
     _phController.dispose();
     _doController.dispose();
-    _tempController.dispose();
     _salinityController.dispose();
     _alkalinityController.dispose();
     _ammoniaController.dispose();
+    _nitriteController.dispose();
     super.dispose();
+  }
+
+  String? _getRecommendation(String param, double value) {
+    switch (param) {
+      case 'ph':
+        if (value < 7.5) return "Add agricultural lime to raise pH";
+        if (value > 8.5) return "Stop lime application, add organic matter";
+        return null;
+      case 'do':
+        if (value < 4.0) return "Increase aeration, reduce feeding";
+        if (value < 5.0) return "Monitor aeration, slight improvement needed";
+        return null;
+      case 'salinity':
+        if (value < 10.0) return "Increase salt or brackish water inflow";
+        if (value > 25.0) return "Add fresh water to dilute salinity";
+        return null;
+      case 'alkalinity':
+        if (value < 100.0) return "Add sodium bicarbonate or lime";
+        if (value > 200.0) return "Reduce lime application";
+        return null;
+      case 'ammonia':
+        if (value > 0.3) return "CRITICAL: Reduce feeding by 50%, increase aeration, add probiotics";
+        if (value > 0.1) return "Reduce feeding by 20%, increase aeration";
+        return null;
+      case 'nitrite':
+        if (value > 0.3) return "CRITICAL: Salt treatment (1-2 ppt), reduce feeding";
+        if (value > 0.1) return "Add salt (0.5-1 ppt), reduce feeding";
+        return null;
+      default:
+        return null;
+    }
   }
 
   void _saveWaterTest() {
     if (_formKey.currentState?.validate() ?? false) {
       final ph = double.tryParse(_phController.text) ?? 0;
       final doVal = double.tryParse(_doController.text) ?? 0;
-      final temp = double.tryParse(_tempController.text) ?? 0;
       final sal = double.tryParse(_salinityController.text) ?? 0;
       final alk = double.tryParse(_alkalinityController.text) ?? 0;
       final ammonia = double.tryParse(_ammoniaController.text) ?? 0;
+      final nitrite = double.tryParse(_nitriteController.text) ?? 0;
       final doc = ref.read(docProvider(widget.pondId));
 
       ref.read(waterProvider(widget.pondId).notifier).addLog(
         doc: doc,
         ph: ph,
         dissolvedOxygen: doVal,
-        temperature: temp,
         salinity: sal,
         alkalinity: alk,
         ammonia: ammonia,
-        nitrite: 0,
+        nitrite: nitrite,
       );
+
+      // Clear inputs after save
+      _phController.clear();
+      _doController.clear();
+      _salinityController.clear();
+      _alkalinityController.clear();
+      _ammoniaController.clear();
+      _nitriteController.clear();
+
+      // Calculate health score for snackbar message
+      int score = 100;
+      if (doVal < 4) score -= 20;
+      else if (doVal < 5) score -= 10;
+      if (ph < 7.5 || ph > 8.5) score -= 10;
+      if (sal < 10 || sal > 25) score -= 10;
+      if (alk < 100 || alk > 200) score -= 10;
+      if (ammonia > 0.3) score -= 20;
+      else if (ammonia > 0.1) score -= 10;
+      if (nitrite > 0.3) score -= 20;
+      else if (nitrite > 0.1) score -= 10;
+
+      String snackMsg = "Saved successfully";
+      Color snackColor = Colors.teal;
+      IconData snackIcon = Icons.check_circle;
+
+      if (score < 60) {
+        snackMsg += " ⚠️ Water condition is critical";
+        snackColor = Colors.red.shade700;
+        snackIcon = Icons.warning_amber_rounded;
+      } else if (score < 80) {
+        snackMsg += " ⚠️ Water condition is below optimal";
+        snackColor = Colors.orange.shade800;
+        snackIcon = Icons.warning_amber_rounded;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Text("Water metrics logged successfully", style: TextStyle(fontWeight: FontWeight.bold)),
+              Icon(snackIcon, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(snackMsg, style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          backgroundColor: Colors.teal.shade700,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          backgroundColor: snackColor,
           margin: const EdgeInsets.all(16),
           elevation: 6,
         ),
       );
-      Navigator.pop(context);
     }
   }
 
@@ -79,6 +156,15 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     final unitStr = unit.isNotEmpty ? " $unit" : "";
     if (val < min || val > max) return '$name should be $min-$max$unitStr';
     return null;
+  }
+
+  bool get _hasAnyInput {
+    return _ammoniaController.text.isNotEmpty ||
+        _phController.text.isNotEmpty ||
+        _doController.text.isNotEmpty ||
+        _salinityController.text.isNotEmpty ||
+        _alkalinityController.text.isNotEmpty ||
+        _nitriteController.text.isNotEmpty;
   }
 
   @override
@@ -98,56 +184,77 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
         padding: const EdgeInsets.all(AppSpacing.base),
         child: Column(
           children: [
-            // KPI Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.teal.shade700, Colors.teal.shade500],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: AppRadius.rBase,
-                boxShadow: [
-                  BoxShadow(color: Colors.teal.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text("CURRENT STATUS", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
-                        child: const Text("OPTIMAL", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ),
+            // Latest Test Results Summary Card
+            if (logs.isNotEmpty) 
+              Builder(builder: (context) {
+                final latest = logs.first;
+                final statusColor = latest.healthColor;
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [statusColor, statusColor.withOpacity(0.7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: AppRadius.rBase,
+                    boxShadow: [
+                      BoxShadow(color: statusColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "POND 1 • DOC $doc",
-                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: logs.take(3).map((log) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Chip(
-                        label: Text("pH ${log.ph}"),
-                        backgroundColor: Colors.white24,
-                        labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        side: BorderSide.none,
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("LATEST TEST STATUS", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                            child: Text(
+                              "${latest.healthScore}/100",
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
                       ),
-                    )).toList(),
+                      const SizedBox(height: 8),
+                      Text(
+                        latest.healthStatus.toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "DOC ${latest.doc} • ${DateFormat('dd MMM, hh:mm a').format(latest.date)}",
+                        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                      if (latest.recommendations.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text("RECOMMENDATIONS:", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10)),
+                        ),
+                        const SizedBox(height: 6),
+                        ...latest.recommendations.map((warning) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_outline, color: Colors.white70, size: 14),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  warning,
+                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ],
+                    ],
                   ),
-                ],
-              ),
-            ),
+                );
+              }),
 
             const SizedBox(height: 24),
 
@@ -157,48 +264,65 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _buildInput(label: "pH Level", controller: _phController, icon: Icons.opacity_rounded, hint: "7.5",
-                        validator: (val) {
-                          return _validateRange(val, 6.0, 9.5, "pH");
-                        },
+                      Expanded(child: _buildInput(
+                        label: "pH Level",
+                        controller: _phController,
+                        icon: Icons.opacity_rounded,
+                        hint: "7.5",
+                        paramKey: 'ph',
                       )),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInput(label: "Dissolved Oxygen", controller: _doController, icon: Icons.water, hint: "5.0", suffix: "ppm",
-                        validator: (val) {
-                          return _validateRange(val, 2.0, 20.0, "DO", "ppm");
-                        },
+                      Expanded(child: _buildInput(
+                        label: "Dissolved Oxygen",
+                        controller: _doController,
+                        icon: Icons.water,
+                        hint: "5.0",
+                        suffix: "ppm",
+                        paramKey: 'do',
                       )),
                     ],
                   ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Expanded(child: _buildInput(label: "Temperature", controller: _tempController, icon: Icons.thermostat_rounded, hint: "28", suffix: "°C",
-                        validator: (val) {
-                          return _validateRange(val, 15.0, 40.0, "Temp", "°C");
-                        },
+                      Expanded(child: _buildInput(
+                        label: "Salinity",
+                        controller: _salinityController,
+                        icon: Icons.blur_on_rounded,
+                        hint: "15",
+                        suffix: "ppt",
+                        paramKey: 'salinity',
                       )),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInput(label: "Salinity", controller: _salinityController, icon: Icons.blur_on_rounded, hint: "15", suffix: "ppt",
-                        validator: (val) {
-                          return _validateRange(val, 0.0, 45.0, "Salinity", "ppt");
-                        },
+                      Expanded(child: _buildInput(
+                        label: "Alkalinity",
+                        controller: _alkalinityController,
+                        icon: Icons.science_outlined,
+                        hint: "120",
+                        suffix: "ppm",
+                        paramKey: 'alkalinity',
                       )),
                     ],
                   ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Expanded(child: _buildInput(label: "Alkalinity", controller: _alkalinityController, icon: Icons.science_outlined, hint: "120", suffix: "ppm",
-                        validator: (val) {
-                          return _validateRange(val, 50.0, 250.0, "Alkalinity", "ppm");
-                        },
+                      Expanded(child: _buildInput(
+                        label: "Ammonia",
+                        controller: _ammoniaController,
+                        icon: Icons.warning_amber_rounded,
+                        hint: "0.1",
+                        suffix: "ppm",
+                        paramKey: 'ammonia',
                       )),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInput(label: "Ammonia", controller: _ammoniaController, icon: Icons.warning_amber_rounded, hint: "0.1", suffix: "ppm",
-                        validator: (val) {
-                          return _validateRange(val, 0.0, 2.0, "Ammonia", "ppm");
-                        },
+                      Expanded(child: _buildInput(
+                        label: "Nitrite",
+                        controller: _nitriteController,
+                        icon: Icons.warning_rounded,
+                        hint: "0.1",
+                        suffix: "ppm",
+                        paramKey: 'nitrite',
                       )),
                     ],
                   ),
@@ -232,11 +356,15 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                       borderRadius: AppRadius.rs,
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: Column(
-                      children: [
-                        _headerRow(),
-                        ...logs.take(5).map((log) => _logRow(log)),
-                      ],
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _fullHeaderRow(),
+                          ...logs.take(10).map((log) => _fullLogRow(log)),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -248,13 +376,37 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     );
   }
 
-  Widget _buildInput({required TextEditingController controller, required String label, required IconData icon, required String hint, String? suffix, String? Function(double?)? validator}) {
+  Widget _buildInput({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required String hint,
+    String? suffix,
+    required String paramKey,
+  }) {
+    final range = _ranges[paramKey]!;
+    final currentValue = double.tryParse(controller.text);
+    final isOptimal = currentValue != null &&
+        currentValue >= range['optimalMin'] &&
+        currentValue <= range['optimalMax'];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+        Row(
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+            if (currentValue != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                isOptimal ? "✅" : "⚠️",
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ],
+        ),
         const SizedBox(height: 8),
-        TextFormField( // Changed from TextField to TextFormField
+        TextFormField(
           controller: controller,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
@@ -263,54 +415,107 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
             prefixIcon: Icon(icon, size: 20, color: Colors.grey),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: const BorderSide(color: AppColors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: const BorderSide(color: AppColors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: AppRadius.rs, borderSide: BorderSide(color: Colors.teal.shade500, width: 2)), // Added focused border for consistency
+            border: OutlineInputBorder(
+              borderRadius: AppRadius.rs,
+              borderSide: BorderSide(
+                color: currentValue != null && !isOptimal ? Colors.orange : AppColors.border,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: AppRadius.rs,
+              borderSide: BorderSide(
+                color: currentValue != null && !isOptimal ? Colors.orange : AppColors.border,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: AppRadius.rs,
+              borderSide: BorderSide(color: Colors.teal.shade500, width: 2),
+            ),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Required';
-            }
+            if (value == null || value.isEmpty) return 'Required';
             final double? numValue = double.tryParse(value);
-            if (numValue == null) {
-              return 'Invalid number';
+            if (numValue == null) return 'Invalid number';
+            if (numValue < range['min'] || numValue > range['max']) {
+              return '${range['name']} should be ${range['min']}-${range['max']}${range['unit']}';
             }
-            return validator?.call(numValue); // Call the custom validator
+            return null;
           },
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          "Optimal: ${range['optimalMin']}-${range['optimalMax']}${range['unit']}",
+          style: TextStyle(fontSize: 9, color: AppColors.textTertiary),
         ),
       ],
     );
   }
 
-  Widget _headerRow() {
+  Widget _fullHeaderRow() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.border)),
         color: Color(0xFFF8FAFC),
       ),
       child: const Row(
         children: [
-          Expanded(flex: 2, child: Text("DATE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          Expanded(flex: 1, child: Text("DOC", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          Expanded(flex: 2, child: Text("pH", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          Expanded(flex: 2, child: Text("DO", textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 60, child: Text("DATE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 40, child: Text("DOC", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 45, child: Text("pH", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 45, child: Text("DO", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 50, child: Text("Sal", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 55, child: Text("Alk", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 55, child: Text("NH3", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 55, child: Text("NO2", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(width: 55, child: Text("Score", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
         ],
       ),
     );
   }
 
-  Widget _logRow(dynamic log) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+  Widget _fullLogRow(WaterLog log) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
       child: Row(
         children: [
-          Expanded(flex: 2, child: Text(DateFormat("dd MMM").format(log.date), style: const TextStyle(fontWeight: FontWeight.w500))),
-          Expanded(flex: 1, child: Text("${log.doc}", style: const TextStyle(fontWeight: FontWeight.w500))),
-          Expanded(flex: 2, child: Text("${log.ph}", style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(flex: 2, child: Text("${log.dissolvedOxygen}", textAlign: TextAlign.right, style: const TextStyle(color: AppColors.textSecondary))),
+          SizedBox(width: 60, child: Text(DateFormat("dd MMM").format(log.date), style: const TextStyle(fontSize: 11))),
+          SizedBox(width: 40, child: Text("${log.doc}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
+          SizedBox(width: 45, child: Text(log.ph.toStringAsFixed(1), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _getParameterColor(log.ph, 'ph')))),
+          SizedBox(width: 45, child: Text(log.dissolvedOxygen.toStringAsFixed(1), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _getParameterColor(log.dissolvedOxygen, 'do')))),
+          SizedBox(width: 50, child: Text(log.salinity.toStringAsFixed(0), style: TextStyle(fontSize: 11, color: _getParameterColor(log.salinity, 'salinity')))),
+          SizedBox(width: 55, child: Text(log.alkalinity.toStringAsFixed(0), style: TextStyle(fontSize: 11, color: _getParameterColor(log.alkalinity, 'alkalinity')))),
+          SizedBox(width: 55, child: Text(log.ammonia.toStringAsFixed(2), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _getParameterColor(log.ammonia, 'ammonia')))),
+          SizedBox(width: 55, child: Text(log.nitrite.toStringAsFixed(2), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _getParameterColor(log.nitrite, 'nitrite')))),
+          SizedBox(
+            width: 55,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: log.healthColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                "${log.healthScore}",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: log.healthColor),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Color _getParameterColor(double value, String param) {
+    final range = _ranges[param]!;
+    if (value < range['optimalMin'] || value > range['optimalMax']) {
+      return Colors.orange.shade700;
+    }
+    return Colors.green.shade700;
   }
 }

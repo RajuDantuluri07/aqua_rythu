@@ -35,7 +35,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   // Selection Lists
   final List<String> _selectedFeedingTimes = [];
-  WaterMixTime _selectedWaterTime = WaterMixTime.afterFeed;
+  TimeOfDay _selectedTimeOfDay = const TimeOfDay(hour: 9, minute: 0);
 
   // Items
   final List<SupplementItem> _items = [];
@@ -65,7 +65,14 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
       if (s.type == SupplementType.waterMix) {
         _selectedFrequency = s.frequencyDays ?? 7;
-        _selectedWaterTime = s.preferredTime ?? WaterMixTime.afterFeed;
+        if (s.feedingTimes.isNotEmpty) {
+          try {
+            final parts = s.feedingTimes.first.split(':');
+            final hour = int.parse(parts[0]);
+            final minute = int.parse(parts[1]);
+            _selectedTimeOfDay = TimeOfDay(hour: hour, minute: minute);
+          } catch (_) {}
+        }
       }
 
       // For edit mode, set unit based on first item if available
@@ -148,10 +155,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       feedQty: _selectedType == SupplementType.feedMix ? 1.0 : 0.0, 
       feedingTimes: _selectedType == SupplementType.feedMix 
           ? List.from(_selectedFeedingTimes) 
-          : [],
+          : ["${_selectedTimeOfDay.hour.toString().padLeft(2, '0')}:${_selectedTimeOfDay.minute.toString().padLeft(2, '0')}"],
 
       frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
-      preferredTime: _selectedType == SupplementType.waterMix ? _selectedWaterTime : null,
+      preferredTime: null,
       pondIds: _applyTo == "All Ponds" 
           ? ['ALL'] 
           : (widget.pondId != null ? [widget.pondId!] : (widget.supplement?.pondIds ?? [])),
@@ -339,53 +346,23 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ],
               AppSpacing.hBase,
 
-              const Text("Apply At Time Slots", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
-              const SizedBox(height: 8),
-              Row(
-                children: ["Morning", "Afternoon", "Evening", "Midnight"].map((time) {
-                  final isSelected = _selectedFeedingTimes.contains(time);
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: FilterChip(
-                        label: Text(time, style: const TextStyle(fontSize: 10)),
-                        selected: isSelected,
-                        onSelected: (val) {
-                          setState(() {
-                            if (val) {
-                              _selectedFeedingTimes.add(time);
-                            } else {
-                              _selectedFeedingTimes.remove(time);
-                            }
-                          });
-                        },
-                      ),
-                    ),
-                  );
-                }).toList(),
+            const Text("Scheduled Application Time", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: _selectedTimeOfDay,
+                );
+                if (picked != null) setState(() => _selectedTimeOfDay = picked);
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.access_time_rounded),
+                ),
+                child: Text(_selectedTimeOfDay.format(context)),
               ),
-              AppSpacing.hBase,
-
-              const Text("Preferred Time", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 10,
-                children: WaterMixTime.values.map((time) {
-                  final isSelected = _selectedWaterTime == time;
-                  return ChoiceChip(
-                    label: Text(_formatTime(time)),
-                    selected: isSelected,
-                    onSelected: (val) {
-                      if (val) setState(() => _selectedWaterTime = time);
-                    },
-                    selectedColor: AppColors.primary.withOpacity(0.2),
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppColors.primary : Colors.black,
-                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.normal,
-                    ),
-                  );
-                }).toList(),
-              ),
+            ),
             ],
 
             AppSpacing.hBase,
@@ -546,11 +523,4 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     );
   }
 
-  String _formatTime(WaterMixTime t) {
-    switch (t) {
-      case WaterMixTime.morning: return "Morning";
-      case WaterMixTime.evening: return "Evening";
-      case WaterMixTime.afterFeed: return "After Last Feed";
-    }
-  }
 }

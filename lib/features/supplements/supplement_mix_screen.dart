@@ -12,18 +12,15 @@ class SupplementMixScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. Get Current Context (DOC)
     final doc = ref.watch(docProvider(pondId));
     final allSupplements = ref.watch(supplementProvider);
     final logs = ref.watch(supplementLogProvider).where((l) => l.pondId == pondId).toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    // 2. Filter by Pond
     final pondSupplements = allSupplements.where((s) => 
       s.pondIds.contains(pondId) || s.pondIds.contains('ALL')
     ).toList();
 
-    // 3. Filter by DOC Logic
     final active = pondSupplements.where((s) => 
       doc >= s.startDoc && doc <= s.endDoc
     ).toList();
@@ -284,8 +281,52 @@ class _SupplementCard extends StatelessWidget {
             "Schedule: ${supplement.feedingTimes.join(', ')}",
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
           ),
+          if (supplement.goal != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _getGoalColor(supplement.goal!).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _getGoalLabel(supplement.goal!),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: _getGoalColor(supplement.goal!),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Color _getGoalColor(SupplementGoal goal) {
+    switch (goal) {
+      case SupplementGoal.growthBoost:
+        return Colors.green;
+      case SupplementGoal.diseasePrevention:
+        return Colors.blue;
+      case SupplementGoal.waterCorrection:
+        return Colors.teal;
+      case SupplementGoal.stressRecovery:
+        return Colors.orange;
+    }
+  }
+
+  String _getGoalLabel(SupplementGoal goal) {
+    switch (goal) {
+      case SupplementGoal.growthBoost:
+        return "Growth Booster";
+      case SupplementGoal.diseasePrevention:
+        return "Disease Prevention";
+      case SupplementGoal.waterCorrection:
+        return "Water Correction";
+      case SupplementGoal.stressRecovery:
+        return "Stress Recovery";
+    }
   }
 }

@@ -95,6 +95,7 @@ class SupplementCalculator {
     // Step 1: Filter valid supplements
     final validSupplements = supplements.where((s) {
       final inDocRange = s.type == SupplementType.feedMix && currentDoc >= s.startDoc && currentDoc <= s.endDoc;
+      if (s.isPaused) return false;
 
       final matchesTime = s.feedingTimes
           .map((e) => e.toLowerCase())
@@ -158,6 +159,7 @@ class SupplementCalculator {
 
     final validSupplements = supplements.where((s) {
       if (s.type != SupplementType.waterMix) return false;
+      if (s.isPaused) return false;
       
       final inDocRange = currentDoc >= s.startDoc && currentDoc <= s.endDoc;
       

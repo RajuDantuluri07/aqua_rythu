@@ -8,6 +8,7 @@ import '../features/farm/add_farm_screen.dart';
 import '../features/pond/add_pond_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/pond/pond_dashboard_screen.dart';
+import '../features/pond/edit_pond_screen.dart';
 
 class AppRoutes {
   static const splash = '/';
@@ -16,6 +17,7 @@ class AppRoutes {
   static const profile = '/profile';
   static const addFarm = '/add-farm';
   static const addPond = '/add-pond';
+  static const editPond = '/edit-pond';
   static const dashboard = '/dashboard';
   static const pondDashboard = '/pond-dashboard';
 
@@ -26,6 +28,7 @@ class AppRoutes {
     profile: (context) => const ProfileScreen(),
     addFarm: (context) => const AddFarmScreen(),
     addPond: (context) => const AddPondScreen(),
+    editPond: (context) => const EditPondScreen(), 
     dashboard: (context) => const DashboardScreen(),
     pondDashboard: (context) => const PondDashboardScreen(),
   };

@@ -10,13 +10,13 @@ class HarvestScreen extends ConsumerWidget {
   const HarvestScreen({super.key, required this.pondId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final harvests = ref.watch(harvestProvider(pondId));
-    final doc = ref.watch(docProvider(pondId));
-
-    final totalYield = notifier.totalHarvest;
-    final totalRevenue = notifier.totalRevenue;
-
+Widget build(BuildContext context, WidgetRef ref) {
+  final harvests = ref.watch(harvestProvider(pondId));
+  final doc = ref.watch(docProvider(pondId));
+  
+  final totalYield = harvests.fold(0.0, (sum, h) => sum + h.quantity);
+  final totalRevenue = harvests.fold(0.0, (sum, h) => sum + h.revenue);
+  
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(

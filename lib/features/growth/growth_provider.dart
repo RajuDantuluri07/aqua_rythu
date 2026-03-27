@@ -7,20 +7,48 @@ class SamplingLog {
   final String pondId;
   final DateTime date;
   final int doc;
-  final int sampleCount;
-  final double totalWeight; // Grams
+  final double weightKg;
+  final int countGroups;
+  final int piecesPerGroup;
+  final int totalPieces;
+  final double averageBodyWeight;
 
   SamplingLog({
     required this.id,
     required this.pondId,
     required this.date,
     required this.doc,
-    required this.sampleCount,
-    required this.totalWeight,
+    required this.weightKg,
+    required this.countGroups,
+    required this.piecesPerGroup,
+    required this.totalPieces,
+    required this.averageBodyWeight,
   });
 
-  // ABW = Total Weight / Sample Count
-  double get averageBodyWeight => sampleCount > 0 ? totalWeight / sampleCount : 0;
+  // For backward compatibility with old data
+  factory SamplingLog.fromOldData({
+    required String id,
+    required String pondId,
+    required DateTime date,
+    required int doc,
+    required int sampleCount,
+    required double totalWeightGrams,
+  }) {
+    final weightKg = totalWeightGrams / 1000;
+    final averageBodyWeight = sampleCount > 0 ? totalWeightGrams / sampleCount : 0.0;
+    
+    return SamplingLog(
+      id: id,
+      pondId: pondId,
+      date: date,
+      doc: doc,
+      weightKg: weightKg,
+      countGroups: sampleCount,
+      piecesPerGroup: 1,
+      totalPieces: sampleCount,
+      averageBodyWeight: averageBodyWeight.toDouble(),
+    );
+  }
 }
 
 class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
@@ -30,19 +58,25 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
   GrowthNotifier(this.ref, this.pondId) : super([]);
 
   /// 📏 ADD SAMPLING LOG
-  /// Also triggers feed plan recalculation (PRD 3.6)
   void addLog({
     required int doc,
-    required int sampleCount,
-    required double totalWeight,
+    required double weightKg,
+    required int countGroups,
+    required int piecesPerGroup,
   }) {
+    final totalPieces = countGroups * piecesPerGroup;
+    final averageBodyWeight = totalPieces > 0 ? (weightKg * 1000) / totalPieces : 0.0;
+
     final newLog = SamplingLog(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       pondId: pondId,
       date: DateTime.now(),
       doc: doc,
-      sampleCount: sampleCount,
-      totalWeight: totalWeight,
+      weightKg: weightKg,
+      countGroups: countGroups,
+      piecesPerGroup: piecesPerGroup,
+      totalPieces: totalPieces,
+      averageBodyWeight: averageBodyWeight,
     );
 
     state = [newLog, ...state];
@@ -53,17 +87,14 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
 
   void _recalculateFeedPlan(SamplingLog log) {
     final farmState = ref.read(farmProvider);
-    int seedCount = 100000; // Fallback
+    int seedCount = 100000;
 
-    // Find the seed count for this pond to ensure biomass calculation is accurate
     for (final farm in farmState.farms) {
       try {
         final pond = farm.ponds.firstWhere((p) => p.id == pondId);
         seedCount = pond.seedCount;
         break;
-      } catch (_) {
-        // Pond not found in this farm, continue
-      }
+      } catch (_) {}
     }
 
     ref.read(feedPlanProvider.notifier).recalculatePlan(

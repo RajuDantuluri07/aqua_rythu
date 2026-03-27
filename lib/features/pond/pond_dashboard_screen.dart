@@ -1,3 +1,4 @@
+import '../supplements/supplement_mix_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../feed/feed_plan_provider.dart';
@@ -8,7 +9,7 @@ import '../../features/tray/tray_provider.dart';
 import '../tray/tray_model.dart';
 import '../farm/farm_provider.dart';
 import '../harvest/harvest_provider.dart';
-import '../supplements/supplement_mix_screen.dart';
+import '../supplements/supplement_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_round_card.dart';
@@ -40,11 +41,38 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
-  /// TASK 3: Add activeSupplementItems Getter
-  List<SupplementItem> get activeSupplementItems {
-    // TEMP: placeholder until logic connected
-    return [];
+  List<SupplementItem> _getActiveSupplements(int doc, String feedingTime, double feedQty) {
+  final allSupplements = ref.read(supplementProvider);
+  final selectedPond = ref.read(pondDashboardProvider).selectedPond;
+
+  final activeSupplements = allSupplements.where((s) {
+    if (s.type != SupplementType.feedMix) return false;
+    if (s.isPaused) return false;
+    if (doc < s.startDoc || doc > s.endDoc) return false;
+    if (!s.feedingTimes.contains(feedingTime)) return false;
+    if (!s.pondIds.contains(selectedPond) && !s.pondIds.contains('ALL')) return false;
+    return true;
+  }).toList();
+
+  // Calculate dosages
+  final List<SupplementItem> calculatedItems = [];
+  for (final supplement in activeSupplements) {
+    final dosages = supplement.calculateDosage(feedQty);
+    calculatedItems.addAll(dosages);
   }
+
+  return calculatedItems;
+}
+
+int _getRoundIndex(String feedingTime) {
+  switch (feedingTime) {
+    case 'R1': return 0;
+    case 'R2': return 1;
+    case 'R3': return 2;
+    case 'R4': return 3;
+    default: return 0;
+  }
+}
 
   List<Map<String, dynamic>> _getFeedRounds() {
     return [
@@ -514,33 +542,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ),
               ),
 
-              AppSpacing.hBase,
-
-              /// 📊 POND STATUS SUMMARY
-              // KPI Row
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.base, horizontal: AppSpacing.base),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: AppRadius.rl,
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
-                  ]
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _kpi("SPECIES", "L. vannamei", Icons.water, Colors.blue), // Changed from set_meal_rounded (dog foot lookalike)
-                    _divider(),
-                    _kpi("DOC", "$currentDoc Days", Icons.calendar_month_rounded, Colors.blue),
-                    _divider(),
-                    _kpi("SURVIVAL", "98%", Icons.health_and_safety_rounded, Colors.green),
-                  ],
-                ),
-              ),
-
-              AppSpacing.hBase,
-
               /// TANK OPERATIONS
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -665,13 +666,24 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       ...waterSupplementResults.map<Widget>((group) {
                         final isApplied = appliedTodayIds.contains(group.supplementId);
                         
+                        // Find the original supplement to get the scheduled time
+                        final supplement = supplements.firstWhere((s) => s.id == group.supplementId);
+                        String scheduledTime = "";
+                        if (supplement.feedingTimes.isNotEmpty) {
+                          try {
+                            final parts = supplement.feedingTimes.first.split(':');
+                            final tod = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+                            scheduledTime = " @ ${tod.format(context)}";
+                          } catch (_) {}
+                        }
+
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ...group.items.map<Widget>((item) => Padding(
                               padding: const EdgeInsets.only(bottom: 4),
                               child: Text(
-                                "• ${item.supplementName}: ${item.totalDose.toStringAsFixed(1)}${item.unit}",
+                                "• ${item.supplementName}: ${item.totalDose.toStringAsFixed(1)}${item.unit}$scheduledTime",
                                 style: TextStyle(
                                   fontSize: 14, 
                                   fontWeight: FontWeight.w600,
@@ -853,7 +865,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         showTrayCTA: roundState.showTrayCTA,
                         isPendingTray: roundState.isDone && roundState.showTrayCTA,
                         onOpenTray: (r) => openTray(r, false),
-                        supplements: activeSupplementItems,
+                        supplements: _getActiveSupplements(currentDoc, data['key'] as String, qty),
                         onMarkDone: () {
                           if (!roundState.isLocked) {
                             ref.read(pondDashboardProvider.notifier).markFeedDone(round);
@@ -903,44 +915,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       ],
                     );
                   }),
-
-
-                  /// 2. MINERALS & PROBIOTICS (New Section)
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.shade100),
-                      boxShadow: [
-                         BoxShadow(color: Colors.blue.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                         Row(
-                           children: [
-                             Icon(Icons.science_rounded, color: Colors.blue.shade700, size: 20),
-                             const SizedBox(width: 8),
-                             Text("Daily Care: Minerals & Probiotics", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
-                           ],
-                         ),
-                         const SizedBox(height: 8),
-                         const Text("Apply daily minerals and soil probiotics as per supplement plan.", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                         const SizedBox(height: 12),
-                         SizedBox(
-                           width: double.infinity,
-                           child: OutlinedButton(
-                             onPressed: () {}, // TODO: Link to Supplement Mark Done
-                             style: OutlinedButton.styleFrom(foregroundColor: Colors.blue.shade700),
-                             child: const Text("MARK AS APPLIED"),
-                           ),
-                         )
-                      ],
-                    ),
-                  ),
                 ],
               ),
               ],

@@ -48,8 +48,13 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
       // Estimate biomass: SeedCount * Survival * ABW / 1000
       // Assuming simple survival decay for dashboard view
       double survival = 1.0; 
-      if (pond.doc > 30) survival = 0.95;
-      if (pond.doc > 60) survival = 0.90;
+      if (pond.doc > 60) {
+        survival = 0.90;
+      } else if (pond.doc > 30) {
+        survival = 0.95;
+      } else {
+        survival = 1.0;
+      }
       
       totalBiomass += (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
 

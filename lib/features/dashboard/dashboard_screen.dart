@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../routes/app_routes.dart';
+import '../feed/feed_history_provider.dart';
+import '../growth/growth_provider.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -92,7 +94,7 @@ class DashboardScreen extends ConsumerWidget {
                           padding: const EdgeInsets.only(left: 20, right: 20, bottom: 40),
                           sliver: SliverList(
                             delegate: SliverChildBuilderDelegate(
-                              (context, index) => _buildPondCard(context, currentFarm.ponds[index]),
+                              (context, index) => PondCard(pond: currentFarm.ponds[index]),
                               childCount: currentFarm.ponds.length,
                             ),
                           ),
@@ -465,7 +467,37 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPondCard(BuildContext context, Pond pond) {
+}
+
+class PondCard extends ConsumerWidget {
+  final Pond pond;
+  const PondCard({super.key, required this.pond});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final growthLogs = ref.watch(growthProvider(pond.id));
+    final historyMap = ref.watch(feedHistoryProvider);
+    final feedLogs = historyMap[pond.id] ?? [];
+
+    // Metrics Calculation
+    double abw = 0;
+    double consumedFeed = feedLogs.fold(0.0, (sum, log) => sum + log.total);
+    double survival = 1.0;
+    if (pond.doc > 60) {
+      survival = 0.90;
+    } else if (pond.doc > 30) {
+      survival = 0.95;
+    } else {
+      survival = 1.0;
+    }
+
+    if (growthLogs.isNotEmpty) {
+      abw = growthLogs.first.averageBodyWeight;
+    }
+
+    final double biomass = (pond.seedCount * survival * abw) / 1000;
+    final double fcr = biomass > 0 ? consumedFeed / biomass : 0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -488,68 +520,99 @@ class DashboardScreen extends ConsumerWidget {
           },
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Row(
+            child: Column(
               children: [
-                // Icon
-                Container(
-                  height: 60,
-                  width: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(Icons.water_rounded, color: Colors.blue.shade300, size: 32),
-                      Positioned(
-                        bottom: 4,
-                        child: Icon(Icons.pets_rounded, color: Colors.blue.shade600, size: 16),
-                      )
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Row(
+                  children: [
+                    // Icon
+                    Container(
+                      height: 50,
+                      width: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Text(
-                            pond.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              "Active",
-                              style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
+                          Icon(Icons.water_rounded, color: Colors.blue.shade300, size: 28),
+                          Positioned(
+                            bottom: 2,
+                            child: Icon(Icons.pets_rounded, color: Colors.blue.shade600, size: 14),
                           )
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      
-                      Row(
+                    ),
+                    const SizedBox(width: 16),
+                    
+                    // Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildPondTag(Icons.calendar_month_rounded, "DOC ${pond.doc}"),
-                          const SizedBox(width: 12),
-                          _buildPondTag(Icons.straighten_rounded, "${pond.area} ac"),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                pond.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                              ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      "Active",
+                                      style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    onPressed: () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        AppRoutes.editPond,
+                                        arguments: pond.id,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.edit_outlined, size: 18, color: Colors.grey),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          
+                          Row(
+                            children: [
+                              _PondTag(Icons.calendar_month_rounded, "DOC ${pond.doc}"),
+                              const SizedBox(width: 12),
+                              _PondTag(Icons.straighten_rounded, "${pond.area} ac"),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _MetricItem("ABW", "${abw.toStringAsFixed(1)}g"),
+                    _MetricItem("FEED", "${consumedFeed.toStringAsFixed(0)}kg"),
+                    _MetricItem("FCR", fcr.toStringAsFixed(2)),
+                    _MetricItem("SURVIVAL", "${(survival * 100).toInt()}%"),
+                  ],
+                )
               ],
             ),
           ),
@@ -557,8 +620,32 @@ class DashboardScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  Widget _buildPondTag(IconData icon, String label) {
+class _MetricItem extends StatelessWidget {
+  final String label;
+  final String value;
+  const _MetricItem(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.black87)),
+      ],
+    );
+  }
+}
+
+class _PondTag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _PondTag(this.icon, this.label);
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

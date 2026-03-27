@@ -10,106 +10,105 @@ class FeedScheduleScreen extends ConsumerWidget {
   const FeedScheduleScreen({super.key, required this.pondId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final planMap = ref.watch(feedPlanProvider);
-    final plan = planMap[pondId];
-    final days = plan?.days ?? [];
+Widget build(BuildContext context, WidgetRef ref) {
+  final planMap = ref.watch(feedPlanProvider);
+  final plan = planMap[pondId];
+  final days = plan?.days ?? [];
 
-    final farmState = ref.watch(farmProvider);
-    String pondName = pondId;
-    for (var farm in farmState.farms) {
-      try {
-        final pond = farm.ponds.firstWhere((p) => p.id == pondId);
-        pondName = pond.name;
-        break;
-      } catch (e, stack) {
-        AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
-      }
+  final farmState = ref.watch(farmProvider);
+  String pondName = pondId;
+  for (var farm in farmState.farms) {
+    try {
+      final pond = farm.ponds.firstWhere((p) => p.id == pondId);
+      pondName = pond.name;
+      break;
+    } catch (e, stack) {
+      AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
     }
+  }
 
-    // Assuming DOC 1-25 or similar based on days list
-    final docRange = days.isEmpty ? "" : "DOC ${days.first.doc}-${days.last.doc}";
+  final docRange = days.isEmpty ? "" : "DOC ${days.first.doc}-${days.last.doc}";
 
-    return Scaffold(
+  return Scaffold(
+    backgroundColor: AppColors.cardBg,
+    appBar: AppBar(
       backgroundColor: AppColors.cardBg,
-      appBar: AppBar(
-        backgroundColor: AppColors.cardBg,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF475569)),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Feed Schedule",
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Color(0xFF475569)),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Feed Schedule",
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
-            Text(
-              "$pondName • $docRange",
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
+          ),
+          Text(
+            "$pondName • $docRange",
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.orange),
-            onPressed: () {},
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 1),
-        ),
       ),
-      body: days.isEmpty
-          ? const Center(child: Text("No plan generated yet."))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.base),
-              child: Column(
-                children: [
-                  // Main Table Card
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBg,
-                      borderRadius: AppRadius.rBase,
-                      border: Border.all(color: Colors.grey.shade200),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // Table Header
-                        _buildTableHeader(),
-                        // Data Rows (Show all days for full reference)
-                        ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
-                      ],
-                    ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.info_outline, color: Colors.orange),
+          onPressed: () {},
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(color: Colors.grey.shade200, height: 1),
+      ),
+    ),
+    body: days.isEmpty
+        ? const Center(child: Text("No plan generated yet."))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.base),
+            child: Column(
+              children: [
+                // Main Table Card
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBg,
+                    borderRadius: AppRadius.rBase,
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  AppSpacing.hXl,
+                  child: Column(
+                    children: [
+                      // Table Header
+                      _buildTableHeader(),
+                      // Data Rows (Show all days for full reference)
+                      ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
+                    ],
+                  ),
+                ),
+                AppSpacing.hXl,
 
-                  // Total Summary Card
-                  _buildTotalSummaryCard(plan?.totalProjected ?? 0),
-                  const SizedBox(height: AppSpacing.hXxl * 3), // Fixed: wrapped in SizedBox
-                ],
-              ),
+                // Total Summary Card
+                _buildTotalSummaryCard(plan?.totalProjected ?? 0),
+                const SizedBox(height: 100),
+              ],
             ),
-      bottomSheet: _buildSaveButton(context, ref),
-    );
-  }
+          ),
+    bottomSheet: _buildSaveButton(context, ref),
+  );
+}
 
   Widget _buildTableHeader() {
     return Container(

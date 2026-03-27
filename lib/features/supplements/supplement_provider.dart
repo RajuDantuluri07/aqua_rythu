@@ -58,6 +58,7 @@ class Supplement {
   
   final List<SupplementItem> items;
   final String notes;
+  final bool isPaused;
 
   Supplement({
     required this.id,
@@ -74,13 +75,70 @@ class Supplement {
     this.date,
     required this.items,
     this.notes = '',
+    this.isPaused = false,
   });
+
+  Supplement copyWith({
+    String? id,
+    String? name,
+    int? startDoc,
+    int? endDoc,
+    SupplementType? type,
+    SupplementGoal? goal,
+    List<String>? pondIds,
+    double? feedQty,
+    List<String>? feedingTimes,
+    int? frequencyDays,
+    WaterMixTime? preferredTime,
+    DateTime? date,
+    List<SupplementItem>? items,
+    String? notes,
+    bool? isPaused,
+  }) {
+    return Supplement(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      startDoc: startDoc ?? this.startDoc,
+      endDoc: endDoc ?? this.endDoc,
+      type: type ?? this.type,
+      goal: goal ?? this.goal,
+      pondIds: pondIds ?? this.pondIds,
+      feedQty: feedQty ?? this.feedQty,
+      feedingTimes: feedingTimes ?? this.feedingTimes,
+      frequencyDays: frequencyDays ?? this.frequencyDays,
+      preferredTime: preferredTime ?? this.preferredTime,
+      date: date ?? this.date,
+      items: items ?? this.items,
+      notes: notes ?? this.notes,
+      isPaused: isPaused ?? this.isPaused,
+    );
+  }
 
   // Helper to check status
   SupplementStatus getStatus(int currentDoc) {
     if (currentDoc < startDoc) return SupplementStatus.upcoming;
     if (currentDoc > endDoc) return SupplementStatus.completed;
     return SupplementStatus.active;
+  }
+
+  List<SupplementItem> calculateDosage(double feedKg) {
+    if (type != SupplementType.feedMix) return [];
+    if (feedQty <= 0) {
+      return items.map((item) => item).toList();
+    }
+
+    return items.map((item) {
+      final rate = item.quantity / feedQty;
+      return SupplementItem(
+        id: item.id,
+        name: item.name,
+        quantity: rate * feedKg,
+        unit: item.unit,
+        type: item.type,
+        isMandatory: item.isMandatory,
+        dosePerKg: item.dosePerKg,
+      );
+    }).toList();
   }
 
   Map<String, dynamic> toJson() => {
@@ -98,6 +156,7 @@ class Supplement {
         'date': date?.toIso8601String(),
         'items': items.map((e) => e.toJson()).toList(),
         'notes': notes,
+        'isPaused': isPaused,
       };
 
   factory Supplement.fromJson(Map<String, dynamic> json) {
@@ -124,6 +183,7 @@ class Supplement {
           .map((e) => SupplementItem.fromJson(e))
           .toList(),
       notes: json['notes'] ?? '',
+      isPaused: json['isPaused'] ?? false,
     );
   }
 }
@@ -198,6 +258,13 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
     ];
     newState.sort((a, b) => a.startDoc.compareTo(b.startDoc));
     state = newState;
+  }
+
+  void togglePause(String id) {
+    state = [
+      for (final s in state)
+        if (s.id == id) s.copyWith(isPaused: !s.isPaused) else s
+    ];
   }
 
   // 🔹 DELETE

@@ -5,7 +5,6 @@ import '../../core/theme/app_theme.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 
 /// 🔁 Round → Feeding Time
-/// 🔁 Round → Feeding Time
 String mapRoundToTimeKey(int round) {
   switch (round) {
     case 1:
@@ -19,14 +18,13 @@ String mapRoundToTimeKey(int round) {
     default:
       return "R1";
   }
-
 }
 
 class FeedRoundCard extends ConsumerStatefulWidget {
   final int round;
   final String time;
   final double feedQty;
-  final double? originalQty; // Added for strikethrough display
+  final double? originalQty;
   final bool isDone;
   final bool isCurrent;
   final bool isLocked;
@@ -68,7 +66,6 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
     final trayStatus = dashboardState.trayResults[widget.round];
     final tray = trayStatus?.name;
 
-    // Determine adjustment direction
     final bool isIncreased = widget.isAutoAdjusted && widget.originalQty != null && widget.feedQty > widget.originalQty!;
     final bool isDecreased = widget.isAutoAdjusted && widget.originalQty != null && widget.feedQty < widget.originalQty!;
 
@@ -81,7 +78,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
         border: widget.isLocked
             ? Border.all(color: AppColors.border)
             : (widget.isPendingTray 
-                ? Border.all(color: AppColors.warning, width: 2) // ⚠️ Pending Tray Border
+                ? Border.all(color: AppColors.warning, width: 2)
                 : widget.isCurrent
                 ? Border.all(color: AppColors.success, width: 2)
                 : Border.all(color: AppColors.border)),
@@ -97,7 +94,6 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Badge Row
                     Row(
                       children: [
                         if (widget.isCurrent) ...[
@@ -105,7 +101,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.error,
-                              borderRadius: BorderRadius.circular(4), // Fixed: Explicit value
+                              borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text("NOW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
@@ -115,8 +111,8 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isIncreased ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB), // Green for up, Amber for down
-                              borderRadius: BorderRadius.circular(4), // Fixed: Explicit value
+                              color: isIncreased ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                              borderRadius: BorderRadius.circular(4),
                               border: Border.all(color: isIncreased ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A)),
                             ),
                             child: Text("AUTO ADJUSTED", style: TextStyle(color: isIncreased ? const Color(0xFF059669) : const Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
@@ -141,7 +137,7 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.warning,
-                          borderRadius: BorderRadius.circular(6), // Fixed: Explicit value
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
                           "RECOMMENDED ACTION",
@@ -153,7 +149,6 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
                 ),
               ),
               
-              /// ⚖️ WEIGHT DISPLAY (TOP RIGHT)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -192,28 +187,25 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
           ),
           
           if (!widget.isCurrent && widget.isLocked)
-             const Padding(
-               padding: EdgeInsets.only(top: 8),
-               child: Icon(Icons.lock, size: 16, color: Colors.grey),
-             ),
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Icon(Icons.lock, size: 16, color: Colors.grey),
+            ),
 
           if (widget.isPendingTray)
-             const Padding(
-               padding: EdgeInsets.only(top: AppSpacing.m),
-               child: Row(
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.m),
+              child: Row(
                 children: [
                   Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
                   AppSpacing.wS,
                   Text("TRAY CHECK PENDING", style: TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.bold)),
                 ],
               ),
-             ),
-
-
+            ),
 
           const SizedBox(height: 8),
 
-          /// ⚠️ ADJUSTMENT INFO (Reduced)
           if (isDecreased) ...[
             Container(
               width: double.infinity,
@@ -248,7 +240,6 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
             ),
           ],
 
-          /// 📈 ADJUSTMENT INFO (Increased)
           if (isIncreased) ...[
             Container(
               width: double.infinity,
@@ -283,30 +274,81 @@ class _FeedRoundCardState extends ConsumerState<FeedRoundCard> {
             ),
           ],
 
-
-          /// TRAY
           if (tray != null)
             Text(
               "Tray: $tray",
               style: const TextStyle(color: Colors.grey),
             ),
 
-          /// 🧠 SUPPLEMENTS (COMPACT)
-if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
-  AppSpacing.hS,
-  const SizedBox(height: 8),
-  Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-              children: widget.supplements.map<Widget>((s) => Text(
-                "${s.name} - ${s.quantity}${s.unit}",
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              )).toList(),
-  ),
-],
+          /// 🧠 SUPPLEMENTS DISPLAY
+          if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.indigo.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.medication, size: 14, color: Colors.indigo.shade700),
+                      const SizedBox(width: 6),
+                      Text(
+                        "SUPPLEMENTS TO USE",
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  GridView.count(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    childAspectRatio: 4.5,
+                    mainAxisSpacing: 4,
+                    crossAxisSpacing: 8,
+                    children: widget.supplements.map((s) {
+                      final IconData unitIcon = s.unit.toLowerCase().contains('ml')
+                          ? Icons.science_rounded
+                          : Icons.grain_rounded;
+
+                      return Row(
+                        children: [
+                          Icon(unitIcon, size: 12, color: Colors.indigo.shade300),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              "${s.name} ${s.quantity.toStringAsFixed(1)}${s.unit}",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade800,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           AppSpacing.hS,
 
-          /// BUTTONS
           if (widget.isCurrent && !widget.isDone && !widget.isLocked)
             SizedBox(
               width: double.infinity,
@@ -314,9 +356,7 @@ if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
                 onPressed: _isSubmitting ? null : () async {
                   if (widget.onMarkDone != null) {
                     setState(() => _isSubmitting = true);
-                    widget.onMarkDone!(); 
-                    // Note: Widget typically rebuilds as DONE immediately after state update, 
-                    // so resetting _isSubmitting to false isn't strictly visible but good practice.
+                    widget.onMarkDone!();
                     if (mounted) setState(() => _isSubmitting = false);
                   }
                 },
@@ -336,10 +376,8 @@ if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
                     ),
               ),
             )
-
-
           else if (widget.isDone && !widget.isPendingTray)
-            const Row( // Only show simple "Feeding Completed" if tray is also done (or not needed)
+            const Row(
               children: [
                 Icon(Icons.check_circle, color: AppColors.success, size: 20),
                 AppSpacing.wS,
@@ -348,8 +386,8 @@ if (!widget.isLocked && widget.supplements.isNotEmpty) ...[
             ),
 
           if (widget.showTrayCTA) ...[
-             AppSpacing.hS,
-             SizedBox(
+            AppSpacing.hS,
+            SizedBox(
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => widget.onOpenTray(widget.round),

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 
 enum PondStatus { active, completed }
 
@@ -22,7 +23,7 @@ class Pond {
     this.numTrays = 4,
     this.status = PondStatus.active,
   });
-
+  
   Pond copyWith({
     String? id,
     String? name,
@@ -45,11 +46,16 @@ class Pond {
     );
   }
 
+  /// Calculates Day of Culture (DOC) as whole days since stocking.
   int get doc {
-    final now = DateTime.now();
+    return DateTime.now().difference(stockingDate).inDays;
+  }
+
+  int calculateDoc(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);
     final start = DateTime(stockingDate.year, stockingDate.month, stockingDate.day);
-    return today.difference(start).inDays + 1;
+    final diff = today.difference(start).inDays + 1;
+    return diff > 0 ? diff : 1; // Default to Day 1 if date is in future
   }
 }
 
@@ -189,6 +195,39 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
+  void updatePond({
+    required String pondId,
+    required String name,
+    required double area,
+    required int seedCount,
+    required int plSize,
+    required DateTime stockingDate,
+    required int numTrays,
+  }) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        return Farm(
+          id: f.id,
+          name: f.name,
+          location: f.location,
+          ponds: f.ponds.map((p) {
+            if (p.id == pondId) {
+              return p.copyWith(
+                name: name,
+                area: area,
+                seedCount: seedCount,
+                plSize: plSize,
+                stockingDate: stockingDate,
+                numTrays: numTrays,
+              );
+            }
+            return p;
+          }).toList(),
+        );
+      }).toList(),
+    );
+  }
+
   void updatePondStatus(String pondId, PondStatus status) {
     state = state.copyWith(
       farms: state.farms.map((f) {
@@ -242,18 +281,32 @@ final farmProvider =
   return FarmNotifier();
 });
 
+/// A provider that returns the current date and refreshes every hour
+/// to ensure DOC increments automatically at midnight.
+final currentDateProvider = Provider<DateTime>((ref) {
+  // Rebuild this provider every hour
+  final timer = Timer(const Duration(hours: 1), () => ref.invalidateSelf());
+  ref.onDispose(() => timer.cancel());
+  return DateTime.now();
+});
+
 final docProvider = Provider.family<int, String>((ref, pondId) {
   final farmState = ref.watch(farmProvider);
+  final now = ref.watch(currentDateProvider);
 
   // Optimization: Check current farm first
   final currentPonds = farmState.currentFarm?.ponds ?? [];
   final currentIdx = currentPonds.indexWhere((p) => p.id == pondId);
-  if (currentIdx != -1) return currentPonds[currentIdx].doc;
+  if (currentIdx != -1) {
+    return currentPonds[currentIdx].calculateDoc(now);
+  }
 
   // Fallback: Check all other farms
   for (var farm in farmState.farms) {
     final pondIndex = farm.ponds.indexWhere((p) => p.id == pondId);
-    if (pondIndex != -1) return farm.ponds[pondIndex].doc;
+    if (pondIndex != -1) {
+      return farm.ponds[pondIndex].calculateDoc(now);
+    }
   }
 
   return 1;
