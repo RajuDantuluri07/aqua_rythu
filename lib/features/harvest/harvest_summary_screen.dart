@@ -12,7 +12,9 @@ class HarvestSummaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final harvests = ref.watch(harvestProvider(pondId));
-    final pond = ref.watch(farmProvider).farms
+    final pond = ref
+        .watch(farmProvider)
+        .farms
         .expand((f) => f.ponds)
         .firstWhere((p) => p.id == pondId);
 
@@ -20,7 +22,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
     final totalRevenue = harvests.fold(0.0, (sum, h) => sum + h.revenue);
     final totalExpenses = harvests.fold(0.0, (sum, h) => sum + h.expenses);
     final totalProfit = totalRevenue - totalExpenses;
-    
+
     // Calculate FCR
     final historyMap = ref.watch(feedHistoryProvider);
     final feedLogs = historyMap[pondId] ?? [];
@@ -28,8 +30,10 @@ class HarvestSummaryScreen extends ConsumerWidget {
     final fcr = totalYield > 0 ? totalFeed / totalYield : 0.0;
 
     // Calculate survival % (est)
-    final survivingCount = harvests.fold(0.0, (sum, h) => sum + (h.quantity * h.countPerKg));
-    final survivalRate = (survivingCount / pond.seedCount * 100).clamp(0.0, 100.0);
+    final survivingCount =
+        harvests.fold(0.0, (sum, h) => sum + (h.quantity * h.countPerKg));
+    final survivalRate =
+        (survivingCount / pond.seedCount * 100).clamp(0.0, 100.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
@@ -40,7 +44,8 @@ class HarvestSummaryScreen extends ConsumerWidget {
             pinned: true,
             backgroundColor: Colors.purple.shade700,
             flexibleSpace: FlexibleSpaceBar(
-              title: const Text("Harvest Summary", style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text("Harvest Summary",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -50,7 +55,8 @@ class HarvestSummaryScreen extends ConsumerWidget {
                   ),
                 ),
                 child: Center(
-                  child: Icon(Icons.workspace_premium_rounded, size: 80, color: Colors.white.withOpacity(0.2)),
+                  child: Icon(Icons.workspace_premium_rounded,
+                      size: 80, color: Colors.white.withOpacity(0.2)),
                 ),
               ),
             ),
@@ -61,13 +67,15 @@ class HarvestSummaryScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   _buildMainStats(totalYield, totalRevenue, totalProfit),
-                   const SizedBox(height: 24),
-                   const Text("Performance Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                   const SizedBox(height: 12),
-                   _buildDetailsGrid(pond, survivalRate, totalExpenses, fcr),
-                   const SizedBox(height: 32),
-                   _buildActionButtons(context),
+                  _buildMainStats(totalYield, totalRevenue, totalProfit),
+                  const SizedBox(height: 24),
+                  const Text("Performance Details",
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  _buildDetailsGrid(pond, survivalRate, totalExpenses, fcr),
+                  const SizedBox(height: 32),
+                  _buildActionButtons(context),
                 ],
               ),
             ),
@@ -83,15 +91,26 @@ class HarvestSummaryScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 10))
+        ],
       ),
       child: Column(
         children: [
-          _statRow("Total Yield", "${yield.toStringAsFixed(0)} kg", Icons.scale_rounded, Colors.blue),
+          _statRow("Total Yield", "${yield.toStringAsFixed(0)} kg",
+              Icons.scale_rounded, Colors.blue),
           const Divider(height: 32),
-          _statRow("Total Revenue", "₹${NumberFormat('#,##,###').format(revenue)}", Icons.currency_rupee_rounded, Colors.green),
+          _statRow(
+              "Total Revenue",
+              "₹${NumberFormat('#,##,###').format(revenue)}",
+              Icons.currency_rupee_rounded,
+              Colors.green),
           const Divider(height: 32),
-          _statRow("Net Profit", "₹${NumberFormat('#,##,###').format(profit)}", Icons.account_balance_wallet_rounded, Colors.purple),
+          _statRow("Net Profit", "₹${NumberFormat('#,##,###').format(profit)}",
+              Icons.account_balance_wallet_rounded, Colors.purple),
         ],
       ),
     );
@@ -102,22 +121,30 @@ class HarvestSummaryScreen extends ConsumerWidget {
       children: [
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1), shape: BoxShape.circle),
           child: Icon(icon, color: color, size: 24),
         ),
         const SizedBox(width: 16),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
-            Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+            Text(value,
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildDetailsGrid(Pond pond, double survival, double expenses, double fcr) {
+  Widget _buildDetailsGrid(
+      Pond pond, double survival, double expenses, double fcr) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -126,10 +153,14 @@ class HarvestSummaryScreen extends ConsumerWidget {
       crossAxisSpacing: 16,
       childAspectRatio: 1.5,
       children: [
-        _detailCard("FCR", fcr.toStringAsFixed(2), Icons.trending_up_rounded, Colors.blue),
-        _detailCard("Duration", "${pond.doc} Days", Icons.calendar_today_rounded, Colors.orange),
-        _detailCard("Survival", "${survival.toStringAsFixed(1)}%", Icons.health_and_safety_rounded, Colors.green),
-        _detailCard("Expenses", "₹${NumberFormat('#,###').format(expenses)}", Icons.money_off_rounded, Colors.red),
+        _detailCard("FCR", fcr.toStringAsFixed(2), Icons.trending_up_rounded,
+            Colors.blue),
+        _detailCard("Duration", "${pond.doc} Days",
+            Icons.calendar_today_rounded, Colors.orange),
+        _detailCard("Survival", "${survival.toStringAsFixed(1)}%",
+            Icons.health_and_safety_rounded, Colors.green),
+        _detailCard("Expenses", "₹${NumberFormat('#,###').format(expenses)}",
+            Icons.money_off_rounded, Colors.red),
       ],
     );
   }
@@ -149,7 +180,9 @@ class HarvestSummaryScreen extends ConsumerWidget {
           Icon(icon, color: color, size: 20),
           const SizedBox(height: 8),
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(value,
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ],
       ),
     );
@@ -163,14 +196,16 @@ class HarvestSummaryScreen extends ConsumerWidget {
           height: 56,
           child: ElevatedButton(
             onPressed: () {
-               Navigator.pop(context);
+              Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.purple.shade700,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
             ),
-            child: const Text("BACK TO DASHBOARD", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text("BACK TO DASHBOARD",
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ),
         const SizedBox(height: 12),
@@ -184,9 +219,11 @@ class HarvestSummaryScreen extends ConsumerWidget {
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.purple.shade700,
               side: BorderSide(color: Colors.purple.shade700, width: 2),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
             ),
-            child: const Text("VIEW FULL REPORT", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text("VIEW FULL REPORT",
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ),
       ],

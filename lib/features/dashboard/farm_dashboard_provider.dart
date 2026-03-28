@@ -3,7 +3,7 @@ import '../supplements/supplement_provider.dart';
 import '../supplements/water_task_engine.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_plan_provider.dart';
-import '../growth/growth_provider.dart';
+import '../pond/growth_provider.dart';
 import '../../core/utils/logger.dart';
 
 /// State for the Farm Dashboard Metrics
@@ -47,7 +47,7 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
       final lastLog = growthLogs.first; // Newest first
       // Estimate biomass: SeedCount * Survival * ABW / 1000
       // Assuming simple survival decay for dashboard view
-      double survival = 1.0; 
+      double survival = 1.0;
       if (pond.doc > 60) {
         survival = 0.90;
       } else if (pond.doc > 30) {
@@ -55,8 +55,9 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
       } else {
         survival = 1.0;
       }
-      
-      totalBiomass += (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
+
+      totalBiomass +=
+          (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
 
       // Growth
       if (pond.doc > 0) {
@@ -75,11 +76,9 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
     }
   }
 
-  final double avgGrowth =
-      pondCount > 0 ? totalGrowthRate / pondCount : 0;
+  final double avgGrowth = pondCount > 0 ? totalGrowthRate / pondCount : 0;
 
-  final double fcr =
-      totalBiomass > 0 ? totalFeed / totalBiomass : 0;
+  final double fcr = totalBiomass > 0 ? totalFeed / totalBiomass : 0;
 
   AppLogger.debug("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass");
 
@@ -94,7 +93,7 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
 /// 💧 Water Task Provider for Daily Tasks UI
 final waterTasksProvider = Provider<List<WaterTask>>((ref) {
   final plans = ref.watch(supplementProvider);
-  
+
   return WaterTaskEngine.generateWaterTasks(
     today: DateTime.now(),
     plans: plans,

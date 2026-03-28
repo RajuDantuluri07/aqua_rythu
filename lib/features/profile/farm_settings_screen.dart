@@ -8,7 +8,6 @@ class FarmSettingsScreen extends StatefulWidget {
 }
 
 class _FarmSettingsScreenState extends State<FarmSettingsScreen> {
-
   String farmType = "Semi-Intensive";
   String feedsPerDay = "4 Feeds";
 
@@ -37,22 +36,21 @@ class _FarmSettingsScreenState extends State<FarmSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-
           /// GENERAL
-          const Text("GENERAL",
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text("GENERAL", style: TextStyle(fontWeight: FontWeight.bold)),
 
           const SizedBox(height: 10),
 
-          _dropdown("Farm Type", farmType,
-              ["Semi-Intensive", "Intensive"], (v) {
+          _dropdown("Farm Type", farmType, ["Semi-Intensive", "Intensive"],
+              (v) {
             setState(() => farmType = v!);
           }),
 
           const SizedBox(height: 10),
 
-          _dropdown("Feeds per Day", feedsPerDay,
-              ["2 Feeds", "3 Feeds", "4 Feeds"], (v) {
+          _dropdown(
+              "Feeds per Day", feedsPerDay, ["2 Feeds", "3 Feeds", "4 Feeds"],
+              (v) {
             setState(() => feedsPerDay = v!);
           }),
 

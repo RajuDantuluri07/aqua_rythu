@@ -10,7 +10,7 @@ class HarvestEntry {
   final double pricePerKg;
   final double expenses;
   final String notes;
-  final String type;     // partial / intermediate / final
+  final String type; // partial / intermediate / final
 
   HarvestEntry({
     required this.pondId,
@@ -43,27 +43,24 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
   }
 
   /// 📊 TOTAL HARVEST
-  double get totalHarvest =>
-      state.fold(0, (sum, h) => sum + h.quantity);
+  double get totalHarvest => state.fold(0, (sum, h) => sum + h.quantity);
 
   /// 💰 TOTAL REVENUE
-  double get totalRevenue =>
-      state.fold(0, (sum, h) => sum + h.revenue);
+  double get totalRevenue => state.fold(0, (sum, h) => sum + h.revenue);
 
   /// 💸 TOTAL EXPENSES
-  double get totalExpenses =>
-      state.fold(0, (sum, h) => sum + h.expenses);
+  double get totalExpenses => state.fold(0, (sum, h) => sum + h.expenses);
 
   /// 💰 TOTAL PROFIT
   double get totalProfit => totalRevenue - totalExpenses;
 
   /// 🏁 FINAL HARVEST DONE?
-  bool get isFinalHarvestDone =>
-      state.any((h) => h.type == "final");
+  bool get isFinalHarvestDone => state.any((h) => h.type == "final");
 }
 
 /// ================= PROVIDER =================
 final harvestProvider =
     StateNotifierProvider.family<HarvestNotifier, List<HarvestEntry>, String>(
-  (ref, pondId) => HarvestNotifier(), // Notifier doesn't strictly need ID if entry has it
+  (ref, pondId) =>
+      HarvestNotifier(), // Notifier doesn't strictly need ID if entry has it
 );

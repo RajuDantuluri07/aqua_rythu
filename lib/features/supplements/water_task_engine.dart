@@ -27,8 +27,9 @@ class WaterTaskEngine {
     return plans.where((p) {
       if (p.type != SupplementType.waterMix || p.date == null) return false;
 
-      final normalizedStartDate = DateTime(p.date!.year, p.date!.month, p.date!.day);
-      
+      final normalizedStartDate =
+          DateTime(p.date!.year, p.date!.month, p.date!.day);
+
       if (normalizedToday.isBefore(normalizedStartDate)) return false;
 
       // Repeat logic

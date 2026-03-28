@@ -158,7 +158,8 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         TextButton(
                           child: Text('Logout',
-                              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
                           onPressed: () {
                             ref.read(authProvider.notifier).logout();
                             // Close the dialog first

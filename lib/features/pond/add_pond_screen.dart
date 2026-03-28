@@ -16,7 +16,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   final _areaController = TextEditingController();
   final _seedCountController = TextEditingController();
   final _plSizeController = TextEditingController();
-  
+
   DateTime _stockingDate = DateTime.now();
 
   @override
@@ -65,7 +65,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           SnackBar(
             content: const Text("No Farm Selected"),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             backgroundColor: Colors.red.shade600,
           ),
         );
@@ -85,16 +86,17 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
             plSize: plSize,
             stockingDate: _stockingDate,
           );
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("Pond Added Successfully"),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           backgroundColor: Colors.green.shade600,
         ),
       );
-      
+
       Navigator.pop(context);
     }
   }
@@ -124,7 +126,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+          borderSide:
+              BorderSide(color: Theme.of(context).primaryColor, width: 2),
         ),
       ),
       validator: required ? (v) => v!.isEmpty ? "Required" : null : null,
@@ -136,7 +139,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("Add New Pond", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Add New Pond",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -162,7 +166,6 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                 style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 24),
-
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -190,7 +193,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                       label: "Area (Acres)",
                       hint: "e.g. 2.5",
                       icon: Icons.landscape_rounded,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 20),
                     _buildTextField(
@@ -206,29 +210,37 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                       onTap: () => _selectDate(context),
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 16),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.calendar_month_rounded, color: Theme.of(context).primaryColor),
+                            Icon(Icons.calendar_month_rounded,
+                                color: Theme.of(context).primaryColor),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("Stocking Date", style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                  Text("Stocking Date",
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600)),
                                   const SizedBox(height: 4),
                                   Text(
-                                    DateFormat('dd MMM yyyy').format(_stockingDate),
-                                    style: const TextStyle(fontSize: 16, color: Colors.black87),
+                                    DateFormat('dd MMM yyyy')
+                                        .format(_stockingDate),
+                                    style: const TextStyle(
+                                        fontSize: 16, color: Colors.black87),
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey.shade400),
+                            Icon(Icons.arrow_forward_ios_rounded,
+                                size: 16, color: Colors.grey.shade400),
                           ],
                         ),
                       ),
@@ -236,9 +248,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                   ],
                 ),
               ),
-              
               const SizedBox(height: 40),
-              
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -248,14 +258,18 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
                     elevation: 4,
-                    shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+                    shadowColor:
+                        Theme.of(context).primaryColor.withOpacity(0.4),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
                   child: const Text(
                     "Create Pond",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5),
                   ),
                 ),
               ),

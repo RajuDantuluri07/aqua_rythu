@@ -34,7 +34,8 @@ class CalculatedItem {
   final double quantity;
   final String unit;
 
-  const CalculatedItem({required this.name, required this.quantity, required this.unit});
+  const CalculatedItem(
+      {required this.name, required this.quantity, required this.unit});
 }
 
 class Supplement {
@@ -55,7 +56,7 @@ class Supplement {
   final int? frequencyDays; // Maps to repeatIntervalDays
   final WaterMixTime? preferredTime;
   final DateTime? date; // Start date for water tasks
-  
+
   final List<SupplementItem> items;
   final String notes;
   final bool isPaused;
@@ -211,18 +212,23 @@ class SupplementLogNotifier extends StateNotifier<List<SupplementLog>> {
   SupplementLogNotifier() : super([]);
 
   void logApplication({
+    String? id,
     required String supplementId,
     required String pondId,
     required List<CalculatedItem> items,
   }) {
     final log = SupplementLog(
-      id: '${DateTime.now().millisecondsSinceEpoch}_$pondId',
+      id: id ?? '${DateTime.now().millisecondsSinceEpoch}_$pondId',
       supplementId: supplementId,
       pondId: pondId,
       timestamp: DateTime.now(),
       appliedItems: items,
     );
     state = [...state, log];
+  }
+
+  void removeLog(String logId) {
+    state = state.where((l) => l.id != logId).toList();
   }
 }
 
@@ -239,7 +245,9 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
   SupplementNotifier() : super([]);
 
   List<Supplement> getByPond(String pondId) {
-    return state.where((e) => e.pondIds.contains(pondId) || e.pondIds.contains('ALL')).toList();
+    return state
+        .where((e) => e.pondIds.contains(pondId) || e.pondIds.contains('ALL'))
+        .toList();
   }
 
   // 🔹 CREATE
@@ -269,6 +277,10 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
 
   // 🔹 DELETE
   void deleteSupplement(String id) {
+    state = state.where((s) => s.id != id).toList();
+  }
+
+  void removeSupplement(String id) {
     state = state.where((s) => s.id != id).toList();
   }
 }

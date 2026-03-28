@@ -20,7 +20,9 @@ class SummaryStrip extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.blue.shade200),
             ),
-            child: const Text("DOC 32", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            child: const Text("DOC 32",
+                style:
+                    TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -31,14 +33,19 @@ class SummaryStrip extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        Text(label,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
         const SizedBox(height: 4),
         Row(
           children: [
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(value,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             if (change != null) ...[
               const SizedBox(width: 4),
-              Text(change, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text(change,
+                  style: TextStyle(
+                      color: color, fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ],
         )

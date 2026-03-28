@@ -18,7 +18,8 @@ class FeedHistoryScreen extends ConsumerWidget {
     for (int i = 0; i < logs.length && i < 7; i++) {
       total7d += logs[i].total;
     }
-    double avg7d = logs.isNotEmpty ? (total7d / (logs.length > 7 ? 7 : logs.length)) : 0;
+    double avg7d =
+        logs.isNotEmpty ? (total7d / (logs.length > 7 ? 7 : logs.length)) : 0;
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -29,15 +30,26 @@ class FeedHistoryScreen extends ConsumerWidget {
         ),
         title: Column(
           children: [
-            const Text("Feed History", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-            Text("${pondId.toUpperCase()} | DOC ${logs.isNotEmpty ? logs.first.doc : 0}", 
-                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.bold)),
+            const Text("Feed History",
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+            Text(
+                "${pondId.toUpperCase()} | DOC ${logs.isNotEmpty ? logs.first.doc : 0}",
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.calendar_today_outlined, size: 20)),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.table_rows_outlined, size: 20)),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.file_download_outlined, size: 20)),
+          IconButton(
+              onPressed: () {},
+              icon: const Icon(Icons.calendar_today_outlined, size: 20)),
+          IconButton(
+              onPressed: () {},
+              icon: const Icon(Icons.table_rows_outlined, size: 20)),
+          IconButton(
+              onPressed: () {},
+              icon: const Icon(Icons.file_download_outlined, size: 20)),
         ],
         elevation: 0.5,
         backgroundColor: AppColors.cardBg,
@@ -47,7 +59,8 @@ class FeedHistoryScreen extends ConsumerWidget {
         children: [
           // Summary Strip
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.m),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.base, vertical: AppSpacing.m),
             decoration: const BoxDecoration(
               color: AppColors.cardBg,
               border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -57,28 +70,50 @@ class FeedHistoryScreen extends ConsumerWidget {
                 Expanded(
                   child: RichText(
                     text: TextSpan(
-                      style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500),
                       children: [
                         const TextSpan(text: "Last 7d: "),
-                        TextSpan(text: "${total7d.toInt()}kg ", style: const TextStyle(fontWeight: FontWeight.w900)),
-                        const TextSpan(text: "(+5.2%) ", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        TextSpan(
+                            text: "${total7d.toInt()}kg ",
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w900)),
+                        const TextSpan(
+                            text: "(+5.2%) ",
+                            style: TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold)),
                         const TextSpan(text: "| Avg: "),
-                        TextSpan(text: "${avg7d.toInt()}kg", style: const TextStyle(fontWeight: FontWeight.w900)),
+                        TextSpan(
+                            text: "${avg7d.toInt()}kg",
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w900)),
                       ],
                     ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(4), // Fixed: Explicit value
+                    borderRadius:
+                        BorderRadius.circular(4), // Fixed: Explicit value
                   ),
                   child: Row(
                     children: [
-                      const Text("DOC: ", style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-                      Text("${logs.isNotEmpty ? logs.first.doc : 0}", 
-                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                      const Text("DOC: ",
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.bold)),
+                      Text("${logs.isNotEmpty ? logs.first.doc : 0}",
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimary)),
                     ],
                   ),
                 ),
@@ -112,9 +147,11 @@ class FeedHistoryScreen extends ConsumerWidget {
               itemCount: logs.length,
               itemBuilder: (context, index) {
                 final log = logs[index];
-                final prevLog = (index + 1 < logs.length) ? logs[index + 1] : null;
-                final delta = (prevLog != null) ? (log.total - prevLog.total) : 0.0;
-                
+                final prevLog =
+                    (index + 1 < logs.length) ? logs[index + 1] : null;
+                final delta =
+                    (prevLog != null) ? (log.total - prevLog.total) : 0.0;
+
                 return _buildHistoryRow(log, index == 0, delta);
               },
             ),
@@ -142,11 +179,14 @@ class FeedHistoryScreen extends ConsumerWidget {
 
   Widget _buildHistoryRow(FeedHistoryLog log, bool isToday, double delta) {
     final dateFormat = DateFormat('dd MMM');
-    final String dateStr = isToday ? "Today, ${dateFormat.format(log.date)}" : dateFormat.format(log.date);
-    
+    final String dateStr = isToday
+        ? "Today, ${dateFormat.format(log.date)}"
+        : dateFormat.format(log.date);
+
     // Status Logic
     // Today has R4 empty? (Simulation)
-    final bool incomplete = isToday && log.rounds.length > 3 && log.rounds[3] == 0;
+    final bool incomplete =
+        isToday && log.rounds.length > 3 && log.rounds[3] == 0;
 
     return Container(
       decoration: const BoxDecoration(
@@ -156,15 +196,22 @@ class FeedHistoryScreen extends ConsumerWidget {
         child: Row(
           children: [
             // DATE
-            _dataCell(dateStr, flex: 3, bold: isToday, color: isToday ? Colors.orange.shade700 : Colors.black87),
+            _dataCell(dateStr,
+                flex: 3,
+                bold: isToday,
+                color: isToday ? Colors.orange.shade700 : Colors.black87),
             _vDivider(),
             // DOC
-            _dataCell("${log.doc}", flex: 1, color: isToday ? Colors.black87 : Colors.grey.shade500, bold: isToday),
+            _dataCell("${log.doc}",
+                flex: 1,
+                color: isToday ? Colors.black87 : Colors.grey.shade500,
+                bold: isToday),
             _vDivider(),
             // R1-R4
             ...List.generate(4, (i) {
               final val = (i < log.rounds.length) ? log.rounds[i] : 0.0;
-              final isMissing = (isToday && i == 3); // Emulate R4 missing for Today
+              final isMissing =
+                  (isToday && i == 3); // Emulate R4 missing for Today
               return Expanded(
                 flex: 1,
                 child: Row(
@@ -174,9 +221,11 @@ class FeedHistoryScreen extends ConsumerWidget {
                         isMissing ? "--" : val.toStringAsFixed(1),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 12, 
-                          fontWeight: isToday ? FontWeight.w900 : FontWeight.w500,
-                          color: isMissing ? Colors.grey.shade300 : Colors.black87,
+                          fontSize: 12,
+                          fontWeight:
+                              isToday ? FontWeight.w900 : FontWeight.w500,
+                          color:
+                              isMissing ? Colors.grey.shade300 : Colors.black87,
                         ),
                       ),
                     ),
@@ -186,7 +235,8 @@ class FeedHistoryScreen extends ConsumerWidget {
               );
             }),
             // TOT
-            _dataCell(log.total.toStringAsFixed(1), flex: 2, color: const Color(0xFF10B981), bold: true),
+            _dataCell(log.total.toStringAsFixed(1),
+                flex: 2, color: const Color(0xFF10B981), bold: true),
             _vDivider(),
             // DELTA
             Expanded(
@@ -200,7 +250,10 @@ class FeedHistoryScreen extends ConsumerWidget {
                       Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          border: Border.all(color: delta > 0 ? Colors.green.shade200 : Colors.red.shade200),
+                          border: Border.all(
+                              color: delta > 0
+                                  ? Colors.green.shade200
+                                  : Colors.red.shade200),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(
@@ -213,8 +266,8 @@ class FeedHistoryScreen extends ConsumerWidget {
                             Text(
                               delta.abs().toStringAsFixed(1),
                               style: TextStyle(
-                                fontSize: 10, 
-                                fontWeight: FontWeight.bold, 
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
                                 color: delta > 0 ? Colors.green : Colors.red,
                               ),
                             ),
@@ -222,7 +275,8 @@ class FeedHistoryScreen extends ConsumerWidget {
                         ),
                       ),
                     ] else ...[
-                      const Text("0.0", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const Text("0.0",
+                          style: TextStyle(fontSize: 10, color: Colors.grey)),
                     ],
                   ],
                 ),
@@ -230,14 +284,17 @@ class FeedHistoryScreen extends ConsumerWidget {
             ),
             _vDivider(),
             // CUM
-            _dataCell(log.cumulative.toInt().toString(), flex: 2, bold: true, color: Colors.grey.shade800),
+            _dataCell(log.cumulative.toInt().toString(),
+                flex: 2, bold: true, color: Colors.grey.shade800),
             _vDivider(),
             // ST
             Expanded(
               flex: 1,
               child: Center(
                 child: Icon(
-                  incomplete ? Icons.warning_amber_rounded : Icons.check_rounded,
+                  incomplete
+                      ? Icons.warning_amber_rounded
+                      : Icons.check_rounded,
                   size: 16,
                   color: incomplete ? Colors.orange : Colors.green,
                 ),
@@ -249,7 +306,8 @@ class FeedHistoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _dataCell(String text, {required int flex, bool bold = false, Color? color}) {
+  Widget _dataCell(String text,
+      {required int flex, bool bold = false, Color? color}) {
     return Expanded(
       flex: flex,
       child: Center(
@@ -266,5 +324,6 @@ class FeedHistoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _vDivider() => Container(width: 1, color: AppColors.border.withOpacity(0.5));
+  Widget _vDivider() =>
+      Container(width: 1, color: AppColors.border.withOpacity(0.5));
 }

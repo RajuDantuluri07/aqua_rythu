@@ -12,7 +12,8 @@ class NewCycleSetupScreen extends ConsumerStatefulWidget {
   const NewCycleSetupScreen({super.key, required this.pondId});
 
   @override
-  ConsumerState<NewCycleSetupScreen> createState() => _NewCycleSetupScreenState();
+  ConsumerState<NewCycleSetupScreen> createState() =>
+      _NewCycleSetupScreenState();
 }
 
 class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
@@ -36,27 +37,27 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
 
       // 1. Reset Pond Status & Data
       ref.read(farmProvider.notifier).resetPond(
-        widget.pondId,
-        seedCount: seedCount,
-        plSize: plSize,
-        stockingDate: _stockingDate,
-        numTrays: _selectedTrays,
-      );
+            widget.pondId,
+            seedCount: seedCount,
+            plSize: plSize,
+            stockingDate: _stockingDate,
+            numTrays: _selectedTrays,
+          );
 
       // 2. Generate New Blind Plan (Overwrites old plan)
       ref.read(feedPlanProvider.notifier).createPlan(
-        pondId: widget.pondId,
-        seedCount: seedCount,
-        plSize: plSize,
-      );
+            pondId: widget.pondId,
+            seedCount: seedCount,
+            plSize: plSize,
+          );
 
       // 3. Clear Old Data
       ref.read(harvestProvider(widget.pondId).notifier).clearHarvests();
       ref.read(feedHistoryProvider.notifier).clearHistory(widget.pondId);
-      
+
       // Navigate back to Dashboard
       Navigator.pop(context);
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("New crop cycle started successfully!"),
@@ -97,16 +98,20 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
                     Expanded(
                       child: Text(
                         "This will reset the pond to DOC 1 and generate a new 30-day blind feed plan.",
-                        style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
+                        style: TextStyle(
+                            color: Colors.blue.shade900, fontSize: 13),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Stocking Date
-              Text("Stocking Date", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+              Text("Stocking Date",
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700)),
               const SizedBox(height: 8),
               InkWell(
                 onTap: () async {
@@ -119,7 +124,8 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
                   if (picked != null) setState(() => _stockingDate = picked);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey.shade300),
                     borderRadius: BorderRadius.circular(12),
@@ -128,37 +134,51 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(DateFormat('dd MMM yyyy').format(_stockingDate), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const Icon(Icons.calendar_today_rounded, size: 20, color: Colors.grey),
+                      Text(DateFormat('dd MMM yyyy').format(_stockingDate),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 20, color: Colors.grey),
                     ],
                   ),
                 ),
               ),
 
               const SizedBox(height: 20),
-              
-              _buildInput("Seed Count", _seedCtrl, Icons.scatter_plot_rounded, isNumber: true),
+
+              _buildInput("Seed Count", _seedCtrl, Icons.scatter_plot_rounded,
+                  isNumber: true),
               const SizedBox(height: 20),
-              _buildInput("PL Size", _plSizeCtrl, Icons.straighten_rounded, isNumber: true),
-              
+              _buildInput("PL Size", _plSizeCtrl, Icons.straighten_rounded,
+                  isNumber: true),
+
               const SizedBox(height: 20),
-              
+
               // TRAY SELECTION DROPDOWN
-              Text("Number of Trays", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+              Text("Number of Trays",
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700)),
               const SizedBox(height: 8),
               DropdownButtonFormField<int>(
                 value: _selectedTrays,
                 decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.grid_view_rounded, color: Colors.grey),
+                  prefixIcon:
+                      const Icon(Icons.grid_view_rounded, color: Colors.grey),
                   filled: true,
                   fillColor: Colors.white,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300)),
                 ),
-                items: [2, 4, 6].map((e) => DropdownMenuItem(
-                  value: e,
-                  child: Text("$e Trays"),
-                )).toList(),
+                items: [2, 4, 6]
+                    .map((e) => DropdownMenuItem(
+                          value: e,
+                          child: Text("$e Trays"),
+                        ))
+                    .toList(),
                 onChanged: (val) {
                   if (val != null) setState(() => _selectedTrays = val);
                 },
@@ -173,9 +193,14 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
                   onPressed: _startCycle,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text("LAUNCH CYCLE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  child: const Text("LAUNCH CYCLE",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.white)),
                 ),
               ),
             ],
@@ -185,11 +210,14 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
     );
   }
 
-  Widget _buildInput(String label, TextEditingController ctrl, IconData icon, {bool isNumber = false}) {
+  Widget _buildInput(String label, TextEditingController ctrl, IconData icon,
+      {bool isNumber = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+        Text(label,
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
         const SizedBox(height: 8),
         TextFormField(
           controller: ctrl,
@@ -198,8 +226,12 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
             prefixIcon: Icon(icon, color: Colors.grey),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
           ),
           validator: (val) => val == null || val.isEmpty ? "Required" : null,
         ),

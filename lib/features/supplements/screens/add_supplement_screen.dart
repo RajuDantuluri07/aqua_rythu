@@ -127,7 +127,9 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   }
 
   void _save() {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
     
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

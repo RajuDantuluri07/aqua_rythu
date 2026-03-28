@@ -45,10 +45,10 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
         seedCount: seedCount,
         doc: i,
       );
-      
+
       // Distribute logic from Engine
       final rounds = FeedCalculationEngine.distributeFeed(dailyTotal, 4);
-      
+
       days.add(FeedDayPlan(
         doc: i,
         rounds: rounds,
@@ -73,7 +73,8 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     if (oldPlan == null) return;
 
     // 1. Keep past/today days as is (locked)
-    final updatedDays = oldPlan.days.where((day) => day.doc <= currentDoc).toList();
+    final updatedDays =
+        oldPlan.days.where((day) => day.doc <= currentDoc).toList();
 
     // 2. Project future days up to DOC 120 (Standard Harvest Cycle)
     // Extends the plan if it was short (e.g. only 30 days) and updates existing future days
@@ -82,7 +83,7 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     for (int d = currentDoc + 1; d <= projectionLimit; d++) {
       // Project future ABW (Simple linear growth of 0.2g/day)
       final docDiff = d - currentDoc;
-      final projectedAbw = sampledAbw + (docDiff * 0.2); 
+      final projectedAbw = sampledAbw + (docDiff * 0.2);
 
       final newTotal = FeedCalculationEngine.calculateFeed(
         seedCount: seedCount,
@@ -92,7 +93,7 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
 
       // Distribute into 4 rounds (V1 standard)
       final newRounds = FeedCalculationEngine.distributeFeed(newTotal, 4);
-      
+
       updatedDays.add(FeedDayPlan(doc: d, rounds: newRounds));
     }
 
@@ -115,9 +116,9 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
       if (day.doc == doc) {
         // Create new rounds list with updated value
         if (roundIndex >= 0 && roundIndex < day.rounds.length) {
-           final newRounds = List<double>.from(day.rounds);
-           newRounds[roundIndex] = qty;
-           return FeedDayPlan(doc: doc, rounds: newRounds);
+          final newRounds = List<double>.from(day.rounds);
+          newRounds[roundIndex] = qty;
+          return FeedDayPlan(doc: doc, rounds: newRounds);
         }
       }
       return day;
@@ -138,11 +139,12 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
   FeedDayPlan? getDayPlan(String pondId, int doc) {
     final plan = state[pondId];
     if (plan == null) return null;
-    return plan.days.firstWhere((d) => d.doc == doc, 
-      orElse: () => FeedDayPlan(doc: doc, rounds: [0.0, 0.0, 0.0, 0.0]));
+    return plan.days.firstWhere((d) => d.doc == doc,
+        orElse: () => FeedDayPlan(doc: doc, rounds: [0.0, 0.0, 0.0, 0.0]));
   }
 }
 
-final feedPlanProvider = StateNotifierProvider<FeedPlanNotifier, Map<String, FeedPlan>>((ref) {
+final feedPlanProvider =
+    StateNotifierProvider<FeedPlanNotifier, Map<String, FeedPlan>>((ref) {
   return FeedPlanNotifier();
 });

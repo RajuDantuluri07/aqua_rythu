@@ -6,7 +6,6 @@ import '../feed/feed_plan_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
 
-
 /// =======================
 /// STATE
 /// =======================
@@ -80,9 +79,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     state = state.copyWith(
       doc: doc,
-      feedDone: cached != null
-          ? Map<int, bool>.from(cached['feedDone'])
-          : {},
+      feedDone: cached != null ? Map<int, bool>.from(cached['feedDone']) : {},
       currentFeed: 15.0,
       trayResults: cached != null
           ? Map<int, TrayStatus>.from(cached['trayResults'])
@@ -113,36 +110,29 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final planMap = ref.read(feedPlanProvider);
     final plan = planMap[state.selectedPond];
     if (plan != null) {
-      final dayPlan = plan.days.firstWhere((d) => d.doc == state.doc, 
-        orElse: () => FeedDayPlan(doc: state.doc, rounds: [1.0, 1.0, 1.0, 1.0]));
-      
+      final dayPlan = plan.days.firstWhere((d) => d.doc == state.doc,
+          orElse: () =>
+              FeedDayPlan(doc: state.doc, rounds: [1.0, 1.0, 1.0, 1.0]));
+
       // Access round index (0-based)
       final roundIdx = round - 1;
-      double qty = (dayPlan.rounds.length > roundIdx) ? dayPlan.rounds[roundIdx] : 0.0;
+      double qty =
+          (dayPlan.rounds.length > roundIdx) ? dayPlan.rounds[roundIdx] : 0.0;
 
       // Apply adjustment if round > 1
       if (round > 1) {
-         final prevTray = state.trayResults[round - 1];
-         if (prevTray != null) {
-            // ✅ VERIFIED: Passing single aggregated tray as list to satisfy engine signature
-            final mode = FeedStateEngine.getMode(state.doc);
-            qty = FeedStateEngine.applyTrayAdjustment(
-              [prevTray],
-              qty,
-              mode
-            );
-         }
+        final prevTray = state.trayResults[round - 1];
+        if (prevTray != null) {
+          // ✅ VERIFIED: Passing single aggregated tray as list to satisfy engine signature
+          final mode = FeedStateEngine.getMode(state.doc);
+          qty = FeedStateEngine.applyTrayAdjustment([prevTray], qty, mode);
+        }
       }
 
       ref.read(feedHistoryProvider.notifier).logFeeding(
-        pondId: state.selectedPond, 
-        doc: state.doc, 
-        round: round, 
-        qty: qty
-      );
+          pondId: state.selectedPond, doc: state.doc, round: round, qty: qty);
     }
   }
-
 
   // =========================================================
   // 🧠 TRAY LOGIC (FIXED)
@@ -161,11 +151,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final finalStatus = FeedStateEngine.aggregateTrayStatus(trayStatuses);
 
     ref.read(feedHistoryProvider.notifier).logTray(
-      pondId: state.selectedPond,
-      doc: state.doc,
-      round: round,
-      status: finalStatus,
-    );
+          pondId: state.selectedPond,
+          doc: state.doc,
+          round: round,
+          status: finalStatus,
+        );
 
     final newMap = Map<int, TrayStatus>.from(state.trayResults);
     newMap[round] = finalStatus;
@@ -175,8 +165,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     );
   }
 }
-
-
 
 /// =======================
 /// PROVIDER

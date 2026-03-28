@@ -10,105 +10,106 @@ class FeedScheduleScreen extends ConsumerWidget {
   const FeedScheduleScreen({super.key, required this.pondId});
 
   @override
-Widget build(BuildContext context, WidgetRef ref) {
-  final planMap = ref.watch(feedPlanProvider);
-  final plan = planMap[pondId];
-  final days = plan?.days ?? [];
+  Widget build(BuildContext context, WidgetRef ref) {
+    final planMap = ref.watch(feedPlanProvider);
+    final plan = planMap[pondId];
+    final days = plan?.days ?? [];
 
-  final farmState = ref.watch(farmProvider);
-  String pondName = pondId;
-  for (var farm in farmState.farms) {
-    try {
-      final pond = farm.ponds.firstWhere((p) => p.id == pondId);
-      pondName = pond.name;
-      break;
-    } catch (e, stack) {
-      AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
+    final farmState = ref.watch(farmProvider);
+    String pondName = pondId;
+    for (var farm in farmState.farms) {
+      try {
+        final pond = farm.ponds.firstWhere((p) => p.id == pondId);
+        pondName = pond.name;
+        break;
+      } catch (e, stack) {
+        AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
+      }
     }
-  }
 
-  final docRange = days.isEmpty ? "" : "DOC ${days.first.doc}-${days.last.doc}";
+    final docRange =
+        days.isEmpty ? "" : "DOC ${days.first.doc}-${days.last.doc}";
 
-  return Scaffold(
-    backgroundColor: AppColors.cardBg,
-    appBar: AppBar(
+    return Scaffold(
       backgroundColor: AppColors.cardBg,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFF475569)),
-        onPressed: () => Navigator.of(context).pop(),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Feed Schedule",
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
+      appBar: AppBar(
+        backgroundColor: AppColors.cardBg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF475569)),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Feed Schedule",
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          Text(
-            "$pondName • $docRange",
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
+            Text(
+              "$pondName • $docRange",
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
             ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.orange),
+            onPressed: () {},
           ),
         ],
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.info_outline, color: Colors.orange),
-          onPressed: () {},
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: Colors.grey.shade200, height: 1),
         ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(color: Colors.grey.shade200, height: 1),
       ),
-    ),
-    body: days.isEmpty
-        ? const Center(child: Text("No plan generated yet."))
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.base),
-            child: Column(
-              children: [
-                // Main Table Card
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBg,
-                    borderRadius: AppRadius.rBase,
-                    border: Border.all(color: Colors.grey.shade200),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+      body: days.isEmpty
+          ? const Center(child: Text("No plan generated yet."))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.base),
+              child: Column(
+                children: [
+                  // Main Table Card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: AppRadius.rBase,
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // Table Header
+                        _buildTableHeader(),
+                        // Data Rows (Show all days for full reference)
+                        ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      // Table Header
-                      _buildTableHeader(),
-                      // Data Rows (Show all days for full reference)
-                      ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
-                    ],
-                  ),
-                ),
-                AppSpacing.hXl,
+                  AppSpacing.hXl,
 
-                // Total Summary Card
-                _buildTotalSummaryCard(plan?.totalProjected ?? 0),
-                const SizedBox(height: 100),
-              ],
+                  // Total Summary Card
+                  _buildTotalSummaryCard(plan?.totalProjected ?? 0),
+                  const SizedBox(height: 100),
+                ],
+              ),
             ),
-          ),
-    bottomSheet: _buildSaveButton(context, ref),
-  );
-}
+      bottomSheet: _buildSaveButton(context, ref),
+    );
+  }
 
   Widget _buildTableHeader() {
     return Container(
@@ -127,7 +128,8 @@ Widget build(BuildContext context, WidgetRef ref) {
           Expanded(flex: 3, child: _HeaderCell("R2", align: TextAlign.center)),
           Expanded(flex: 3, child: _HeaderCell("R3", align: TextAlign.center)),
           Expanded(flex: 3, child: _HeaderCell("R4", align: TextAlign.center)),
-          Expanded(flex: 3, child: _HeaderCell("TOTAL", align: TextAlign.right)),
+          Expanded(
+              flex: 3, child: _HeaderCell("TOTAL", align: TextAlign.right)),
         ],
       ),
     );
@@ -177,7 +179,11 @@ Widget build(BuildContext context, WidgetRef ref) {
   Widget _buildSaveButton(BuildContext context, WidgetRef ref) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.only(left: AppSpacing.base, right: AppSpacing.base, bottom: AppSpacing.xl, top: AppSpacing.m),
+      padding: const EdgeInsets.only(
+          left: AppSpacing.base,
+          right: AppSpacing.base,
+          bottom: AppSpacing.xl,
+          top: AppSpacing.m),
       child: ElevatedButton.icon(
         onPressed: () {
           ref.read(feedPlanProvider.notifier).savePlan(pondId);
@@ -188,7 +194,8 @@ Widget build(BuildContext context, WidgetRef ref) {
         icon: const Icon(Icons.save, color: Colors.white),
         label: const Text(
           "Save Schedule",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+              fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF22C55E),
@@ -243,7 +250,9 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   void didUpdateWidget(_FeedRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.day != widget.day) {
-      for (int i = 0; i < _controllers.length && i < widget.day.rounds.length; i++) {
+      for (int i = 0;
+          i < _controllers.length && i < widget.day.rounds.length;
+          i++) {
         // 🔒 Prevent overwriting user input while typing unless value changed externally
         // This avoids cursor jumping or "1." becoming "1.0" immediately
         final currentVal = double.tryParse(_controllers[i].text) ?? 0;
@@ -279,7 +288,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
 
     return Container(
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
+        border:
+            Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
       ),
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Row(
@@ -298,7 +308,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
           ),
           // Dynamically build cells based on controllers (rounds)
           for (int i = 0; i < _controllers.length; i++)
-             _buildInputCell(_controllers[i], i),
+            _buildInputCell(_controllers[i], i),
           Expanded(
             flex: 2,
             child: Text(

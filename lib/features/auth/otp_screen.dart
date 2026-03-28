@@ -119,7 +119,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Text("Enter the code sent to +91 $phone", style: const TextStyle(color: Colors.grey)),
+            Text("Enter the code sent to +91 $phone",
+                style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 30),
 
             /// OTP INPUT
@@ -129,18 +130,24 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               codeLength: 6,
               focusNode: _focusNode,
               autoFocus: true,
-              keyboardType: const TextInputType.numberWithOptions(signed: false, decimal: false),
+              keyboardType: const TextInputType.numberWithOptions(
+                  signed: false, decimal: false),
               textInputAction: TextInputAction.done,
               decoration: BoxLooseDecoration(
-                textStyle: const TextStyle(fontSize: 20, color: Colors.black, fontWeight: FontWeight.bold),
-                strokeColorBuilder: FixedColorBuilder(Theme.of(context).primaryColor),
+                textStyle: const TextStyle(
+                    fontSize: 20,
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold),
+                strokeColorBuilder:
+                    FixedColorBuilder(Theme.of(context).primaryColor),
                 bgColorBuilder: const FixedColorBuilder(Colors.white),
                 radius: const Radius.circular(8),
                 gapSpace: 12,
                 strokeWidth: 1.5,
               ),
               onCodeChanged: (code) {
-                setState(() {}); // Force rebuild to persist text across timer ticks
+                setState(
+                    () {}); // Force rebuild to persist text across timer ticks
                 if (code?.length == 6) {
                   _verifyOtp(code);
                 }

@@ -34,13 +34,16 @@ class FeedTable extends StatelessWidget {
         Expanded(
           child: ListView.separated(
             itemCount: logs.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, thickness: 0.5),
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, thickness: 0.5),
             itemBuilder: (context, index) {
               final log = logs[index];
               // Check for Today
               final now = DateTime.now();
-              final isToday = log.date.year == now.year && log.date.month == now.month && log.date.day == now.day;
-              
+              final isToday = log.date.year == now.year &&
+                  log.date.month == now.month &&
+                  log.date.day == now.day;
+
               return FeedRow(log: log, isToday: isToday);
             },
           ),
@@ -62,7 +65,10 @@ class _HeaderCell extends StatelessWidget {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.bold),
+        style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 11,
+            fontWeight: FontWeight.bold),
       ),
     );
   }

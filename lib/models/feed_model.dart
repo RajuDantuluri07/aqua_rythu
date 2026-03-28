@@ -31,4 +31,3 @@ class FeedInput {
     required this.doc, // 🔥 ADD
   });
 }
-

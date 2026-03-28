@@ -28,14 +28,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _opacity = Tween<double>(begin: 0.0, end: 1.0)
         .animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
-    _scale = Tween<double>(begin: 0.5, end: 1.0)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
+    _scale = Tween<double>(begin: 0.5, end: 1.0).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
 
     _controller.forward();
-    
+
     // Initialize auth check
     ref.read(authProvider.notifier).checkSession();
-    
+
     _navigate();
   }
 

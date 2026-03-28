@@ -20,12 +20,13 @@ class FeedHistoryLog {
 
   double get total => rounds.fold(0.0, (sum, item) => sum + item);
   double get delta => total - expected;
-  
+
   // Logic: if delta < -1 => Warning
   bool get isWarning => delta < -1;
 }
 
-class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>>> {
+class FeedHistoryNotifier
+    extends StateNotifier<Map<String, List<FeedHistoryLog>>> {
   FeedHistoryNotifier() : super({}) {
     _loadInitialMockData();
   }
@@ -39,13 +40,18 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
     for (int i = 0; i < 31; i++) {
       final doc = i + 1;
       final date = now.subtract(Duration(days: 31 - i + 1)); // Past days
-      
-      final double baseFeed = doc * 0.5 + 5; 
-      final mockRounds = [baseFeed * 0.25, baseFeed * 0.25, baseFeed * 0.25, baseFeed * 0.25];
-      
+
+      final double baseFeed = doc * 0.5 + 5;
+      final mockRounds = [
+        baseFeed * 0.25,
+        baseFeed * 0.25,
+        baseFeed * 0.25,
+        baseFeed * 0.25
+      ];
+
       final total = mockRounds.reduce((a, b) => a + b);
       runningCum += total;
-      
+
       logs.add(FeedHistoryLog(
         date: date,
         doc: doc,
@@ -55,11 +61,10 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
         cumulative: runningCum,
       ));
     }
-    
-   
+
     // Add Today as an empty placeholder or partially filled if needed
     // But better to add it on the fly from Dashboard
-    
+
     state = {
       'Pond 1': logs.reversed.toList(),
     };
@@ -74,21 +79,20 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
   }) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    
+
     final pondLogs = List<FeedHistoryLog>.from(state[pondId] ?? []);
-    
+
     // Check if today already exists
-    int todayIdx = pondLogs.indexWhere((log) => 
-      log.date.year == today.year && 
-      log.date.month == today.month && 
-      log.date.day == today.day
-    );
+    int todayIdx = pondLogs.indexWhere((log) =>
+        log.date.year == today.year &&
+        log.date.month == today.month &&
+        log.date.day == today.day);
 
     if (todayIdx != -1) {
       final existing = pondLogs[todayIdx];
       final newRounds = List<double>.from(existing.rounds);
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
-      
+
       // Expand rounds if needed (e.g. if rounds was [0,0,0,0])
       if (newRounds.length < round) {
         final diff = round - newRounds.length;
@@ -117,17 +121,19 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
       final newRounds = List.filled(4, 0.0);
       newRounds[round - 1] = qty;
       final newTrays = List<TrayStatus?>.filled(4, null);
-      
+
       final prevCum = pondLogs.isNotEmpty ? pondLogs.first.cumulative : 0.0;
 
-      pondLogs.insert(0, FeedHistoryLog(
-        date: today,
-        doc: doc,
-        rounds: newRounds,
-        trayStatuses: newTrays,
-        expected: 10.0, // Mock expected
-        cumulative: prevCum + qty,
-      ));
+      pondLogs.insert(
+          0,
+          FeedHistoryLog(
+            date: today,
+            doc: doc,
+            rounds: newRounds,
+            trayStatuses: newTrays,
+            expected: 10.0, // Mock expected
+            cumulative: prevCum + qty,
+          ));
     }
 
     state = {
@@ -188,6 +194,7 @@ class FeedHistoryNotifier extends StateNotifier<Map<String, List<FeedHistoryLog>
   }
 }
 
-final feedHistoryProvider = StateNotifierProvider<FeedHistoryNotifier, Map<String, List<FeedHistoryLog>>>((ref) {
+final feedHistoryProvider = StateNotifierProvider<FeedHistoryNotifier,
+    Map<String, List<FeedHistoryLog>>>((ref) {
   return FeedHistoryNotifier();
 });

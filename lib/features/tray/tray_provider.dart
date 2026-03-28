@@ -21,7 +21,6 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
   }
 }
 
-
 final trayProvider =
     StateNotifierProvider.family<TrayNotifier, List<TrayLog>, String>(
   (ref, pondId) => TrayNotifier(),

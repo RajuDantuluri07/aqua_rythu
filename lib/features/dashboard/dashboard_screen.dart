@@ -30,13 +30,13 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildWeatherCard(),
                           const SizedBox(height: 28),
-                          
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -48,14 +48,13 @@ class DashboardScreen extends ConsumerWidget {
                                   color: Colors.grey.shade800,
                                 ),
                               ),
-                              Icon(Icons.insert_chart_outlined_rounded, color: Colors.grey.shade400, size: 20),
+                              Icon(Icons.insert_chart_outlined_rounded,
+                                  color: Colors.grey.shade400, size: 20),
                             ],
                           ),
                           const SizedBox(height: 16),
-                          
                           _buildMetricsGrid(context),
                           const SizedBox(height: 32),
-                          
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -68,9 +67,12 @@ class DashboardScreen extends ConsumerWidget {
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                  color: Theme.of(context)
+                                      .primaryColor
+                                      .withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
@@ -91,10 +93,12 @@ class DashboardScreen extends ConsumerWidget {
                   currentFarm.ponds.isEmpty
                       ? SliverToBoxAdapter(child: _buildEmptyPonds())
                       : SliverPadding(
-                          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 40),
+                          padding: const EdgeInsets.only(
+                              left: 20, right: 20, bottom: 40),
                           sliver: SliverList(
                             delegate: SliverChildBuilderDelegate(
-                              (context, index) => PondCard(pond: currentFarm.ponds[index]),
+                              (context, index) =>
+                                  PondCard(pond: currentFarm.ponds[index]),
                               childCount: currentFarm.ponds.length,
                             ),
                           ),
@@ -105,7 +109,8 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, WidgetRef ref, FarmState farmState, Farm currentFarm) {
+  Widget _buildHeader(BuildContext context, WidgetRef ref, FarmState farmState,
+      Farm currentFarm) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -115,12 +120,14 @@ class DashboardScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
-                ]
-              ),
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                        color: Theme.of(context).primaryColor.withOpacity(0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4))
+                  ]),
               child: Icon(Icons.water_drop_rounded,
                   color: Theme.of(context).primaryColor, size: 22),
             ),
@@ -128,7 +135,9 @@ class DashboardScreen extends ConsumerWidget {
             const Text(
               "AquaRythu",
               style: TextStyle(
-                  fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5),
             ),
           ],
         ),
@@ -138,12 +147,14 @@ class DashboardScreen extends ConsumerWidget {
           onTap: () => _showFarmSwitchDialog(context, ref, farmState),
           borderRadius: BorderRadius.circular(30),
           child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
               ],
               borderRadius: BorderRadius.circular(30),
             ),
@@ -155,10 +166,9 @@ class DashboardScreen extends ConsumerWidget {
                 Text(
                   currentFarm.name,
                   style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: Colors.grey.shade800
-                  ),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: Colors.grey.shade800),
                 ),
                 const SizedBox(width: 4),
                 Icon(Icons.keyboard_arrow_down_rounded,
@@ -171,7 +181,8 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  void _showFarmSwitchDialog(BuildContext context, WidgetRef ref, FarmState farmState) {
+  void _showFarmSwitchDialog(
+      BuildContext context, WidgetRef ref, FarmState farmState) {
     showDialog(
       context: context,
       builder: (context) => SimpleDialog(
@@ -294,11 +305,15 @@ class DashboardScreen extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.dashboard_customize_rounded, size: 80, color: Colors.grey.shade300),
+          Icon(Icons.dashboard_customize_rounded,
+              size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           Text(
             "No Farm Selected",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+            style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
           Text(
@@ -312,7 +327,8 @@ class DashboardScreen extends ConsumerWidget {
             label: const Text("Create New Farm"),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
           )
         ],
@@ -328,11 +344,22 @@ class DashboardScreen extends ConsumerWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
-            child: Icon(Icons.water_drop_outlined, size: 40, color: Colors.blue.shade200),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.05), blurRadius: 10)
+                ]),
+            child: Icon(Icons.water_drop_outlined,
+                size: 40, color: Colors.blue.shade200),
           ),
           const SizedBox(height: 16),
-          Text("No ponds added yet", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600, fontSize: 16)),
+          Text("No ponds added yet",
+              style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16)),
         ],
       ),
     );
@@ -362,20 +389,29 @@ class DashboardScreen extends ConsumerWidget {
           Positioned(
             right: -20,
             top: -20,
-            child: Icon(Icons.wb_sunny_rounded, size: 120, color: Colors.white.withOpacity(0.15)),
+            child: Icon(Icons.wb_sunny_rounded,
+                size: 120, color: Colors.white.withOpacity(0.15)),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20)),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.calendar_today_rounded, size: 12, color: Colors.white),
+                    Icon(Icons.calendar_today_rounded,
+                        size: 12, color: Colors.white),
                     SizedBox(width: 6),
-                    Text("Today's Climate", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text("Today's Climate",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -409,7 +445,10 @@ class DashboardScreen extends ConsumerWidget {
               const SizedBox(height: 8),
               const Text(
                 "Sunny • Humidity 65%",
-                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -466,7 +505,6 @@ class DashboardScreen extends ConsumerWidget {
       ],
     );
   }
-
 }
 
 class PondCard extends ConsumerWidget {
@@ -516,7 +554,8 @@ class PondCard extends ConsumerWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            Navigator.pushNamed(context, AppRoutes.pondDashboard, arguments: pond.id);
+            Navigator.pushNamed(context, AppRoutes.pondDashboard,
+                arguments: pond.id);
           },
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -535,16 +574,18 @@ class PondCard extends ConsumerWidget {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          Icon(Icons.water_rounded, color: Colors.blue.shade300, size: 28),
+                          Icon(Icons.water_rounded,
+                              color: Colors.blue.shade300, size: 28),
                           Positioned(
                             bottom: 2,
-                            child: Icon(Icons.pets_rounded, color: Colors.blue.shade600, size: 14),
+                            child: Icon(Icons.pets_rounded,
+                                color: Colors.blue.shade600, size: 14),
                           )
                         ],
                       ),
                     ),
                     const SizedBox(width: 16),
-                    
+
                     // Info
                     Expanded(
                       child: Column(
@@ -555,19 +596,24 @@ class PondCard extends ConsumerWidget {
                             children: [
                               Text(
                                 pond.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 18),
                               ),
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: Colors.green.shade50,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: const Text(
                                       "Active",
-                                      style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                          color: Colors.green,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -579,7 +625,8 @@ class PondCard extends ConsumerWidget {
                                         arguments: pond.id,
                                       );
                                     },
-                                    icon: const Icon(Icons.edit_outlined, size: 18, color: Colors.grey),
+                                    icon: const Icon(Icons.edit_outlined,
+                                        size: 18, color: Colors.grey),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                   ),
@@ -588,12 +635,13 @@ class PondCard extends ConsumerWidget {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          
                           Row(
                             children: [
-                              _PondTag(Icons.calendar_month_rounded, "DOC ${pond.doc}"),
+                              _PondTag(Icons.calendar_month_rounded,
+                                  "DOC ${pond.doc}"),
                               const SizedBox(width: 12),
-                              _PondTag(Icons.straighten_rounded, "${pond.area} ac"),
+                              _PondTag(
+                                  Icons.straighten_rounded, "${pond.area} ac"),
                             ],
                           ),
                         ],
@@ -631,9 +679,18 @@ class _MetricItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text(label,
+            style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey.shade500,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.black87)),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Colors.black87)),
       ],
     );
   }
@@ -653,7 +710,10 @@ class _PondTag extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+          style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -709,7 +769,8 @@ class _StatCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              Icon(Icons.more_horiz_rounded, color: Colors.grey.shade300, size: 20),
+              Icon(Icons.more_horiz_rounded,
+                  color: Colors.grey.shade300, size: 20),
             ],
           ),
           const Spacer(),

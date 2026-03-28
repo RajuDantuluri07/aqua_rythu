@@ -29,7 +29,7 @@ class WaterLog {
   // Health Score calculation
   int get healthScore {
     int score = 100;
-    
+
     // Dissolved Oxygen (0-20 points)
     if (dissolvedOxygen < 4) {
       score -= 20;
@@ -38,7 +38,9 @@ class WaterLog {
     }
 
     // pH (0-10 points)
-    if (ph < 7.5 || ph > 8.5) score -= 10;
+    if (ph < 7.5 || ph > 8.5) {
+      score -= 10;
+    }
 
     // Ammonia (0-20 points)
     if (ammonia > 0.3) {
@@ -55,10 +57,14 @@ class WaterLog {
     }
 
     // Salinity (0-10 points)
-    if (salinity < 10 || salinity > 25) score -= 10;
+    if (salinity < 10 || salinity > 25) {
+      score -= 10;
+    }
 
     // Alkalinity (0-10 points)
-    if (alkalinity < 100 || alkalinity > 200) score -= 10;
+    if (alkalinity < 100 || alkalinity > 200) {
+      score -= 10;
+    }
 
     return score.clamp(0, 100);
   }
@@ -77,16 +83,39 @@ class WaterLog {
 
   List<String> get recommendations {
     final List<String> recs = [];
-    if (ph < 7.5) recs.add("Add agricultural lime to raise pH");
-    if (ph > 8.5) recs.add("Stop lime application, add organic matter");
-    if (dissolvedOxygen < 4.0) recs.add("CRITICAL: Increase aeration, reduce feeding");
-    else if (dissolvedOxygen < 5.0) recs.add("Monitor aeration, slight improvement needed");
-    if (salinity < 10.0) recs.add("Increase salt or brackish water inflow");
-    if (salinity > 25.0) recs.add("Add fresh water to dilute salinity");
-    if (alkalinity < 100.0) recs.add("Add sodium bicarbonate or lime");
-    if (alkalinity > 200.0) recs.add("Reduce lime application");
-    if (ammonia > 0.1) recs.add(ammonia > 0.3 ? "CRITICAL: Reduce feeding by 50%, increase aeration, add probiotics" : "Reduce feeding by 20%, increase aeration");
-    if (nitrite > 0.1) recs.add(nitrite > 0.3 ? "CRITICAL: Salt treatment (1-2 ppt), reduce feeding" : "Add salt (0.5-1 ppt), reduce feeding");
+    if (ph < 7.5) {
+      recs.add("Add agricultural lime to raise pH");
+    }
+    if (ph > 8.5) {
+      recs.add("Stop lime application, add organic matter");
+    }
+    if (dissolvedOxygen < 4.0) {
+      recs.add("CRITICAL: Increase aeration, reduce feeding");
+    } else if (dissolvedOxygen < 5.0) {
+      recs.add("Monitor aeration, slight improvement needed");
+    }
+    if (salinity < 10.0) {
+      recs.add("Increase salt or brackish water inflow");
+    }
+    if (salinity > 25.0) {
+      recs.add("Add fresh water to dilute salinity");
+    }
+    if (alkalinity < 100.0) {
+      recs.add("Add sodium bicarbonate or lime");
+    }
+    if (alkalinity > 200.0) {
+      recs.add("Reduce lime application");
+    }
+    if (ammonia > 0.1) {
+      recs.add(ammonia > 0.3
+          ? "CRITICAL: Reduce feeding by 50%, increase aeration, add probiotics"
+          : "Reduce feeding by 20%, increase aeration");
+    }
+    if (nitrite > 0.1) {
+      recs.add(nitrite > 0.3
+          ? "CRITICAL: Salt treatment (1-2 ppt), reduce feeding"
+          : "Add salt (0.5-1 ppt), reduce feeding");
+    }
     return recs;
   }
 }

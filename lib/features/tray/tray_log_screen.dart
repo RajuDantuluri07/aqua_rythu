@@ -10,7 +10,11 @@ class TrayLogScreen extends ConsumerStatefulWidget {
   final String pondId;
   final int doc;
   final int round;
-  const TrayLogScreen({super.key, required this.pondId, required this.doc, required this.round});
+  const TrayLogScreen(
+      {super.key,
+      required this.pondId,
+      required this.doc,
+      required this.round});
   @override
   ConsumerState<TrayLogScreen> createState() => _TrayLogScreenState();
 }
@@ -18,16 +22,15 @@ class TrayLogScreen extends ConsumerStatefulWidget {
 class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   // Wizard State
   int _currentTrayIndex = 0; // 0-based
-  late final int _totalTrays; 
-  
+  late final int _totalTrays;
+
   // Data Collection
   final List<TrayStatus> _results = [];
-  final Map<int, Set<String>> _observations = {}; 
+  final Map<int, Set<String>> _observations = {};
 
   // Current Selection
   TrayStatus? _selectedStatus;
   final Set<String> _selectedObservations = {};
-
 
   final List<String> _observationOptions = [
     'Dead shrimp',
@@ -90,7 +93,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     );
 
     ref.read(trayProvider(widget.pondId).notifier).addTrayLog(log);
-    
+
     Navigator.pop(context, "Logged $_totalTrays trays");
   }
 
@@ -117,7 +120,8 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
         ),
         title: Text(
           "Round ${widget.round} Tray Check",
-          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
+          style: const TextStyle(
+              color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
       ),
@@ -135,11 +139,17 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                     children: [
                       Text(
                         "Tray $currentTrayNumber of $_totalTrays",
-                        style: TextStyle(fontWeight: FontWeight.w800, color: Theme.of(context).primaryColor, fontSize: 16),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).primaryColor,
+                            fontSize: 16),
                       ),
                       Text(
                         "Step $currentStep of $totalSteps",
-                        style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade500, fontSize: 12),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade500,
+                            fontSize: 12),
                       ),
                     ],
                   ),
@@ -150,25 +160,30 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                       value: progress,
                       minHeight: 8,
                       backgroundColor: Colors.grey.shade200,
-                      valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).primaryColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).primaryColor),
                     ),
                   ),
                 ],
               ),
             ),
-            
+
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0, vertical: 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       "What is the feed status in this tray?",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87),
                     ),
                     const SizedBox(height: 20),
-                    
+
                     // Status Options
                     ...TrayStatus.values.map((status) {
                       final isSelected = _selectedStatus == status;
@@ -180,7 +195,8 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                     // Observations
                     Row(
                       children: [
-                        Icon(Icons.visibility_rounded, size: 18, color: Colors.grey.shade600),
+                        Icon(Icons.visibility_rounded,
+                            size: 18, color: Colors.grey.shade600),
                         const SizedBox(width: 8),
                         Text(
                           'OBSERVATIONS (OPTIONAL)',
@@ -212,17 +228,22 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                             });
                           },
                           backgroundColor: Colors.white,
-                          selectedColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                          selectedColor:
+                              Theme.of(context).primaryColor.withOpacity(0.1),
                           checkmarkColor: Theme.of(context).primaryColor,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(
-                              color: isSelected ? Theme.of(context).primaryColor : Colors.grey.shade300,
-                            )
-                          ),
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Theme.of(context).primaryColor
+                                    : Colors.grey.shade300,
+                              )),
                           labelStyle: TextStyle(
-                            color: isSelected ? Theme.of(context).primaryColor : Colors.black87,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected
+                                ? Theme.of(context).primaryColor
+                                : Colors.black87,
+                            fontWeight:
+                                isSelected ? FontWeight.bold : FontWeight.w500,
                           ),
                         );
                       }).toList(),
@@ -255,7 +276,8 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey.shade300,
                     elevation: canProceed ? 4 : 0,
-                    shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+                    shadowColor:
+                        Theme.of(context).primaryColor.withOpacity(0.4),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -278,8 +300,6 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     );
   }
 
-
-
   Widget _buildStatusCard(TrayStatus status, bool isSelected) {
     return GestureDetector(
       onTap: () => setState(() => _selectedStatus = status),
@@ -290,8 +310,16 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
-            if (isSelected) BoxShadow(color: status.color.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))
-            else BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))
+            if (isSelected)
+              BoxShadow(
+                  color: status.color.withOpacity(0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4))
+            else
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2))
           ],
           border: Border.all(
             color: isSelected ? status.color : Colors.transparent,
@@ -305,7 +333,8 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: isSelected ? status.color : status.color.withOpacity(0.1),
+                color:
+                    isSelected ? status.color : status.color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(

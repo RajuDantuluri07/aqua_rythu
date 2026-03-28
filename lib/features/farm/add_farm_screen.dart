@@ -32,11 +32,12 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
         SnackBar(
           content: const Text("New Farm Added Successfully"),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           backgroundColor: Colors.green.shade600,
         ),
       );
-      
+
       Navigator.pop(context);
     }
   }
@@ -46,7 +47,8 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("Add New Farm", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Add New Farm",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -72,7 +74,6 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                 style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 24),
-              
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -93,7 +94,8 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                       decoration: InputDecoration(
                         labelText: "Farm Name",
                         hintText: "e.g. Green Valley Aqua",
-                        prefixIcon: Icon(Icons.schema_rounded, color: Theme.of(context).primaryColor),
+                        prefixIcon: Icon(Icons.schema_rounded,
+                            color: Theme.of(context).primaryColor),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -104,10 +106,12 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+                          borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor, width: 2),
                         ),
                       ),
-                      validator: (value) => value == null || value.isEmpty ? "Required" : null,
+                      validator: (value) =>
+                          value == null || value.isEmpty ? "Required" : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -115,7 +119,8 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                       decoration: InputDecoration(
                         labelText: "Location",
                         hintText: "e.g. Bhimavaram, AP",
-                        prefixIcon: Icon(Icons.location_on_rounded, color: Theme.of(context).primaryColor),
+                        prefixIcon: Icon(Icons.location_on_rounded,
+                            color: Theme.of(context).primaryColor),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -126,17 +131,17 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+                          borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor, width: 2),
                         ),
                       ),
-                      validator: (value) => value == null || value.isEmpty ? "Required" : null,
+                      validator: (value) =>
+                          value == null || value.isEmpty ? "Required" : null,
                     ),
                   ],
                 ),
               ),
-              
               const SizedBox(height: 40),
-              
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -146,14 +151,18 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
                     elevation: 4,
-                    shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+                    shadowColor:
+                        Theme.of(context).primaryColor.withOpacity(0.4),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
                   child: const Text(
                     "Create Farm",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5),
                   ),
                 ),
               ),

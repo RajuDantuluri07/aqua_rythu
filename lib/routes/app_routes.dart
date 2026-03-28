@@ -28,7 +28,7 @@ class AppRoutes {
     profile: (context) => const ProfileScreen(),
     addFarm: (context) => const AddFarmScreen(),
     addPond: (context) => const AddPondScreen(),
-    editPond: (context) => const EditPondScreen(), 
+    editPond: (context) => const EditPondScreen(),
     dashboard: (context) => const DashboardScreen(),
     pondDashboard: (context) => const PondDashboardScreen(),
   };

@@ -26,7 +26,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (phone.length != 10) return;
 
     setState(() => _isLoading = true);
-    
+
     // ✅ PRD 4.1: Supabase call signInWithOtp(phone: '+91$phone')
     // Assuming this method exists in your AuthNotifier and returns a boolean for success.
     final success = await ref.read(authProvider.notifier).signInWithOtp(phone);
@@ -35,7 +35,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() => _isLoading = false);
       if (success) {
         // Navigate to OTP Screen
-        Navigator.pushNamed(context, AppRoutes.otp, arguments: phone); 
+        Navigator.pushNamed(context, AppRoutes.otp, arguments: phone);
       }
     }
   }
@@ -55,7 +55,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Image.asset(
                   'assets/images/logo.png',
                   height: 90,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.water_drop, size: 90, color: Colors.blue),
+                  errorBuilder: (_, __, ___) => const Icon(Icons.water_drop,
+                      size: 90, color: Colors.blue),
                 ),
               ),
               const SizedBox(height: 40),
@@ -63,7 +64,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // 2. Headline & Sub (PRD 4.1)
               const Text(
                 "Welcome Back",
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black),
+                style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -78,23 +82,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   border: Border.all(color: Colors.grey.shade300),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
                   children: [
                     const Text(
                       "+91",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black),
                     ),
                     const SizedBox(width: 12),
-                    Container(width: 1, height: 24, color: Colors.grey.shade300),
+                    Container(
+                        width: 1, height: 24, color: Colors.grey.shade300),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextField(
                         controller: _phoneController,
                         keyboardType: TextInputType.number,
                         maxLength: 10,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                         decoration: const InputDecoration(
                           hintText: "Mobile Number",
                           border: InputBorder.none,
@@ -119,47 +131,63 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     disabledBackgroundColor: Colors.grey.shade300,
                   ),
                   child: _isLoading
-                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text("Send OTP →", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text("Send OTP →",
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
-              
+
               const SizedBox(height: 40),
-              
+
               // 5. Social Proof (PRD 4.1)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   // Stacked Avatars
-                   SizedBox(
-                     width: 70,
-                     height: 30,
-                     child: Stack(
-                       children: [
-                         _avatar(0, Colors.grey.shade300),
-                         _avatar(20, Colors.grey.shade400),
-                         _avatar(40, Colors.grey.shade500),
-                       ],
-                     ),
-                   ),
-                   const SizedBox(width: 8),
-                   Text("Trusted by 1000+ Farmers", style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
+                  // Stacked Avatars
+                  SizedBox(
+                    width: 70,
+                    height: 30,
+                    child: Stack(
+                      children: [
+                        _avatar(0, Colors.grey.shade300),
+                        _avatar(20, Colors.grey.shade400),
+                        _avatar(40, Colors.grey.shade500),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text("Trusted by 1000+ Farmers",
+                      style: TextStyle(
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
-              
+
               const SizedBox(height: 60),
-              
+
               // 6. Footer (PRD 4.1)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  TextButton(onPressed: () {}, child: const Text("TERMS", style: TextStyle(color: Colors.grey, fontSize: 12))),
+                  TextButton(
+                      onPressed: () {},
+                      child: const Text("TERMS",
+                          style: TextStyle(color: Colors.grey, fontSize: 12))),
                   const Text("•", style: TextStyle(color: Colors.grey)),
-                  TextButton(onPressed: () {}, child: const Text("PRIVACY", style: TextStyle(color: Colors.grey, fontSize: 12))),
+                  TextButton(
+                      onPressed: () {},
+                      child: const Text("PRIVACY",
+                          style: TextStyle(color: Colors.grey, fontSize: 12))),
                 ],
               ),
             ],
@@ -168,11 +196,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
-  
+
   Widget _avatar(double left, Color color) {
     return Positioned(
       left: left,
-      child: CircleAvatar(radius: 14, backgroundColor: Colors.white, child: CircleAvatar(radius: 12, backgroundColor: color)),
+      child: CircleAvatar(
+          radius: 14,
+          backgroundColor: Colors.white,
+          child: CircleAvatar(radius: 12, backgroundColor: color)),
     );
   }
 }

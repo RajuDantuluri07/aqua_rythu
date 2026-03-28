@@ -42,17 +42,26 @@ class WeatherCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                      const Icon(Icons.location_on,
+                          color: Colors.white70, size: 14),
                       const SizedBox(width: 4),
-                      Text(location, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                      Text(location,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(temp, style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
-                  const Text("Sunny", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const Text(temp,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold)),
+                  const Text("Sunny",
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
                 ],
               ),
-              Icon(Icons.wb_sunny_rounded, color: Colors.white.withOpacity(0.3), size: 64),
+              Icon(Icons.wb_sunny_rounded,
+                  color: Colors.white.withOpacity(0.3), size: 64),
             ],
           ),
           const SizedBox(height: 16),
@@ -74,9 +83,17 @@ class WeatherCard extends StatelessWidget {
   Widget _weatherStat(String label, String value) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold)),
       ],
     );
   }

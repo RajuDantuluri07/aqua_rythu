@@ -94,12 +94,13 @@ class SupplementCalculator {
 
     // Step 1: Filter valid supplements
     final validSupplements = supplements.where((s) {
-      final inDocRange = s.type == SupplementType.feedMix && currentDoc >= s.startDoc && currentDoc <= s.endDoc;
+      final inDocRange = s.type == SupplementType.feedMix &&
+          currentDoc >= s.startDoc &&
+          currentDoc <= s.endDoc;
       if (s.isPaused) return false;
 
-      final matchesTime = s.feedingTimes
-          .map((e) => e.toLowerCase())
-          .contains(normalizedTime);
+      final matchesTime =
+          s.feedingTimes.map((e) => e.toLowerCase()).contains(normalizedTime);
 
       return inDocRange && matchesTime;
     }).toList();
@@ -114,7 +115,8 @@ class SupplementCalculator {
 
       for (final item in supplement.items) {
         // Normalize rate: If recipe is defined for X kg (feedQty), calculate per-kg rate first.
-        final double rate = (supplement.type == SupplementType.feedMix && supplement.feedQty > 0)
+        final double rate = (supplement.type == SupplementType.feedMix &&
+                supplement.feedQty > 0)
             ? item.quantity / supplement.feedQty
             : item.quantity;
 
@@ -160,9 +162,9 @@ class SupplementCalculator {
     final validSupplements = supplements.where((s) {
       if (s.type != SupplementType.waterMix) return false;
       if (s.isPaused) return false;
-      
+
       final inDocRange = currentDoc >= s.startDoc && currentDoc <= s.endDoc;
-      
+
       bool matchesTime = true;
       if (currentTimeSlot != null && s.feedingTimes.isNotEmpty) {
         matchesTime = s.feedingTimes

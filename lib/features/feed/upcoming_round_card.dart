@@ -37,17 +37,26 @@ class UpcomingRoundCard extends StatelessWidget {
                   children: [
                     Text(
                       "ROUND $round",
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8), letterSpacing: 0.5),
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF94A3B8),
+                          letterSpacing: 0.5),
                     ),
                     if (isNext) ...[
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFF2563EB),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text("NEXT", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: const Text("NEXT",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ],
@@ -55,7 +64,10 @@ class UpcomingRoundCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   time,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF94A3B8)),
+                  style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF94A3B8)),
                 ),
               ],
             ),
@@ -75,16 +87,25 @@ class UpcomingRoundCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 2),
-                    const Text("kg", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    const Text("kg",
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B))),
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text("UPCOMING", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8))),
+                  child: const Text("UPCOMING",
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF94A3B8))),
                 ),
               ],
             ),

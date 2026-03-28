@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/enums/tray_status.dart';
-import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
 
 class CompletedRoundCard extends StatelessWidget {
@@ -27,9 +26,9 @@ class CompletedRoundCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isAutoAdjusted = originalQty != null && (feedQty - originalQty!).abs() > 0.01;
+    final bool isAutoAdjusted =
+        originalQty != null && (feedQty - originalQty!).abs() > 0.01;
     final bool isIncreased = isAutoAdjusted && feedQty > originalQty!;
-    final bool isDecreased = isAutoAdjusted && feedQty < originalQty!;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s + 2),
@@ -53,23 +52,40 @@ class CompletedRoundCard extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFF10B981),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text("DONE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: const Text("DONE",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
                       ),
                       if (isAutoAdjusted) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: isIncreased ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                            color: isIncreased
+                                ? const Color(0xFFECFDF5)
+                                : const Color(0xFFFFFBEB),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: isIncreased ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A)),
+                            border: Border.all(
+                                color: isIncreased
+                                    ? const Color(0xFFA7F3D0)
+                                    : const Color(0xFFFDE68A)),
                           ),
-                          child: Text("ADJUSTED", style: TextStyle(color: isIncreased ? const Color(0xFF059669) : const Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
+                          child: Text("ADJUSTED",
+                              style: TextStyle(
+                                  color: isIncreased
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFFD97706),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ],
@@ -102,7 +118,11 @@ class CompletedRoundCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 2),
-                      const Text("kg", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const Text("kg",
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B))),
                     ],
                   ),
                   if (isAutoAdjusted && originalQty != null)
@@ -135,7 +155,8 @@ class CompletedRoundCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.medication_liquid_rounded, size: 14, color: Colors.indigo.shade700),
+                      Icon(Icons.medication_liquid_rounded,
+                          size: 14, color: Colors.indigo.shade700),
                       const SizedBox(width: 6),
                       Text(
                         "SUPPLEMENTS APPLIED",
@@ -164,7 +185,8 @@ class CompletedRoundCard extends StatelessWidget {
 
                       return Row(
                         children: [
-                          Icon(unitIcon, size: 12, color: Colors.indigo.shade300),
+                          Icon(unitIcon,
+                              size: 12, color: Colors.indigo.shade300),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -188,7 +210,9 @@ class CompletedRoundCard extends StatelessWidget {
           ],
 
           /// 📥 TRAY SUMMARY BOX
-          if (showTraySummary && trayStatuses != null && trayStatuses!.isNotEmpty) ...[
+          if (showTraySummary &&
+              trayStatuses != null &&
+              trayStatuses!.isNotEmpty) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
@@ -200,16 +224,23 @@ class CompletedRoundCard extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: List.generate(4, (i) {
-                  final status = (trayStatuses != null && trayStatuses!.length > i) ? trayStatuses![i] : null;
+                  final status =
+                      (trayStatuses != null && trayStatuses!.length > i)
+                          ? trayStatuses![i]
+                          : null;
                   return Column(
                     children: [
                       Text(
                         "TRAY ${i + 1}",
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
+                        style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF94A3B8)),
                       ),
                       const SizedBox(height: 4),
-                      Text( // Fix #1: Removed unnecessary string interpolation
-                        status?.label ?? "EMPTY", 
+                      Text(
+                        // Fix #1: Removed unnecessary string interpolation
+                        status?.label ?? "EMPTY",
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -219,7 +250,10 @@ class CompletedRoundCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         "${(feedQty * 10).toInt()}g", // Logic: ~10% per tray approx
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   );
@@ -229,23 +263,24 @@ class CompletedRoundCard extends StatelessWidget {
           ],
 
           if (onLogTray != null) ...[
-             const SizedBox(height: 12),
-             SizedBox(
-               width: double.infinity,
-               child: OutlinedButton.icon(
-                 onPressed: onLogTray,
-                 icon: const Icon(Icons.add_task_rounded, size: 16),
-                 label: Text(trayStatuses != null ? "Update Tray" : "Log Tray Outcome"),
-                 style: OutlinedButton.styleFrom(
-                   padding: const EdgeInsets.symmetric(vertical: 10),
-                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                 ),
-               ),
-             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onLogTray,
+                icon: const Icon(Icons.add_task_rounded, size: 16),
+                label: Text(
+                    trayStatuses != null ? "Update Tray" : "Log Tray Outcome"),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
           ],
         ],
       ),
     );
-
   }
 }

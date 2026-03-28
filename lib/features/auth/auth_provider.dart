@@ -11,7 +11,11 @@ class AuthState {
     this.errorMessage,
   });
 
-  AuthState copyWith({bool? isAuthenticated, bool? isLoading, String? errorMessage, bool clearError = false}) {
+  AuthState copyWith(
+      {bool? isAuthenticated,
+      bool? isLoading,
+      String? errorMessage,
+      bool clearError = false}) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       isLoading: isLoading ?? this.isLoading,
@@ -24,12 +28,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier() : super(AuthState());
 
   Future<bool> signInWithOtp(String phone) async {
-  // TEMP MOCK LOGIC (Phase 1: UI only)
-  await Future.delayed(const Duration(seconds: 1));
+    // TEMP MOCK LOGIC (Phase 1: UI only)
+    await Future.delayed(const Duration(seconds: 1));
 
-  // Always succeed for now
-  return true;
-}
+    // Always succeed for now
+    return true;
+  }
 
   /// Simulate checking local storage/session on app start
   Future<void> checkSession() async {
@@ -43,7 +47,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true);
     await Future.delayed(const Duration(seconds: 1));
 
-    if (otp == "123456") { // "Correct" OTP for simulation
+    if (otp == "123456") {
+      // "Correct" OTP for simulation
       state = AuthState(isAuthenticated: true, isLoading: false);
     } else {
       state = state.copyWith(

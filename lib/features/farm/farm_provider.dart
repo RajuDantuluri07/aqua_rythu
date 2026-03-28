@@ -23,7 +23,7 @@ class Pond {
     this.numTrays = 4,
     this.status = PondStatus.active,
   });
-  
+
   Pond copyWith({
     String? id,
     String? name,
@@ -53,7 +53,8 @@ class Pond {
 
   int calculateDoc(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);
-    final start = DateTime(stockingDate.year, stockingDate.month, stockingDate.day);
+    final start =
+        DateTime(stockingDate.year, stockingDate.month, stockingDate.day);
     final diff = today.difference(start).inDays + 1;
     return diff > 0 ? diff : 1; // Default to Day 1 if date is in future
   }
@@ -246,7 +247,8 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
-  void resetPond(String pondId, {
+  void resetPond(
+    String pondId, {
     required int seedCount,
     required int plSize,
     required DateTime stockingDate,
@@ -276,8 +278,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
   }
 }
 
-final farmProvider =
-    StateNotifierProvider<FarmNotifier, FarmState>((ref) {
+final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
   return FarmNotifier();
 });
 
@@ -288,6 +289,16 @@ final currentDateProvider = Provider<DateTime>((ref) {
   final timer = Timer(const Duration(hours: 1), () => ref.invalidateSelf());
   ref.onDispose(() => timer.cancel());
   return DateTime.now();
+});
+
+final todayProvider = Provider<DateTime>((ref) {
+  final now = ref.watch(currentDateProvider);
+  return DateTime(now.year, now.month, now.day);
+});
+
+final oneWeekAgoProvider = Provider<DateTime>((ref) {
+  final today = ref.watch(todayProvider);
+  return today.subtract(const Duration(days: 7));
 });
 
 final docProvider = Provider.family<int, String>((ref, pondId) {

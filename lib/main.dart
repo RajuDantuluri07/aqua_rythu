@@ -19,10 +19,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Aqua Rythu',
-
       theme: AppTheme.lightTheme,
       initialRoute: AppRoutes.splash,
-
       routes: AppRoutes.routes,
     );
   }

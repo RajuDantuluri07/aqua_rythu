@@ -10,7 +10,8 @@ class FeedCalculationEngine {
     final survival = _survivalRate(doc);
     // Use actual ABW if available, otherwise use standard curve
     final weight = currentAbw ?? _avgWeight(doc);
-    final feedPct = _feedPercent(weight); // Feed % depends on Weight, not just DOC
+    final feedPct =
+        _feedPercent(weight); // Feed % depends on Weight, not just DOC
 
     final biomass = (seedCount * survival * weight) / 1000;
 

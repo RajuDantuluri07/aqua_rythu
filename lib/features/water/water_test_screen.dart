@@ -24,12 +24,54 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
 
   // Validation ranges
   static const Map<String, Map<String, dynamic>> _ranges = {
-    'ph': {'min': 0.0, 'max': 14.0, 'optimalMin': 7.5, 'optimalMax': 8.5, 'unit': '', 'name': 'pH'},
-    'do': {'min': 0.0, 'max': 25.0, 'optimalMin': 4.0, 'optimalMax': 8.0, 'unit': 'ppm', 'name': 'DO'},
-    'salinity': {'min': 0.0, 'max': 100.0, 'optimalMin': 10.0, 'optimalMax': 25.0, 'unit': 'ppt', 'name': 'Salinity'},
-    'alkalinity': {'min': 0.0, 'max': 1000.0, 'optimalMin': 100.0, 'optimalMax': 200.0, 'unit': 'ppm', 'name': 'Alkalinity'},
-    'ammonia': {'min': 0.0, 'max': 10.0, 'optimalMin': 0.0, 'optimalMax': 0.1, 'unit': 'ppm', 'name': 'Ammonia'},
-    'nitrite': {'min': 0.0, 'max': 10.0, 'optimalMin': 0.0, 'optimalMax': 0.1, 'unit': 'ppm', 'name': 'Nitrite'},
+    'ph': {
+      'min': 0.0,
+      'max': 14.0,
+      'optimalMin': 7.5,
+      'optimalMax': 8.5,
+      'unit': '',
+      'name': 'pH'
+    },
+    'do': {
+      'min': 0.0,
+      'max': 25.0,
+      'optimalMin': 4.0,
+      'optimalMax': 8.0,
+      'unit': 'ppm',
+      'name': 'DO'
+    },
+    'salinity': {
+      'min': 0.0,
+      'max': 100.0,
+      'optimalMin': 10.0,
+      'optimalMax': 25.0,
+      'unit': 'ppt',
+      'name': 'Salinity'
+    },
+    'alkalinity': {
+      'min': 0.0,
+      'max': 1000.0,
+      'optimalMin': 100.0,
+      'optimalMax': 200.0,
+      'unit': 'ppm',
+      'name': 'Alkalinity'
+    },
+    'ammonia': {
+      'min': 0.0,
+      'max': 10.0,
+      'optimalMin': 0.0,
+      'optimalMax': 0.1,
+      'unit': 'ppm',
+      'name': 'Ammonia'
+    },
+    'nitrite': {
+      'min': 0.0,
+      'max': 10.0,
+      'optimalMin': 0.0,
+      'optimalMax': 0.1,
+      'unit': 'ppm',
+      'name': 'Nitrite'
+    },
   };
 
   @override
@@ -43,37 +85,6 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     super.dispose();
   }
 
-  String? _getRecommendation(String param, double value) {
-    switch (param) {
-      case 'ph':
-        if (value < 7.5) return "Add agricultural lime to raise pH";
-        if (value > 8.5) return "Stop lime application, add organic matter";
-        return null;
-      case 'do':
-        if (value < 4.0) return "Increase aeration, reduce feeding";
-        if (value < 5.0) return "Monitor aeration, slight improvement needed";
-        return null;
-      case 'salinity':
-        if (value < 10.0) return "Increase salt or brackish water inflow";
-        if (value > 25.0) return "Add fresh water to dilute salinity";
-        return null;
-      case 'alkalinity':
-        if (value < 100.0) return "Add sodium bicarbonate or lime";
-        if (value > 200.0) return "Reduce lime application";
-        return null;
-      case 'ammonia':
-        if (value > 0.3) return "CRITICAL: Reduce feeding by 50%, increase aeration, add probiotics";
-        if (value > 0.1) return "Reduce feeding by 20%, increase aeration";
-        return null;
-      case 'nitrite':
-        if (value > 0.3) return "CRITICAL: Salt treatment (1-2 ppt), reduce feeding";
-        if (value > 0.1) return "Add salt (0.5-1 ppt), reduce feeding";
-        return null;
-      default:
-        return null;
-    }
-  }
-
   void _saveWaterTest() {
     if (_formKey.currentState?.validate() ?? false) {
       final ph = double.tryParse(_phController.text) ?? 0;
@@ -85,14 +96,14 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
       final doc = ref.read(docProvider(widget.pondId));
 
       ref.read(waterProvider(widget.pondId).notifier).addLog(
-        doc: doc,
-        ph: ph,
-        dissolvedOxygen: doVal,
-        salinity: sal,
-        alkalinity: alk,
-        ammonia: ammonia,
-        nitrite: nitrite,
-      );
+            doc: doc,
+            ph: ph,
+            dissolvedOxygen: doVal,
+            salinity: sal,
+            alkalinity: alk,
+            ammonia: ammonia,
+            nitrite: nitrite,
+          );
 
       // Clear inputs after save
       _phController.clear();
@@ -104,15 +115,30 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
 
       // Calculate health score for snackbar message
       int score = 100;
-      if (doVal < 4) score -= 20;
-      else if (doVal < 5) score -= 10;
-      if (ph < 7.5 || ph > 8.5) score -= 10;
-      if (sal < 10 || sal > 25) score -= 10;
-      if (alk < 100 || alk > 200) score -= 10;
-      if (ammonia > 0.3) score -= 20;
-      else if (ammonia > 0.1) score -= 10;
-      if (nitrite > 0.3) score -= 20;
-      else if (nitrite > 0.1) score -= 10;
+      if (doVal < 4) {
+        score -= 20;
+      } else if (doVal < 5) {
+        score -= 10;
+      }
+      if (ph < 7.5 || ph > 8.5) {
+        score -= 10;
+      }
+      if (sal < 10 || sal > 25) {
+        score -= 10;
+      }
+      if (alk < 100 || alk > 200) {
+        score -= 10;
+      }
+      if (ammonia > 0.3) {
+        score -= 20;
+      } else if (ammonia > 0.1) {
+        score -= 10;
+      }
+      if (nitrite > 0.3) {
+        score -= 20;
+      } else if (nitrite > 0.1) {
+        score -= 10;
+      }
 
       String snackMsg = "Saved successfully";
       Color snackColor = Colors.teal;
@@ -135,7 +161,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
               Icon(snackIcon, color: Colors.white),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(snackMsg, style: const TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(snackMsg,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -151,31 +178,15 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     }
   }
 
-  String? _validateRange(double? val, double min, double max, String name, [String unit = ""]) {
-    if (val == null) return 'Enter $name';
-    final unitStr = unit.isNotEmpty ? " $unit" : "";
-    if (val < min || val > max) return '$name should be $min-$max$unitStr';
-    return null;
-  }
-
-  bool get _hasAnyInput {
-    return _ammoniaController.text.isNotEmpty ||
-        _phController.text.isNotEmpty ||
-        _doController.text.isNotEmpty ||
-        _salinityController.text.isNotEmpty ||
-        _alkalinityController.text.isNotEmpty ||
-        _nitriteController.text.isNotEmpty;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final doc = ref.watch(docProvider(widget.pondId));
     final logs = ref.watch(waterProvider(widget.pondId));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("Water Quality Test", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Water Quality Test",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
@@ -185,7 +196,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
         child: Column(
           children: [
             // Latest Test Results Summary Card
-            if (logs.isNotEmpty) 
+            if (logs.isNotEmpty)
               Builder(builder: (context) {
                 final latest = logs.first;
                 final statusColor = latest.healthColor;
@@ -199,7 +210,10 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                     ),
                     borderRadius: AppRadius.rBase,
                     boxShadow: [
-                      BoxShadow(color: statusColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
+                      BoxShadow(
+                          color: statusColor.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4)),
                     ],
                   ),
                   child: Column(
@@ -207,13 +221,24 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("LATEST TEST STATUS", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
+                          const Text("LATEST TEST STATUS",
+                              style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  letterSpacing: 0.5)),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(10)),
                             child: Text(
                               "${latest.healthScore}/100",
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
@@ -221,35 +246,49 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                       const SizedBox(height: 8),
                       Text(
                         latest.healthStatus.toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         "DOC ${latest.doc} • ${DateFormat('dd MMM, hh:mm a').format(latest.date)}",
-                        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500),
                       ),
                       if (latest.recommendations.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         const Align(
                           alignment: Alignment.centerLeft,
-                          child: Text("RECOMMENDATIONS:", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10)),
+                          child: Text("RECOMMENDATIONS:",
+                              style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10)),
                         ),
                         const SizedBox(height: 6),
                         ...latest.recommendations.map((warning) => Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle_outline, color: Colors.white70, size: 14),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  warning,
-                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                                ),
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_outline,
+                                      color: Colors.white70, size: 14),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      warning,
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        )),
+                            )),
                       ],
                     ],
                   ),
@@ -264,7 +303,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _buildInput(
+                      Expanded(
+                          child: _buildInput(
                         label: "pH Level",
                         controller: _phController,
                         icon: Icons.opacity_rounded,
@@ -272,7 +312,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                         paramKey: 'ph',
                       )),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInput(
+                      Expanded(
+                          child: _buildInput(
                         label: "Dissolved Oxygen",
                         controller: _doController,
                         icon: Icons.water,
@@ -285,7 +326,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Expanded(child: _buildInput(
+                      Expanded(
+                          child: _buildInput(
                         label: "Salinity",
                         controller: _salinityController,
                         icon: Icons.blur_on_rounded,
@@ -294,7 +336,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                         paramKey: 'salinity',
                       )),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInput(
+                      Expanded(
+                          child: _buildInput(
                         label: "Alkalinity",
                         controller: _alkalinityController,
                         icon: Icons.science_outlined,
@@ -307,7 +350,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Expanded(child: _buildInput(
+                      Expanded(
+                          child: _buildInput(
                         label: "Ammonia",
                         controller: _ammoniaController,
                         icon: Icons.warning_amber_rounded,
@@ -316,7 +360,8 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                         paramKey: 'ammonia',
                       )),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInput(
+                      Expanded(
+                          child: _buildInput(
                         label: "Nitrite",
                         controller: _nitriteController,
                         icon: Icons.warning_rounded,
@@ -326,9 +371,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                       )),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -337,17 +380,19 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.success,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: AppRadius.rs),
+                        shape:
+                            RoundedRectangleBorder(borderRadius: AppRadius.rs),
                       ),
-                      child: const Text("SAVE WATER LOG", style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text("SAVE WATER LOG",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
-
                   const SizedBox(height: 32),
-
                   const Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("Recent Logs", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text("Recent Logs",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -395,7 +440,11 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
       children: [
         Row(
           children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+            Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: AppColors.textSecondary)),
             if (currentValue != null) ...[
               const SizedBox(width: 6),
               Text(
@@ -418,13 +467,17 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
             border: OutlineInputBorder(
               borderRadius: AppRadius.rs,
               borderSide: BorderSide(
-                color: currentValue != null && !isOptimal ? Colors.orange : AppColors.border,
+                color: currentValue != null && !isOptimal
+                    ? Colors.orange
+                    : AppColors.border,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: AppRadius.rs,
               borderSide: BorderSide(
-                color: currentValue != null && !isOptimal ? Colors.orange : AppColors.border,
+                color: currentValue != null && !isOptimal
+                    ? Colors.orange
+                    : AppColors.border,
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -446,7 +499,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
         const SizedBox(height: 2),
         Text(
           "Optimal: ${range['optimalMin']}-${range['optimalMax']}${range['unit']}",
-          style: TextStyle(fontSize: 9, color: AppColors.textTertiary),
+          style: const TextStyle(fontSize: 9, color: AppColors.textTertiary),
         ),
       ],
     );
@@ -461,15 +514,69 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
       ),
       child: const Row(
         children: [
-          SizedBox(width: 60, child: Text("DATE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 40, child: Text("DOC", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 45, child: Text("pH", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 45, child: Text("DO", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 50, child: Text("Sal", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 55, child: Text("Alk", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 55, child: Text("NH3", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 55, child: Text("NO2", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
-          SizedBox(width: 55, child: Text("Score", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textTertiary))),
+          SizedBox(
+              width: 60,
+              child: Text("DATE",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 40,
+              child: Text("DOC",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 45,
+              child: Text("pH",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 45,
+              child: Text("DO",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 50,
+              child: Text("Sal",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 55,
+              child: Text("Alk",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 55,
+              child: Text("NH3",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 55,
+              child: Text("NO2",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
+          SizedBox(
+              width: 55,
+              child: Text("Score",
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textTertiary))),
         ],
       ),
     );
@@ -483,14 +590,56 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
       ),
       child: Row(
         children: [
-          SizedBox(width: 60, child: Text(DateFormat("dd MMM").format(log.date), style: const TextStyle(fontSize: 11))),
-          SizedBox(width: 40, child: Text("${log.doc}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
-          SizedBox(width: 45, child: Text(log.ph.toStringAsFixed(1), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _getParameterColor(log.ph, 'ph')))),
-          SizedBox(width: 45, child: Text(log.dissolvedOxygen.toStringAsFixed(1), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _getParameterColor(log.dissolvedOxygen, 'do')))),
-          SizedBox(width: 50, child: Text(log.salinity.toStringAsFixed(0), style: TextStyle(fontSize: 11, color: _getParameterColor(log.salinity, 'salinity')))),
-          SizedBox(width: 55, child: Text(log.alkalinity.toStringAsFixed(0), style: TextStyle(fontSize: 11, color: _getParameterColor(log.alkalinity, 'alkalinity')))),
-          SizedBox(width: 55, child: Text(log.ammonia.toStringAsFixed(2), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _getParameterColor(log.ammonia, 'ammonia')))),
-          SizedBox(width: 55, child: Text(log.nitrite.toStringAsFixed(2), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _getParameterColor(log.nitrite, 'nitrite')))),
+          SizedBox(
+              width: 60,
+              child: Text(DateFormat("dd MMM").format(log.date),
+                  style: const TextStyle(fontSize: 11))),
+          SizedBox(
+              width: 40,
+              child: Text("${log.doc}",
+                  style: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w500))),
+          SizedBox(
+              width: 45,
+              child: Text(log.ph.toStringAsFixed(1),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _getParameterColor(log.ph, 'ph')))),
+          SizedBox(
+              width: 45,
+              child: Text(log.dissolvedOxygen.toStringAsFixed(1),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _getParameterColor(log.dissolvedOxygen, 'do')))),
+          SizedBox(
+              width: 50,
+              child: Text(log.salinity.toStringAsFixed(0),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: _getParameterColor(log.salinity, 'salinity')))),
+          SizedBox(
+              width: 55,
+              child: Text(log.alkalinity.toStringAsFixed(0),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color:
+                          _getParameterColor(log.alkalinity, 'alkalinity')))),
+          SizedBox(
+              width: 55,
+              child: Text(log.ammonia.toStringAsFixed(2),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _getParameterColor(log.ammonia, 'ammonia')))),
+          SizedBox(
+              width: 55,
+              child: Text(log.nitrite.toStringAsFixed(2),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _getParameterColor(log.nitrite, 'nitrite')))),
           SizedBox(
             width: 55,
             child: Container(
@@ -502,7 +651,10 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
               child: Text(
                 "${log.healthScore}",
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: log.healthColor),
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: log.healthColor),
               ),
             ),
           ),

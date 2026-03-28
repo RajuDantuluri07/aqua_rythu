@@ -37,8 +37,8 @@ class FeedEngineConstants {
   static const double lastMealFactor = 1.2;
 
   /// Tray-based adjustment multipliers (PRD 5.4)
-  static const double heavyLeftoverMultiplier = 0.7;  // -30%
+  static const double heavyLeftoverMultiplier = 0.7; // -30%
   static const double mediumLeftoverMultiplier = 0.85; // -15%
   static const double slightLeftoverMultiplier = 0.95; // -5%
-  static const double emptyTrayMultiplier = 1.0;      // 0%
+  static const double emptyTrayMultiplier = 1.0; // 0%
 }
