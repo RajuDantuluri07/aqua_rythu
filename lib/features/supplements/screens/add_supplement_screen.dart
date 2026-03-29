@@ -403,27 +403,33 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             ] else ...[
               AppSpacing.hBase,
-              const Text("Date", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Date & Time", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              InkWell(
-                onTap: () => _pickDate(
-                  current: _waterDate,
-                  onPicked: (date) => setState(() => _waterDate = date),
-                ),
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: "Date"),
-                  child: Text(DateFormat('dd MMM yyyy').format(_waterDate)),
-                ),
-              ),
-              AppSpacing.hBase,
-              const Text("Time", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: _pickTime,
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: "Time"),
-                  child: Text(_waterTime.format(context)),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _pickDate(
+                        current: _waterDate,
+                        onPicked: (date) => setState(() => _waterDate = date),
+                      ),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: "Date"),
+                        child: Text(DateFormat('dd MMM yyyy').format(_waterDate)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickTime,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: "Time"),
+                        child: Text(_waterTime.format(context)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               AppSpacing.hBase,
               const Text("Repeat", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -450,6 +456,23 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   },
                 ),
               ],
+              AppSpacing.hBase,
+              const Text("Apply To", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: ["This Pond", "All Ponds"].map((opt) {
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(opt),
+                        selected: _applyTo == opt,
+                        onSelected: (_) => setState(() => _applyTo = opt),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ],
             AppSpacing.hXl,
             SizedBox(

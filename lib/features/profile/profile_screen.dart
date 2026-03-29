@@ -5,6 +5,7 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_provider.dart';
 import '../farm/farm_provider.dart';
+import 'user_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -12,6 +13,7 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final farmState = ref.watch(farmProvider);
+    final userProfile = ref.watch(userProvider);
 
     return Scaffold(
       // backgroundColor is now handled by the global theme
@@ -30,10 +32,10 @@ class ProfileScreen extends ConsumerWidget {
               children: [
                 Stack(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 40,
                       backgroundImage: NetworkImage(
-                        "https://i.pravatar.cc/150?img=3",
+                        userProfile.profileImageUrl ?? "https://i.pravatar.cc/150?img=3",
                       ),
                     ),
                     Positioned(
@@ -56,14 +58,14 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "Rajesh Kumar",
+                  userProfile.name,
                   style: Theme.of(context)
                       .textTheme
                       .titleLarge
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text("+91 98765 43210",
+                Text(userProfile.phoneNumber,
                     style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),

@@ -33,10 +33,10 @@ class FeedScheduleScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.cardBg,
       appBar: AppBar(
-        backgroundColor: AppColors.cardBg,
-        elevation: 0,
+        backgroundColor: Colors.white,
+        elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF475569)),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E293B)),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
@@ -45,23 +45,24 @@ class FeedScheduleScreen extends ConsumerWidget {
             const Text(
               "Feed Schedule",
               style: TextStyle(
-                color: AppColors.textPrimary,
+                color: Color(0xFF1E293B),
                 fontSize: 20,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w900,
               ),
             ),
             Text(
               "$pondName • $docRange",
               style: const TextStyle(
                 color: AppColors.textSecondary,
-                fontSize: 14,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.orange),
+            icon: const Icon(Icons.info_outline, color: Color(0xFF22C55E), size: 24),
             onPressed: () {},
           ),
         ],
@@ -95,7 +96,11 @@ class FeedScheduleScreen extends ConsumerWidget {
                         // Table Header
                         _buildTableHeader(),
                         // Data Rows (Show all days for full reference)
-                        ...days.map((d) => _FeedRow(pondId: pondId, day: d)),
+                        ...(days.asMap().entries.map((entry) => _FeedRow(
+                          pondId: pondId,
+                          day: entry.value,
+                          index: entry.key,
+                        )).toList()),
                       ],
                     ),
                   ),
@@ -113,9 +118,9 @@ class FeedScheduleScreen extends ConsumerWidget {
 
   Widget _buildTableHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: const BoxDecoration(
-        color: Color(0xFFF8FAFB),
+        color: Color(0xFF1E293B),
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(15),
           topRight: Radius.circular(15),
@@ -123,13 +128,13 @@ class FeedScheduleScreen extends ConsumerWidget {
       ),
       child: const Row(
         children: [
-          Expanded(flex: 2, child: _HeaderCell("DOC", align: TextAlign.center)),
-          Expanded(flex: 3, child: _HeaderCell("R1", align: TextAlign.center)),
-          Expanded(flex: 3, child: _HeaderCell("R2", align: TextAlign.center)),
-          Expanded(flex: 3, child: _HeaderCell("R3", align: TextAlign.center)),
-          Expanded(flex: 3, child: _HeaderCell("R4", align: TextAlign.center)),
+          Expanded(flex: 2, child: _HeaderCell("DOC", align: TextAlign.center, isWhite: true)),
+          Expanded(flex: 3, child: _HeaderCell("R1", align: TextAlign.center, isWhite: true)),
+          Expanded(flex: 3, child: _HeaderCell("R2", align: TextAlign.center, isWhite: true)),
+          Expanded(flex: 3, child: _HeaderCell("R3", align: TextAlign.center, isWhite: true)),
+          Expanded(flex: 3, child: _HeaderCell("R4", align: TextAlign.center, isWhite: true)),
           Expanded(
-              flex: 3, child: _HeaderCell("TOTAL", align: TextAlign.right)),
+              flex: 3, child: _HeaderCell("TOTAL (kg)", align: TextAlign.right, isWhite: true)),
         ],
       ),
     );
@@ -139,36 +144,51 @@ class FeedScheduleScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
+        gradient: LinearGradient(
+          colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: AppRadius.rBase,
-        border: Border.all(color: const Color(0xFFFFEED9)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0xFF22C55E).withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(AppSpacing.s),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Colors.white.withOpacity(0.25),
               borderRadius: AppRadius.rs,
             ),
-            child: const Icon(Icons.bar_chart, color: Colors.orange, size: 24),
+            child: const Icon(Icons.bar_chart_rounded, color: Colors.white, size: 26),
           ),
           AppSpacing.wBase,
-          const Text(
-            "Total Projected Feed",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E293B),
-            ),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Total Projected Feed",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
           ),
           const Spacer(),
           Text(
             "${total.toStringAsFixed(1)} kg",
             style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.orange,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
             ),
           ),
         ],
@@ -183,24 +203,28 @@ class FeedScheduleScreen extends ConsumerWidget {
           left: AppSpacing.base,
           right: AppSpacing.base,
           bottom: AppSpacing.xl,
-          top: AppSpacing.m),
+          top: AppSpacing.l),
       child: ElevatedButton.icon(
         onPressed: () {
           ref.read(feedPlanProvider.notifier).savePlan(pondId);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Feed Schedule Saved Successfully")),
+            const SnackBar(
+              content: Text("Feed Schedule Saved Successfully"),
+              backgroundColor: Color(0xFF22C55E),
+            ),
           );
         },
-        icon: const Icon(Icons.save, color: Colors.white),
+        icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
         label: const Text(
           "Save Schedule",
           style: TextStyle(
-              fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF22C55E),
           minimumSize: const Size(double.infinity, 56),
           shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
+          elevation: 3,
         ),
       ),
     );
@@ -210,17 +234,19 @@ class FeedScheduleScreen extends ConsumerWidget {
 class _HeaderCell extends StatelessWidget {
   final String label;
   final TextAlign align;
-  const _HeaderCell(this.label, {this.align = TextAlign.center});
+  final bool isWhite;
+  const _HeaderCell(this.label, {this.align = TextAlign.center, this.isWhite = false});
 
   @override
   Widget build(BuildContext context) {
     return Text(
       label,
       textAlign: align,
-      style: const TextStyle(
-        color: AppColors.textTertiary,
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
+      style: TextStyle(
+        color: isWhite ? Colors.white : AppColors.textTertiary,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.3,
       ),
     );
   }
@@ -229,7 +255,8 @@ class _HeaderCell extends StatelessWidget {
 class _FeedRow extends ConsumerStatefulWidget {
   final String pondId;
   final FeedDayPlan day;
-  const _FeedRow({required this.pondId, required this.day});
+  final int index;
+  const _FeedRow({required this.pondId, required this.day, required this.index});
 
   @override
   ConsumerState<_FeedRow> createState() => _FeedRowState();
@@ -285,13 +312,17 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   Widget build(BuildContext context) {
     // Optimized: widget.day is already the updated object from parent
     final total = widget.day.total;
+    final isEvenRow = widget.index.isEven;
+    final backgroundColor = isEvenRow ? Colors.white : Color(0xFFF8FAFB);
 
     return Container(
-      decoration: const BoxDecoration(
-        border:
-            Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: const Border(
+          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+        ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       child: Row(
         children: [
           Expanded(
@@ -300,9 +331,9 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
               "${widget.day.doc}",
               textAlign: TextAlign.left,
               style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: Colors.grey,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: Color(0xFF1E293B),
               ),
             ),
           ),
@@ -316,8 +347,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
               textAlign: TextAlign.right,
               style: const TextStyle(
                 color: Colors.black87,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
               ),
             ),
           ),
@@ -330,30 +361,34 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     return Expanded(
       flex: 3,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         child: SizedBox(
-          height: 36,
+          height: 44,
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textAlign: TextAlign.center,
             onChanged: (val) => _onChanged(index),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1E293B),
+            ),
             decoration: InputDecoration(
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Colors.blue, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFF22C55E), width: 2),
               ),
             ),
           ),

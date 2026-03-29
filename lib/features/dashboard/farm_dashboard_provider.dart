@@ -4,6 +4,7 @@ import '../supplements/water_task_engine.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_plan_provider.dart';
 import '../pond/growth_provider.dart';
+import '../profile/farm_settings_provider.dart';
 import '../../core/utils/logger.dart';
 
 /// State for the Farm Dashboard Metrics
@@ -12,12 +13,14 @@ class FarmDashboardState {
   final double totalBiomass;
   final double avgGrowth;
   final double fcr;
+  final String healthIndicator; // "Healthy", "Caution", "Critical"
 
   const FarmDashboardState({
     this.totalFeed = 0,
     this.totalBiomass = 0,
     this.avgGrowth = 0,
     this.fcr = 0,
+    this.healthIndicator = "Healthy",
   });
 }
 
@@ -25,6 +28,7 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   AppLogger.debug("🔥 FARM DASHBOARD PROVIDER RUNNING 🔥");
 
   final farmState = ref.watch(farmProvider);
+  final farmSettings = ref.watch(farmSettingsProvider);
   final currentFarm = farmState.currentFarm;
 
   if (currentFarm == null) {
@@ -34,39 +38,44 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   double totalFeed = 0;
   double totalBiomass = 0;
   double totalGrowthRate = 0;
-  int pondCount = currentFarm.ponds.length;
+  int pondCount = currentFarm.ponds.where((p) => p.status.name == 'active').length;
+
+  // Get survival rates based on farm type and settings
+  final isSemiIntensive = farmSettings.farmType == "Semi-Intensive";
+  final survivalEarlyStage = isSemiIntensive ? 0.98 : 0.95;
+  final survivalMiddleStage = isSemiIntensive ? 0.95 : 0.90;
+  final survivalLateStage = isSemiIntensive ? 0.92 : 0.85;
 
   final planMap = ref.watch(feedPlanProvider);
 
-  // ✅ SINGLE CLEAN LOOP
-  for (var pond in currentFarm.ponds) {
+  // ✅ SINGLE CLEAN LOOP - Only count active ponds
+  for (var pond in currentFarm.ponds.where((p) => p.status.name == 'active')) {
     final currentDoc = ref.watch(docProvider(pond.id));
     final growthLogs = ref.watch(growthProvider(pond.id));
 
-    // Biomass
+    // Biomass calculation with farm-specific survival rates
     if (growthLogs.isNotEmpty) {
       final lastLog = growthLogs.first; // Newest first
+      
       // Estimate biomass: SeedCount * Survival * ABW / 1000
-      // Assuming simple survival decay for dashboard view
-      double survival = 1.0;
+      // Survival rates based on farm type and DOC stage
+      double survival = survivalEarlyStage;
       if (currentDoc > 60) {
-        survival = 0.90;
+        survival = survivalLateStage;
       } else if (currentDoc > 30) {
-        survival = 0.95;
-      } else {
-        survival = 1.0;
+        survival = survivalMiddleStage;
       }
 
       totalBiomass +=
           (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
 
-      // Growth
+      // Growth rate (ABW per day)
       if (currentDoc > 0) {
         totalGrowthRate += (lastLog.averageBodyWeight / currentDoc);
       }
     }
 
-    // Feed
+    // Feed calculation
     final plan = planMap[pond.id];
     if (plan != null && plan.days.isNotEmpty) {
       totalFeed += plan.days
@@ -78,16 +87,24 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   }
 
   final double avgGrowth = pondCount > 0 ? totalGrowthRate / pondCount : 0;
-
   final double fcr = totalBiomass > 0 ? totalFeed / totalBiomass : 0;
 
-  AppLogger.debug("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass");
+  // Health indicator based on FCR
+  String healthIndicator = "Healthy";
+  if (fcr > 2.5) {
+    healthIndicator = "Critical"; // High FCR indicates issues
+  } else if (fcr > 2.0) {
+    healthIndicator = "Caution";
+  }
+
+  AppLogger.debug("DEBUG → Feed: $totalFeed | Biomass: $totalBiomass | FCR: $fcr");
 
   return FarmDashboardState(
     totalFeed: totalFeed,
     totalBiomass: totalBiomass,
     avgGrowth: avgGrowth,
     fcr: fcr,
+    healthIndicator: healthIndicator,
   );
 });
 

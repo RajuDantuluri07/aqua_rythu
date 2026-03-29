@@ -74,32 +74,107 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
     super.dispose();
   }
 
+  String? _validateArea(String? value) {
+    if (value == null || value.isEmpty) {
+      return "Area is required";
+    }
+    final area = double.tryParse(value);
+    if (area == null) {
+      return "Enter a valid number";
+    }
+    if (area <= 0) {
+      return "Area must be greater than 0";
+    }
+    if (area > 100) {
+      return "Area seems too large. Max: 100 acres";
+    }
+    return null;
+  }
+
+  String? _validateSeedCount(String? value) {
+    if (value == null || value.isEmpty) {
+      return "Seed count is required";
+    }
+    final count = int.tryParse(value);
+    if (count == null) {
+      return "Enter a valid whole number";
+    }
+    if (count <= 0) {
+      return "Seed count must be greater than 0";
+    }
+    if (count > 10000000) {
+      return "Seed count seems too large (max: 10M)";
+    }
+    return null;
+  }
+
+  String? _validatePlSize(String? value) {
+    if (value == null || value.isEmpty) {
+      return "PL size is required";
+    }
+    final size = int.tryParse(value);
+    if (size == null) {
+      return "Enter a valid whole number";
+    }
+    if (size <= 0) {
+      return "PL size must be greater than 0";
+    }
+    if (size > 50) {
+      return "PL size seems too large (typical: 5-30mm)";
+    }
+    return null;
+  }
+
+  String? _validateTrays(String? value) {
+    if (value == null || value.isEmpty) {
+      return "Number of trays is required";
+    }
+    final trays = int.tryParse(value);
+    if (trays == null) {
+      return "Enter a valid whole number";
+    }
+    if (trays <= 0) {
+      return "Must have at least 1 tray";
+    }
+    if (trays > 100) {
+      return "Number of trays seems too large (typical: 1-20)";
+    }
+    return null;
+  }
+
   void _save(String pondId) {
     if (_formKey.currentState!.validate()) {
-      final seedCount = int.parse(_seedCountController.text);
-      final plSize = int.parse(_plSizeController.text);
+      try {
+        final seedCount = int.parse(_seedCountController.text);
+        final plSize = int.parse(_plSizeController.text);
+        final numTrays = int.parse(_traysController.text);
 
-      ref.read(farmProvider.notifier).updatePond(
-            pondId: pondId,
-            name: _nameController.text,
-            area: double.parse(_areaController.text),
-            seedCount: seedCount,
-            plSize: plSize,
-            stockingDate: _stockingDate ?? DateTime.now(),
-            numTrays: int.parse(_traysController.text),
-          );
+        ref.read(farmProvider.notifier).updatePond(
+              pondId: pondId,
+              name: _nameController.text,
+              area: double.parse(_areaController.text),
+              seedCount: seedCount,
+              plSize: plSize,
+              stockingDate: _stockingDate ?? DateTime.now(),
+              numTrays: numTrays,
+            );
 
-      // Trigger feed plan recalculation based on new seed count/PL size
-      ref.read(feedPlanProvider.notifier).createPlan(
-            pondId: pondId,
-            seedCount: seedCount,
-            plSize: plSize,
-          );
+        // NOTE: Do NOT recreate feed plan on edit. The feed plan is created when the pond
+        // is first created, and is updated via sampling data (recalculatePlan).
+        // Editing pond details should not wipe out feed history.
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pond updated successfully")),
-      );
-      Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Pond updated successfully")),
+        );
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error updating pond: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -156,7 +231,7 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
                 controller: _nameController,
                 decoration: const InputDecoration(
                     labelText: "Pond Name", border: OutlineInputBorder()),
-                validator: (v) => v!.isEmpty ? "Required" : null,
+                validator: (v) => v!.isEmpty ? "Pond name is required" : null,
               ),
               const SizedBox(height: 20),
               TextFormField(
@@ -165,7 +240,7 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
                     labelText: "Area (Acres)", border: OutlineInputBorder()),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) => v!.isEmpty ? "Required" : null,
+                validator: _validateArea,
               ),
               const SizedBox(height: 20),
               TextFormField(
@@ -173,15 +248,15 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
                 decoration: const InputDecoration(
                     labelText: "Seed Count", border: OutlineInputBorder()),
                 keyboardType: TextInputType.number,
-                validator: (v) => v!.isEmpty ? "Required" : null,
+                validator: _validateSeedCount,
               ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _plSizeController,
                 decoration: const InputDecoration(
-                    labelText: "PL Size", border: OutlineInputBorder()),
+                    labelText: "PL Size (mm)", border: OutlineInputBorder()),
                 keyboardType: TextInputType.number,
-                validator: (v) => v!.isEmpty ? "Required" : null,
+                validator: _validatePlSize,
               ),
               const SizedBox(height: 20),
               TextFormField(
@@ -189,7 +264,7 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
                 decoration: const InputDecoration(
                     labelText: "Number of Trays", border: OutlineInputBorder()),
                 keyboardType: TextInputType.number,
-                validator: (v) => v!.isEmpty ? "Required" : null,
+                validator: _validateTrays,
               ),
               const SizedBox(height: 20),
               ListTile(

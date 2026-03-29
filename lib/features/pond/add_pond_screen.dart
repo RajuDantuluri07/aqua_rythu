@@ -55,6 +55,57 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     }
   }
 
+  String? _validateArea(String? value) {
+    if (value == null || value.isEmpty) {
+      return "Area is required";
+    }
+    final area = double.tryParse(value);
+    if (area == null) {
+      return "Enter a valid number";
+    }
+    if (area <= 0) {
+      return "Area must be greater than 0";
+    }
+    if (area > 100) {
+      return "Area seems too large. Max: 100 acres";
+    }
+    return null;
+  }
+
+  String? _validateSeedCount(String? value) {
+    if (value == null || value.isEmpty) {
+      return null; // Optional field
+    }
+    final count = int.tryParse(value);
+    if (count == null) {
+      return "Enter a valid whole number";
+    }
+    if (count <= 0) {
+      return "Seed count must be greater than 0";
+    }
+    if (count > 10000000) {
+      return "Seed count seems too large (max: 10M)";
+    }
+    return null;
+  }
+
+  String? _validatePlSize(String? value) {
+    if (value == null || value.isEmpty) {
+      return null; // Optional field
+    }
+    final size = int.tryParse(value);
+    if (size == null) {
+      return "Enter a valid whole number";
+    }
+    if (size <= 0) {
+      return "PL size must be greater than 0";
+    }
+    if (size > 50) {
+      return "PL size seems too large (typical: 5-30mm)";
+    }
+    return null;
+  }
+
   void _savePond() {
     if (_formKey.currentState?.validate() ?? false) {
       final farmState = ref.read(farmProvider);
@@ -73,9 +124,13 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         return;
       }
 
-      final area = double.tryParse(_areaController.text) ?? 0.0;
-      final seedCount = int.tryParse(_seedCountController.text) ?? 100000;
-      final plSize = int.tryParse(_plSizeController.text) ?? 10;
+      final area = double.parse(_areaController.text);
+      final seedCount = _seedCountController.text.isEmpty 
+          ? 100000 
+          : int.parse(_seedCountController.text);
+      final plSize = _plSizeController.text.isEmpty 
+          ? 10 
+          : int.parse(_plSizeController.text);
 
       // Add Pond to Farm
       ref.read(farmProvider.notifier).addPond(
@@ -108,6 +163,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     bool required = true,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
@@ -130,7 +186,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
               BorderSide(color: Theme.of(context).primaryColor, width: 2),
         ),
       ),
-      validator: required ? (v) => v!.isEmpty ? "Required" : null : null,
+      validator: validator ?? (required ? (v) => v!.isEmpty ? "Required" : null : null),
     );
   }
 
@@ -195,6 +251,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                       icon: Icons.landscape_rounded,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
+                      validator: _validateArea,
                     ),
                     const SizedBox(height: 20),
                     _buildTextField(
@@ -204,6 +261,17 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                       icon: Icons.numbers_rounded,
                       keyboardType: TextInputType.number,
                       required: false,
+                      validator: _validateSeedCount,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(
+                      controller: _plSizeController,
+                      label: "PL Size (mm)",
+                      hint: "e.g. 10",
+                      icon: Icons.straighten_rounded,
+                      keyboardType: TextInputType.number,
+                      required: false,
+                      validator: _validatePlSize,
                     ),
                     const SizedBox(height: 20),
                     InkWell(

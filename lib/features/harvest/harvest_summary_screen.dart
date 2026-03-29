@@ -197,7 +197,14 @@ class HarvestSummaryScreen extends ConsumerWidget {
           height: 56,
           child: ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              // Navigate back to pond dashboard
+              Navigator.of(context).popUntil(
+                (route) {
+                  // Pop until we reach a screen that's not the harvest related screens
+                  return route.settings.name != '/harvest_summary' && 
+                         route.settings.name != '/harvest';
+                },
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.purple.shade700,
@@ -205,7 +212,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
             ),
-            child: const Text("BACK TO DASHBOARD",
+            child: const Text("BACK TO FARM",
                 style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ),
@@ -215,7 +222,16 @@ class HarvestSummaryScreen extends ConsumerWidget {
           height: 56,
           child: OutlinedButton(
             onPressed: () {
-              // TODO: Navigation to full reports
+              // Show harvest report or export functionality
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text("Detailed report generation coming soon"),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  backgroundColor: Colors.purple.shade700,
+                ),
+              );
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.purple.shade700,
@@ -223,7 +239,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
             ),
-            child: const Text("VIEW FULL REPORT",
+            child: const Text("GENERATE REPORT",
                 style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ),
