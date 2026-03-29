@@ -36,10 +36,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([
-      Future.delayed(const Duration(milliseconds: 1200)),
-      ref.read(authProvider.notifier).checkSession(),
-    ]);
+    await Future.delayed(const Duration(milliseconds: 1200));
+    await ref.read(authProvider.notifier).checkSession();
 
     if (!mounted) return;
 

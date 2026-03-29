@@ -48,34 +48,27 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   void _resendOtp() {
     final phone = ModalRoute.of(context)?.settings.arguments as String?;
-
     if (phone != null) {
       ref.read(authProvider.notifier).signInWithOtp(phone);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("OTP Resent Successfully")),
+      );
     }
 
     _startTimer();
     _listenForOtp();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("OTP Resent Successfully")),
-    );
   }
 
   Future<void> _verifyOtp([String? code]) async {
+    final phone = ModalRoute.of(context)?.settings.arguments as String? ?? "";
     final otp = code ?? _otpController.text;
-    if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Enter complete OTP"),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
+
+    if (otp.length != 6) return;
 
     _focusNode.unfocus();
     setState(() => _isLoading = true);
 
-    await ref.read(authProvider.notifier).login(otp);
+    await ref.read(authProvider.notifier).verifyOtp(phone, otp);
 
     if (mounted) {
       setState(() => _isLoading = false);
