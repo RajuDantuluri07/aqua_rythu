@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../farm/farm_provider.dart';
 import 'feed_history_provider.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -12,14 +13,18 @@ class FeedHistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final historyMap = ref.watch(feedHistoryProvider);
     final logs = historyMap[pondId] ?? [];
+    final currentDoc = ref.watch(docProvider(pondId));
 
     // Summary Stats
-    double total7d = 0;
-    for (int i = 0; i < logs.length && i < 7; i++) {
-      total7d += logs[i].total;
-    }
+    final total7d =
+        logs.take(7).fold(0.0, (sum, log) => sum + log.total);
+    final previous7d =
+        logs.skip(7).take(7).fold(0.0, (sum, log) => sum + log.total);
     double avg7d =
         logs.isNotEmpty ? (total7d / (logs.length > 7 ? 7 : logs.length)) : 0;
+    final double? trendPercent = previous7d > 0
+        ? ((total7d - previous7d) / previous7d) * 100
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -33,7 +38,7 @@ class FeedHistoryScreen extends ConsumerWidget {
             const Text("Feed History",
                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
             Text(
-                "${pondId.toUpperCase()} | DOC ${logs.isNotEmpty ? logs.first.doc : 0}",
+                "${pondId.toUpperCase()} | DOC $currentDoc",
                 style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade500,
@@ -80,11 +85,19 @@ class FeedHistoryScreen extends ConsumerWidget {
                             text: "${total7d.toInt()}kg ",
                             style:
                                 const TextStyle(fontWeight: FontWeight.w900)),
-                        const TextSpan(
-                            text: "(+5.2%) ",
-                            style: TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold)),
+                        TextSpan(
+                          text: trendPercent == null
+                              ? "(-- ) "
+                              : "(${trendPercent >= 0 ? '+' : ''}${trendPercent.toStringAsFixed(1)}%) ",
+                          style: TextStyle(
+                            color: trendPercent == null
+                                ? AppColors.textSecondary
+                                : trendPercent >= 0
+                                    ? Colors.green
+                                    : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const TextSpan(text: "| Avg: "),
                         TextSpan(
                             text: "${avg7d.toInt()}kg",
@@ -109,7 +122,7 @@ class FeedHistoryScreen extends ConsumerWidget {
                               fontSize: 12,
                               color: AppColors.textSecondary,
                               fontWeight: FontWeight.bold)),
-                      Text("${logs.isNotEmpty ? logs.first.doc : 0}",
+                      Text("$currentDoc",
                           style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w900,
@@ -143,18 +156,42 @@ class FeedHistoryScreen extends ConsumerWidget {
 
           // Scrollable List
           Expanded(
-            child: ListView.builder(
-              itemCount: logs.length,
-              itemBuilder: (context, index) {
-                final log = logs[index];
-                final prevLog =
-                    (index + 1 < logs.length) ? logs[index + 1] : null;
-                final delta =
-                    (prevLog != null) ? (log.total - prevLog.total) : 0.0;
+            child: logs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.receipt_long_outlined,
+                            size: 52, color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text(
+                          "No feed logs yet",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "Feed rounds you mark done will appear here.",
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: logs.length,
+                    itemBuilder: (context, index) {
+                      final log = logs[index];
+                      final prevLog =
+                          (index + 1 < logs.length) ? logs[index + 1] : null;
+                      final delta =
+                          (prevLog != null) ? (log.total - prevLog.total) : 0.0;
 
-                return _buildHistoryRow(log, index == 0, delta);
-              },
-            ),
+                      return _buildHistoryRow(log, index == 0, delta);
+                    },
+                  ),
           ),
         ],
       ),
@@ -183,10 +220,7 @@ class FeedHistoryScreen extends ConsumerWidget {
         ? "Today, ${dateFormat.format(log.date)}"
         : dateFormat.format(log.date);
 
-    // Status Logic
-    // Today has R4 empty? (Simulation)
-    final bool incomplete =
-        isToday && log.rounds.length > 3 && log.rounds[3] == 0;
+    final bool incomplete = log.rounds.any((qty) => qty <= 0);
 
     return Container(
       decoration: const BoxDecoration(
@@ -210,8 +244,7 @@ class FeedHistoryScreen extends ConsumerWidget {
             // R1-R4
             ...List.generate(4, (i) {
               final val = (i < log.rounds.length) ? log.rounds[i] : 0.0;
-              final isMissing =
-                  (isToday && i == 3); // Emulate R4 missing for Today
+              final isMissing = val <= 0;
               return Expanded(
                 flex: 1,
                 child: Row(

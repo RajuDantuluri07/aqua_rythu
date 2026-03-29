@@ -48,7 +48,7 @@ class Pond {
 
   /// Calculates Day of Culture (DOC) as whole days since stocking.
   int get doc {
-    return DateTime.now().difference(stockingDate).inDays;
+    return calculateDoc(DateTime.now());
   }
 
   int calculateDoc(DateTime now) {

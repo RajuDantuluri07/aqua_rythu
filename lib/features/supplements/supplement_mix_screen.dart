@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../farm/farm_provider.dart';
-import 'supplement_provider.dart';
-import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
+
+import '../../core/theme/app_theme.dart';
 import 'screens/add_supplement_screen.dart';
-import 'screens/supplement_calculator.dart';
+import 'supplement_provider.dart';
 
 class SupplementMixScreen extends ConsumerStatefulWidget {
   final String pondId;
+
   const SupplementMixScreen({super.key, required this.pondId});
 
   @override
@@ -18,76 +18,77 @@ class SupplementMixScreen extends ConsumerStatefulWidget {
 class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
   SupplementType? _filterType;
 
+  Future<void> _openPlanEditor(Supplement plan) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddSupplementScreen(
+          pondId: widget.pondId,
+          supplement: plan,
+        ),
+      ),
+    );
+  }
+
+  void _togglePlanPause(Supplement plan) {
+    ref.read(supplementProvider.notifier).togglePause(plan.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(plan.isPaused ? "Plan resumed" : "Plan paused"),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _stopPlan(Supplement plan) async {
+    final shouldStop = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text("Stop Supplement Plan?"),
+            content: Text(
+              "This will remove '${plan.name}' from active supplement plans.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text(
+                  "Stop Plan",
+                  style: TextStyle(color: AppColors.error),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!shouldStop || !mounted) {
+      return;
+    }
+
+    ref.read(supplementProvider.notifier).deleteSupplement(plan.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Supplement plan stopped"),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pondId = widget.pondId;
-    final doc = ref.watch(docProvider(pondId));
-    final allSupplements = ref.watch(supplementProvider);
-    final logs = ref.watch(supplementLogProvider).toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    // Get pond details for dose calculation
-    final pondState = ref.watch(farmProvider);
-    final currentFarm = pondState.currentFarm;
-    final pond = currentFarm?.ponds.firstWhere((p) => p.id == pondId);
-    final area = pond?.area ?? 1.0;
-
-    // Track what has been applied today
+    final plans = _pondPlans();
+    final logs = _pondLogs();
     final today = DateTime.now();
-    final appliedTodayIds = logs
-        .where((l) =>
-            l.timestamp.year == today.year &&
-            l.timestamp.month == today.month &&
-            l.timestamp.day == today.day)
-        .map((l) => l.supplementId)
-        .toSet();
-
-    final pondSupplements = allSupplements.where((s) => 
-      s.pondIds.contains(pondId) || s.pondIds.contains('ALL')
-    ).toList();
-
-    final active = pondSupplements.where((s) => 
-      doc >= s.startDoc && doc <= s.endDoc
-    ).toList();
-
-    final upcoming = pondSupplements.where((s) => 
-      doc < s.startDoc
-    ).toList();
-    
-    final expired = pondSupplements.where((s) =>
-      doc > s.endDoc
-    ).toList();
-
-    String getPlanName(String id) {
-      try {
-        return allSupplements.firstWhere((s) => s.id == id).name;
-      } catch (_) {
-        return "Manual Application";
-      }
-    }
-
-    String getPondName(String pid) {
-      for (var f in pondState.farms) {
-        for (var p in f.ponds) {
-          if (p.id == pid) return p.name;
-        }
-      }
-      return "Unknown Pond";
-    }
-
-    SupplementType? getSupplementType(String id) {
-      try {
-        return allSupplements.firstWhere((s) => s.id == id).type;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final filteredLogs = _filterType == null
+    final todayPlans = plans.where((plan) => plan.isActiveOnDate(today)).toList();
+    final activePlans = todayPlans.where((plan) => !plan.isPaused).toList();
+    final pausedPlans = todayPlans.where((plan) => plan.isPaused).toList();
+    final filteredHistory = _filterType == null
         ? logs
-        : logs
-            .where((l) => getSupplementType(l.supplementId) == _filterType)
-            .toList();
+        : logs.where((log) => log.supplementType == _filterType).toList();
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -106,70 +107,54 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader("ACTIVE TODAY (DOC $doc)"),
-            if (active.isEmpty)
-              _buildEmptyState(context, "No active supplements for today."),
-            ...active.map((s) => _SupplementCard(
-                  supplement: s,
-                  isActive: true,
-                  isApplied: appliedTodayIds.contains(s.id),
+            _sectionHeader("ACTIVE TODAY"),
+            if (activePlans.isEmpty && pausedPlans.isEmpty)
+              _emptyState("No active supplements for today."),
+            ...activePlans.map((plan) => _PlanCard(
+                  plan: plan,
+                  highlight: true,
+                  onEdit: () => _openPlanEditor(plan),
+                  onTogglePause: () => _togglePlanPause(plan),
+                  onStop: () => _stopPlan(plan),
                 )),
-
-            if (upcoming.isNotEmpty) ...[
+            if (pausedPlans.isNotEmpty) ...[
               AppSpacing.hBase,
-              _buildSectionHeader("UPCOMING"),
-              ...upcoming.map((s) => _SupplementCard(
-                    supplement: s,
-                    isActive: false,
-                    isApplied: false,
+              _sectionHeader("PAUSED PLANS"),
+              ...pausedPlans.map((plan) => _PlanCard(
+                    plan: plan,
+                    onEdit: () => _openPlanEditor(plan),
+                    onTogglePause: () => _togglePlanPause(plan),
+                    onStop: () => _stopPlan(plan),
                   )),
             ],
-
-            if (expired.isNotEmpty) ...[
-              AppSpacing.hBase,
-              _buildSectionHeader("COMPLETED / EXPIRED"),
-              ...expired.map((s) => _SupplementCard(
-                    supplement: s,
-                    isActive: false,
-                    isExpired: true,
-                    isApplied: false,
-                  )),
-            ],
-
-            if (logs.isNotEmpty) ...[
-              AppSpacing.hXl,
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildSectionHeader("APPLICATION HISTORY"),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: [
-                        _filterChip(null, "ALL"),
-                        const SizedBox(width: 8),
-                        _filterChip(SupplementType.feedMix, "FEED"),
-                        const SizedBox(width: 8),
-                        _filterChip(SupplementType.waterMix, "WATER"),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              ...filteredLogs.map((log) => _HistoryCard(
-                log: log,
-                planName: getPlanName(log.supplementId),
-                pondName: getPondName(log.pondId),
-                type: getSupplementType(log.supplementId),
-              )),
-              if (filteredLogs.isEmpty)
-                _buildEmptyState(context, "No logs for selected filter."),
-            ],
+            AppSpacing.hXl,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _sectionHeader("APPLICATION HISTORY"),
+                Row(
+                  children: [
+                    _filterChip(null, "ALL"),
+                    const SizedBox(width: 8),
+                    _filterChip(SupplementType.feedMix, "FEED"),
+                    const SizedBox(width: 8),
+                    _filterChip(SupplementType.waterMix, "WATER"),
+                  ],
+                ),
+              ],
+            ),
+            if (filteredHistory.isEmpty)
+              _emptyState("No application history found.")
+            else
+              _ApplicationLedger(logs: filteredHistory),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navigateToAdd(context),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => AddSupplementScreen(pondId: widget.pondId)),
+        ),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("ADD NEW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
@@ -177,14 +162,27 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     );
   }
 
-  void _navigateToAdd(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => AddSupplementScreen(pondId: widget.pondId)),
-    );
+  List<Supplement> _pondPlans() {
+    return ref
+        .watch(supplementProvider)
+        .where((plan) => plan.appliesToPond(widget.pondId))
+        .toList()
+      ..sort((a, b) {
+        final aDate = a.type == SupplementType.feedMix ? a.startDate : a.date;
+        final bDate = b.type == SupplementType.feedMix ? b.startDate : b.date;
+        return (bDate ?? DateTime(2000)).compareTo(aDate ?? DateTime(2000));
+      });
   }
 
-  Widget _buildSectionHeader(String title) {
+  List<SupplementLog> _pondLogs() {
+    return ref
+        .watch(supplementLogProvider)
+        .where((log) => log.pondId == widget.pondId)
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  Widget _sectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12, left: 4),
       child: Text(
@@ -199,7 +197,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, String msg) {
+  Widget _emptyState(String text) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -208,9 +206,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Center(
-        child: Text(msg, style: TextStyle(color: Colors.grey.shade500)),
-      ),
+      child: Center(child: Text(text, style: TextStyle(color: Colors.grey.shade500))),
     );
   }
 
@@ -240,20 +236,28 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
   }
 }
 
-class _HistoryCard extends StatelessWidget {
-  final SupplementLog log;
-  final String? planName;
-  final String? pondName;
-  final SupplementType? type;
+class _PlanCard extends StatelessWidget {
+  final Supplement plan;
+  final bool highlight;
+  final VoidCallback? onEdit;
+  final VoidCallback? onTogglePause;
+  final VoidCallback? onStop;
 
-  const _HistoryCard({required this.log, this.planName, this.pondName, this.type});
+  const _PlanCard({
+    required this.plan,
+    this.highlight = false,
+    this.onEdit,
+    this.onTogglePause,
+    this.onStop,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final dateStr = DateFormat('dd MMM, hh:mm a').format(log.timestamp);
-    final isWater = type == SupplementType.waterMix;
-    final accentColor = isWater ? Colors.teal : Colors.indigo;
-    final icon = isWater ? Icons.water_drop_rounded : Icons.grain_rounded;
+    final isFeed = plan.type == SupplementType.feedMix;
+    final accent = isFeed ? Colors.indigo : Colors.teal;
+    final subtitle = isFeed
+        ? "${_dateRange(plan.startDate, plan.endDate)} • ${plan.feedingTimes.join(', ')}"
+        : "${_singleDate(plan.date)} • ${_formatTime(plan.effectiveWaterTime ?? '')} • ${_repeatText(plan.frequencyDays)}";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -261,319 +265,302 @@ class _HistoryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border(
-          left: BorderSide(color: accentColor, width: 4),
-          top: BorderSide(color: Colors.grey.shade100),
-          right: BorderSide(color: Colors.grey.shade100),
-          bottom: BorderSide(color: Colors.grey.shade100),
+        border: Border.all(
+          color: highlight ? accent.withOpacity(0.25) : Colors.grey.shade200,
         ),
+        boxShadow: highlight
+            ? [
+                BoxShadow(
+                  color: accent.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(icon, size: 10, color: accentColor),
-                        const SizedBox(width: 4),
-                        if (pondName != null)
-                          Text(
-                            pondName!.toUpperCase(),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 10,
-                              color: accentColor,
-                            ),
-                          ),
-                      ],
-                    ),
-                    Text(
-                      planName ?? "Supplement Applied",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isFeed ? "FEED" : "WATER",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
                 ),
               ),
+              if (plan.isPaused) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    "PAUSED",
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ),
+              ],
+              const Spacer(),
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    onEdit?.call();
+                  } else if (value == 'pause') {
+                    onTogglePause?.call();
+                  } else if (value == 'stop') {
+                    onStop?.call();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text("Edit Plan"),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'pause',
+                    child: Text(plan.isPaused ? "Resume Plan" : "Pause Plan"),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'stop',
+                    child: Text("Stop Plan"),
+                  ),
+                ],
+              ),
               Text(
-                dateStr,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+                plan.pondIds.contains('ALL') ? "ALL PONDS" : "THIS POND",
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.grey.shade500,
+                ),
               ),
             ],
           ),
-          const Divider(height: 20),
-          ...log.appliedItems.map((item) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(item.name, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
-                Text(
-                  "${item.quantity.toStringAsFixed(1)}${item.unit}",
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-              ],
+          const SizedBox(height: 10),
+          Text(
+            plan.goal != null ? _goalText(plan.goal!) : plan.name,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w600,
             ),
-          )),
+          ),
+          const SizedBox(height: 10),
+          ...plan.items.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      "${item.quantity.toStringAsFixed(1)} ${item.unit}",
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+  static String _goalText(SupplementGoal goal) {
+    switch (goal) {
+      case SupplementGoal.growthBoost:
+        return "Growth / Mineral";
+      case SupplementGoal.diseasePrevention:
+        return "Immunity";
+      case SupplementGoal.waterCorrection:
+        return "Water Quality";
+      case SupplementGoal.stressRecovery:
+        return "Stress";
+    }
+  }
+
+  static String _dateRange(DateTime? start, DateTime? end) {
+    if (start == null || end == null) return "No date";
+    return "${DateFormat('dd MMM').format(start)} - ${DateFormat('dd MMM').format(end)}";
+  }
+
+  static String _singleDate(DateTime? date) {
+    if (date == null) return "No date";
+    return DateFormat('dd MMM yyyy').format(date);
+  }
+
+  static String _formatTime(String value) {
+    try {
+      final parts = value.split(':');
+      if (parts.length == 2) {
+        final dt = DateTime(2000, 1, 1, int.parse(parts[0]), int.parse(parts[1]));
+        return DateFormat('hh:mm a').format(dt);
+      }
+    } catch (_) {}
+    return value;
+  }
+
+  static String _repeatText(int? frequency) {
+    if (frequency == null || frequency == 0) return "Today only";
+    if (frequency == 7) return "Every 7 days";
+    return "Every $frequency days";
+  }
+}
+
+class _ApplicationLedger extends StatelessWidget {
+  final List<SupplementLog> logs;
+
+  const _ApplicationLedger({required this.logs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppRadius.rs,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...logs.take(20).map((log) => _ApplicationLogRow(log: log)),
         ],
       ),
     );
   }
 }
 
-class _SupplementCard extends ConsumerWidget {
-  final Supplement supplement;
-  final bool isActive;
-  final bool isExpired;
-  final bool isApplied;
-  final VoidCallback? onMarkDone;
+class _ApplicationLogRow extends StatelessWidget {
+  final SupplementLog log;
 
-  const _SupplementCard({
-    required this.supplement,
-    required this.isActive,
-    this.isExpired = false,
-    required this.isApplied,
-    this.onMarkDone,
-  });
+  const _ApplicationLogRow({required this.log});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final isFeed = log.supplementType == SupplementType.feedMix;
+    final accent = isFeed ? Colors.indigo : Colors.teal;
+    final dateText = DateFormat('dd MMM, hh:mm a').format(log.timestamp);
+    final title = log.supplementName ??
+        (isFeed ? "Feed R${log.feedRound ?? '-'} Mix" : "Water Mix");
+    final contextText = isFeed
+        ? "R${log.feedRound ?? '-'} • ${(log.inputValue ?? 0).toStringAsFixed(1)} ${log.inputUnit ?? 'kg'}"
+        : "${(log.inputValue ?? 0).toStringAsFixed(2)} ${log.inputUnit ?? 'acre'}";
+    final mixDetails = log.appliedItems.isEmpty
+        ? title
+        : log.appliedItems
+            .map((item) => item.name)
+            .take(3)
+            .join(", ");
+    final qtyUsed = log.appliedItems.isEmpty
+        ? "--"
+        : log.appliedItems
+            .map((item) => "${item.quantity.toStringAsFixed(1)} ${item.unit}")
+            .take(3)
+            .join(", ");
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: (isActive && !supplement.isPaused) ? Theme.of(context).primaryColor.withOpacity(0.5) : Colors.grey.shade200,
-          width: (isActive && !supplement.isPaused) ? 1.5 : 1.0,
-        ),
-        boxShadow: (isActive && !supplement.isPaused) ? [
-          BoxShadow(
-            color: Theme.of(context).primaryColor.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          )
-        ] : [],
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Row(
-                  children: [
-                    if (isApplied)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.success,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text("DONE", style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)),
-                      ),
-                    if (isApplied) const SizedBox(width: 8),
-                    if (supplement.isPaused)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.warning,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text("PAUSED", style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)),
-                      ),
-                    if (supplement.isPaused) const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        supplement.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: (isExpired || supplement.isPaused) ? Colors.grey : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  dateText,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isActive ? Colors.green.shade50 : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: isActive ? Colors.green.shade200 : Colors.grey.shade300),
-                    ),
-                    child: Text(
-                      "DOC ${supplement.startDoc} - ${supplement.endDoc}",
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: isActive ? Colors.green.shade700 : Colors.grey.shade600,
-                      ),
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  isFeed ? "FEED" : "WATER",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
                   ),
-                  const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 20, color: Colors.grey),
-                    onSelected: (val) => _handleAction(context, ref, val),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'pause',
-                        child: Row(
-                          children: [
-                            Icon(supplement.isPaused ? Icons.play_arrow : Icons.pause, size: 20),
-                            const SizedBox(width: 8),
-                            Text(supplement.isPaused ? "Resume" : "Pause"),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 20),
-                            SizedBox(width: 8),
-                            Text("Edit"),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 20, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text("Delete", style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: supplement.items.map<Widget>((item) => Chip(
-              label: Text("${item.name}: ${item.quantity} ${item.unit}"),
-              backgroundColor: Colors.grey.shade50,
-              labelStyle: const TextStyle(fontSize: 11),
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            )).toList(),
-          ),
+          const SizedBox(height: 10),
+          _ledgerField("Context", contextText),
           const SizedBox(height: 8),
-          Text(
-            "Schedule: ${supplement.feedingTimes.join(', ')}",
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-          ),
-          if (supplement.goal != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (supplement.goal == SupplementGoal.growthBoost
-                          ? Colors.green
-                          : supplement.goal == SupplementGoal.diseasePrevention
-                              ? Colors.blue
-                              : supplement.goal == SupplementGoal.waterCorrection
-                                  ? Colors.teal
-                                  : Colors.orange)
-                      .withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  supplement.goal == SupplementGoal.growthBoost
-                      ? "Growth Booster"
-                      : supplement.goal == SupplementGoal.diseasePrevention
-                          ? "Disease Prevention"
-                          : supplement.goal == SupplementGoal.waterCorrection
-                              ? "Water Correction"
-                              : "Stress Recovery",
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: supplement.goal == SupplementGoal.growthBoost
-                        ? Colors.green
-                        : supplement.goal == SupplementGoal.diseasePrevention
-                            ? Colors.blue
-                            : supplement.goal == SupplementGoal.waterCorrection
-                                ? Colors.teal
-                                : Colors.orange,
-                  ),
-                ),
-              ),
-            ), // ✅ Added missing comma here
-          if (isActive && !isApplied && onMarkDone != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 16.0),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onMarkDone,
-                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: const Text("MARK DONE",
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ),
+          _ledgerField("Mix Details", "$title${mixDetails == title ? '' : ' • $mixDetails'}"),
+          const SizedBox(height: 8),
+          _ledgerField("Qty Used", qtyUsed, emphasize: true),
         ],
       ),
     );
   }
 
-  void _handleAction(BuildContext context, WidgetRef ref, String action) {
-    if (action == 'edit') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => AddSupplementScreen(supplement: supplement, pondId: supplement.pondIds.first)),
-      );
-    } else if (action == 'pause') {
-      ref.read(supplementProvider.notifier).togglePause(supplement.id);
-    } else if (action == 'delete') {
-      _showDeleteConfirmation(context, ref);
-    }
-  }
-
-  void _showDeleteConfirmation(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
-        title: const Text("Delete Supplement?"),
-        content: Text("Are you sure you want to delete '${supplement.name}'?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () {
-              ref.read(supplementProvider.notifier).removeSupplement(supplement.id);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text("Delete", style: TextStyle(color: AppColors.error)),
+  Widget _ledgerField(String label, String value, {bool emphasize = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade500,
+            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
+              color: emphasize ? AppColors.textPrimary : AppColors.textSecondary,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -11,8 +11,8 @@ class SummaryStrip extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildStat("Last 7d", "112kg", "+5.2%", Colors.green),
-          _buildStat("Avg/Day", "16kg", null, Colors.black),
+          _buildStat("Last 7d", "--", null, Colors.black),
+          _buildStat("Avg/Day", "--", null, Colors.black),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
@@ -20,7 +20,7 @@ class SummaryStrip extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.blue.shade200),
             ),
-            child: const Text("DOC 32",
+            child: const Text("DOC --",
                 style:
                     TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
           ),

@@ -27,15 +27,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // ✅ PRD 4.1: Supabase call signInWithOtp(phone: '+91$phone')
-    // Assuming this method exists in your AuthNotifier and returns a boolean for success.
     final success = await ref.read(authProvider.notifier).signInWithOtp(phone);
 
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
-        // Navigate to OTP Screen
         Navigator.pushNamed(context, AppRoutes.otp, arguments: phone);
+      } else {
+        final error = ref.read(authProvider).errorMessage;
+        if (error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
       }
     }
   }

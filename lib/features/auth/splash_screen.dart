@@ -32,15 +32,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
 
     _controller.forward();
-
-    // Initialize auth check
-    ref.read(authProvider.notifier).checkSession();
-
-    _navigate();
+    _bootstrap();
   }
 
-  void _navigate() async {
-    await Future.delayed(const Duration(seconds: 3));
+  Future<void> _bootstrap() async {
+    await Future.wait([
+      Future.delayed(const Duration(milliseconds: 1200)),
+      ref.read(authProvider.notifier).checkSession(),
+    ]);
 
     if (!mounted) return;
 

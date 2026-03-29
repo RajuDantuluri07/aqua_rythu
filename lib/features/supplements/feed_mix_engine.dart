@@ -22,20 +22,7 @@ class FeedMixEngine {
     });
 
     return applicable.expand((plan) {
-      return plan.items.map((item) {
-        // Calculate dosage based on per-kg rate
-        // If plan feedQty is 1kg, rate is simply item.dosePerKg.
-        // If plan was defined for 10kg, we normalize.
-        final double normalizationFactor =
-            (plan.feedQty > 0) ? plan.feedQty : 1.0;
-        final double baseRate = item.dosePerKg / normalizationFactor;
-
-        return CalculatedItem(
-          name: item.name,
-          quantity: double.parse((baseRate * feedQty).toStringAsFixed(2)),
-          unit: item.unit,
-        );
-      });
+      return plan.calculateAppliedItems(feedKg: feedQty);
     }).toList();
   }
 }

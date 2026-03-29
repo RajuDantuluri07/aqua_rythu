@@ -106,6 +106,10 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
           seedCount: seedCount,
         );
   }
+
+  void clearLogs() {
+    state = [];
+  }
 }
 
 final growthProvider =

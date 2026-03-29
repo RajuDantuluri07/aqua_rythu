@@ -26,7 +26,6 @@ import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import '../../core/engines/feed_state_engine.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
-import 'package:aqua_rythu/features/supplements/screens/supplement_calculator.dart';
 import '../../core/theme/app_theme.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
@@ -38,38 +37,157 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
-  List<SupplementItem> _getActiveSupplements(
-      int doc, String feedingTime, double feedQty) {
-    final allSupplements = ref.read(supplementProvider);
-    final selectedPond = ref.read(pondDashboardProvider).selectedPond;
+  List<SupplementItem> _getPlannedFeedSupplements(
+      List<Supplement> supplements, String feedingTime, double feedQty) {
+    final items = <SupplementItem>[];
+    for (final supplement in supplements) {
+      if (supplement.type != SupplementType.feedMix) {
+        continue;
+      }
+      if (supplement.isPaused || !supplement.feedingTimes.contains(feedingTime)) {
+        continue;
+      }
+      items.addAll(supplement.calculateDosage(feedQty));
+    }
+    return items;
+  }
 
-    final activeSupplements = allSupplements.where((s) {
-      if (s.type != SupplementType.feedMix) {
-        return false;
+  List<SupplementItem> _getAppliedFeedSupplements(
+      int round, List<SupplementLog> logs) {
+    final items = <SupplementItem>[];
+    final roundLogs = logs
+        .where((log) =>
+            log.supplementType == SupplementType.feedMix &&
+            log.feedRound == round)
+        .toList();
+    for (final log in roundLogs) {
+      for (final item in log.appliedItems) {
+        items.add(
+          SupplementItem(
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            type: 'feed',
+          ),
+        );
       }
-      if (s.isPaused) {
-        return false;
-      }
-      if (doc < s.startDoc || doc > s.endDoc) {
-        return false;
-      }
-      if (!s.feedingTimes.contains(feedingTime)) {
-        return false;
-      }
-      if (!s.pondIds.contains(selectedPond) && !s.pondIds.contains('ALL')) {
-        return false;
-      }
+    }
+    return items;
+  }
+
+  bool _logFeedSupplementApplication({
+    required String pondId,
+    required String pondName,
+    required int round,
+    required double feedQty,
+    required List<Supplement> activePlansToday,
+  }) {
+    if (feedQty <= 0) {
+      return false;
+    }
+    final alreadyLogged = ref.read(supplementLogProvider.notifier).hasFeedLogForRoundOnDate(
+          pondId: pondId,
+          round: round,
+          date: DateTime.now(),
+        );
+    if (alreadyLogged) {
       return true;
-    }).toList();
-
-    // Calculate dosages
-    final List<SupplementItem> calculatedItems = [];
-    for (final supplement in activeSupplements) {
-      final dosages = supplement.calculateDosage(feedQty);
-      calculatedItems.addAll(dosages);
     }
 
-    return calculatedItems;
+    final roundKey = "R$round";
+    final matchingPlans = activePlansToday
+        .where((plan) =>
+            plan.type == SupplementType.feedMix &&
+            !plan.isPaused &&
+            plan.feedingTimes.contains(roundKey))
+        .toList();
+    if (matchingPlans.isEmpty) {
+      return false;
+    }
+
+    var loggedAny = false;
+    for (final plan in matchingPlans) {
+      final appliedItems = plan.calculateAppliedItems(feedKg: feedQty);
+      if (appliedItems.isEmpty) {
+        continue;
+      }
+      loggedAny = true;
+      ref.read(supplementLogProvider.notifier).logApplication(
+            supplementId: plan.id,
+            pondId: pondId,
+            pondName: pondName,
+            items: appliedItems,
+            supplementName: plan.goal != null ? plan.name : plan.name,
+            supplementType: SupplementType.feedMix,
+            feedRound: round,
+            inputValue: feedQty,
+            inputUnit: 'kg',
+          );
+    }
+    return loggedAny;
+  }
+
+  DateTime _waterPlanScheduleForDay(Supplement plan, DateTime day) {
+    final baseDate = plan.date ?? day;
+    final dateOnly = DateTime(day.year, day.month, day.day);
+    final timeValue = plan.effectiveWaterTime ?? '';
+    try {
+      final parts = timeValue.split(':');
+      if (parts.length == 2) {
+        return DateTime(
+          dateOnly.year,
+          dateOnly.month,
+          dateOnly.day,
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+        );
+      }
+    } catch (_) {}
+    return DateTime(dateOnly.year, dateOnly.month, dateOnly.day, baseDate.hour, baseDate.minute);
+  }
+
+  String _formatWaterTime(DateTime dateTime) {
+    return DateFormat('hh:mm a').format(dateTime);
+  }
+
+  bool _logWaterSupplementApplication({
+    required String pondId,
+    required String pondName,
+    required double pondArea,
+    required Supplement plan,
+    required DateTime scheduledAt,
+  }) {
+    if (pondArea <= 0) {
+      return false;
+    }
+    final alreadyLogged =
+        ref.read(supplementLogProvider.notifier).hasWaterLogForSupplementOnDate(
+              pondId: pondId,
+              supplementId: plan.id,
+              date: scheduledAt,
+            );
+    if (alreadyLogged) {
+      return true;
+    }
+
+    final appliedItems = plan.calculateAppliedItems(pondArea: pondArea);
+    if (appliedItems.isEmpty) {
+      return false;
+    }
+
+    ref.read(supplementLogProvider.notifier).logApplication(
+          supplementId: plan.id,
+          pondId: pondId,
+          pondName: pondName,
+          items: appliedItems,
+          supplementName: plan.name,
+          scheduledTime: _formatWaterTime(scheduledAt),
+          supplementType: SupplementType.waterMix,
+          inputValue: pondArea,
+          inputUnit: 'acre',
+          scheduledAt: scheduledAt,
+        );
+    return true;
   }
 
   List<Map<String, dynamic>> _getFeedRounds() {
@@ -263,10 +381,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final isCompleted = currentPond.status == PondStatus.completed;
 
     final allSupplements = ref.watch(supplementProvider);
-    final supplements = allSupplements
-        .where((s) =>
-            s.pondIds.contains(selectedPond) || s.pondIds.contains('ALL'))
-        .toList();
+    final activePlansToday = allSupplements.where((plan) {
+      return plan.appliesToPond(selectedPond) &&
+          plan.isActiveOnDate(DateTime.now()) &&
+          !plan.isPaused;
+    }).toList();
 
     /// ✅ TRAY DATA
     final trayLogs = ref.watch(trayProvider(selectedPond));
@@ -417,23 +536,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final double abwTrend =
         (currentAbw > 0 && prevAbw > 0) ? (currentAbw - prevAbw) : 0;
 
-    // 💧 WATER SUPPLEMENTS
-    final waterSupplementResults = SupplementCalculator.calculateWater(
-      supplements: supplements,
-      currentDoc: currentDoc,
-      pondArea: currentPond.area,
-    );
-
-    // 🕒 TODAY'S LOGS for supplements
     final supplementLogs = ref.watch(supplementLogProvider);
-    final appliedTodayIds = supplementLogs
+    final now = DateTime.now();
+    final todaySupplementLogs = supplementLogs
         .where((l) =>
             l.pondId == selectedPond &&
-            l.timestamp.year == today.year &&
-            l.timestamp.month == today.month &&
-            l.timestamp.day == today.day)
-        .map((l) => l.supplementId)
-        .toSet();
+            l.timestamp.year == now.year &&
+            l.timestamp.month == now.month &&
+            l.timestamp.day == now.day)
+        .toList();
 
     // Feed plan details
     final dayPlan = plan?.days.firstWhere(
@@ -862,15 +973,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     ..._buildTimeline(
                       today: today,
                       currentDoc: currentDoc,
+                      pondName: currentPond.name,
+                      pondArea: currentPond.area,
                       dayPlan: dayPlan,
                       todayTrayMap: todayTrayMap,
                       dashboardState: dashboardState,
                       trayDone: trayDone,
-                      supplements: supplements,
-                      waterSupplementResults: waterSupplementResults,
-                      appliedTodayIds: appliedTodayIds,
+                      activePlansToday: activePlansToday,
+                      todaySupplementLogs: todaySupplementLogs,
                       feedMode: feedMode,
-                      selectedPond: selectedPond,
                     ),
                   ],
                 ),
@@ -885,15 +996,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
   List<Widget> _buildTimeline({
     required DateTime today,
     required int currentDoc,
+    required String pondName,
+    required double pondArea,
     required FeedDayPlan? dayPlan,
     required Map<int, TrayLog> todayTrayMap,
     required PondDashboardState dashboardState,
     required Map<int, bool> trayDone,
-    required List<Supplement> supplements,
-    required List<dynamic> waterSupplementResults,
-    required Set<String> appliedTodayIds,
+    required List<Supplement> activePlansToday,
+    required List<SupplementLog> todaySupplementLogs,
     required FeedMode feedMode,
-    required String selectedPond,
   }) {
     final feedRoundsData = _getFeedRounds();
     final List<Map<String, dynamic>> timelineItems = [];
@@ -912,29 +1023,44 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       timelineItems.add({...data, 'type': 'feed', 'sortTime': sortTime});
     }
 
-    // Add Water Supplements
-    for (var group in waterSupplementResults) {
-      final supplement =
-          supplements.firstWhere((s) => s.id == group.supplementId);
-      DateTime sortTime = today;
-      String timeLabel = "Scheduled";
-      if (supplement.feedingTimes.isNotEmpty) {
-        try {
-          final timeStr = supplement.feedingTimes.first;
-          if (timeStr.contains(':')) {
-            final parts = timeStr.split(':');
-            sortTime = DateTime(today.year, today.month, today.day,
-                int.parse(parts[0]), int.parse(parts[1]));
-            timeLabel = DateFormat("hh:mm a").format(sortTime);
-          }
-        } catch (_) {}
-      }
+    final waterPlans = activePlansToday
+        .where((plan) => plan.type == SupplementType.waterMix)
+        .toList();
+
+    for (final plan in waterPlans) {
+      final existingLogs = todaySupplementLogs
+          .where((log) =>
+              log.supplementType == SupplementType.waterMix &&
+              log.supplementId == plan.id)
+          .toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      final scheduledAt = _waterPlanScheduleForDay(plan, today);
+      final latestLog = existingLogs.isNotEmpty ? existingLogs.first : null;
+
       timelineItems.add({
         'type': 'water',
-        'group': group,
-        'time': timeLabel,
+        'plan': plan,
+        'log': latestLog,
+        'time': latestLog?.scheduledTime ?? _formatWaterTime(scheduledAt),
+        'sortTime': latestLog?.scheduledAt ?? scheduledAt,
+      });
+    }
+
+    for (final log in todaySupplementLogs) {
+      if (log.supplementType != SupplementType.waterMix) {
+        continue;
+      }
+      final alreadyRepresented = waterPlans.any((plan) => plan.id == log.supplementId);
+      if (alreadyRepresented) {
+        continue;
+      }
+      final sortTime = log.timestamp;
+      timelineItems.add({
+        'type': 'water',
+        'log': log,
+        'time': DateFormat("hh:mm a").format(sortTime),
         'sortTime': sortTime,
-        'supplementId': group.supplementId
       });
     }
 
@@ -975,20 +1101,16 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             roundState.isDone && feedMode != FeedMode.precision;
         final bool isActuallyDoneInPrecision =
             roundState.isDone && !roundState.showTrayCTA;
+        final appliedSupplements = _getAppliedFeedSupplements(
+          round,
+          todaySupplementLogs,
+        );
 
         if (isDoneInHabitOrBeginner || isActuallyDoneInPrecision) {
-          final supplementResults = SupplementCalculator.calculateActive(
-              supplements: supplements,
-              currentDoc: currentDoc,
-              currentFeedingTime: timeKey,
-              feedQty: qty);
-          final List<String> supplementStrings = [];
-          for (final group in supplementResults) {
-            for (final item in group.items) {
-              supplementStrings.add(
-                  "${item.itemName.toUpperCase()} ${item.totalDose.toInt()}${item.unit}");
-            }
-          }
+          final supplementStrings = appliedSupplements
+              .map((item) =>
+                  "${item.name.toUpperCase()} ${item.quantity.toStringAsFixed(1)}${item.unit}")
+              .toList();
           card = CompletedRoundCard(
             round: round,
             time: time,
@@ -1030,48 +1152,79 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             showTrayCTA: roundState.showTrayCTA,
             isPendingTray: roundState.isDone && roundState.showTrayCTA,
             onOpenTray: (r) => openTray(r, false),
-            supplements: _getActiveSupplements(currentDoc, timeKey, qty),
+            supplements:
+                _getPlannedFeedSupplements(activePlansToday, timeKey, qty),
             onMarkDone: () {
               if (!roundState.isLocked) {
+                if (qty <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Feed quantity must be greater than zero"),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                _logFeedSupplementApplication(
+                  pondId: dashboardState.selectedPond,
+                  pondName: pondName,
+                  round: round,
+                  feedQty: qty,
+                  activePlansToday: activePlansToday,
+                );
                 ref.read(pondDashboardProvider.notifier).markFeedDone(round);
               }
             },
           );
         }
       } else {
-        final dynamic group = itemData['group'];
-        final isApplied = appliedTodayIds.contains(itemData['supplementId']);
-        timelineColor = isApplied ? const Color(0xFF10B981) : AppColors.primary;
+        final log = itemData['log'] as SupplementLog?;
+        final plan = itemData['plan'] as Supplement?;
+        final isApplied = log != null;
+        timelineColor =
+            isApplied ? const Color(0xFF10B981) : AppColors.primary;
+
+        final scheduledAt = plan != null
+            ? _waterPlanScheduleForDay(plan, today)
+            : (log?.scheduledAt ?? log?.timestamp ?? today);
+        final items = log?.appliedItems ??
+            (plan != null ? plan.calculateAppliedItems(pondArea: pondArea) : <CalculatedItem>[]);
 
         card = _WaterRoundCard(
           time: itemData['time'],
-          title: group.supplementName,
-          items: group.items,
+          title: log?.supplementName ?? plan?.name ?? "Water Mix",
+          items: items,
           isApplied: isApplied,
-          onMarkDone: () {
-            final logId = '${DateTime.now().millisecondsSinceEpoch}_$selectedPond';
-            final notifier = ref.read(supplementLogProvider.notifier);
-            notifier.logApplication(
-              id: logId,
-              supplementId: group.supplementId,
-              pondId: selectedPond,
-              items: group.items
-                  .map((i) => CalculatedItem(
-                      name: i.itemName, quantity: i.totalDose, unit: i.unit))
-                  .toList(),
-            );
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text("${group.supplementName} marked as applied"),
-                behavior: SnackBarBehavior.floating,
-                action: SnackBarAction(
-                  label: "UNDO",
-                  onPressed: () => notifier.removeLog(logId),
-                ),
-              ),
-            );
-          },
+          onMarkDone: plan == null || isApplied
+              ? null
+              : () {
+                  if (pondArea <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Pond area must be greater than zero"),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
+                  final didLog = _logWaterSupplementApplication(
+                    pondId: dashboardState.selectedPond,
+                    pondName: pondName,
+                    pondArea: pondArea,
+                    plan: plan,
+                    scheduledAt: scheduledAt,
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        didLog
+                            ? "Water supplement marked as applied"
+                            : "Unable to apply water supplement",
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
         );
       }
 
@@ -1220,6 +1373,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
   Widget _buildCompletedDashboard(
       BuildContext context, WidgetRef ref, Pond pond) {
+    final currentDoc = ref.watch(docProvider(pond.id));
     final harvests = ref.watch(harvestProvider(pond.id));
     final totalYield = harvests.fold(0.0, (sum, h) => sum + h.quantity);
     final totalRevenue = harvests.fold(0.0, (sum, h) => sum + h.revenue);
@@ -1280,7 +1434,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 ],
               ),
               const SizedBox(height: 20),
-              _completedStat("DURATION", "${pond.doc} Days"),
+              _completedStat("DURATION", "$currentDoc Days"),
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
@@ -1494,7 +1648,9 @@ class _WaterRoundCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        "${item.itemName.toUpperCase()} ${item.totalDose.toStringAsFixed(1)}${item.unit}",
+                        item is CalculatedItem
+                            ? "${item.name.toUpperCase()} ${item.quantity.toStringAsFixed(1)}${item.unit}"
+                            : "${item.itemName.toUpperCase()} ${item.totalDose.toStringAsFixed(1)}${item.unit}",
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
@@ -1506,23 +1662,54 @@ class _WaterRoundCard extends StatelessWidget {
                     ))
                 .toList(),
           ),
-          if (!isApplied && onMarkDone != null) ...[
+          if (isApplied) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withOpacity(0.18),
+                ),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle, size: 18, color: Color(0xFF10B981)),
+                  SizedBox(width: 8),
+                  Text(
+                    "COMPLETED",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      color: Color(0xFF10B981),
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (onMarkDone != null) ...[
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: onMarkDone,
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text("MARK DONE",
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                label: const Text(
+                  "MARK DONE",
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ),

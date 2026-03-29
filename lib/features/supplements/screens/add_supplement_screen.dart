@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../supplement_provider.dart';
-import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
-import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../supplement_provider.dart';
+import 'supplement_item.dart';
+
 class AddSupplementScreen extends ConsumerStatefulWidget {
+  final String pondId;
   final Supplement? supplement;
-  final String? pondId;
-  const AddSupplementScreen({super.key, this.supplement, this.pondId});
+
+  const AddSupplementScreen({
+    super.key,
+    required this.pondId,
+    this.supplement,
+  });
 
   @override
   ConsumerState<AddSupplementScreen> createState() => _AddSupplementScreenState();
@@ -16,179 +22,227 @@ class AddSupplementScreen extends ConsumerStatefulWidget {
 
 class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   final _formKey = GlobalKey<FormState>();
-
-  // Toggle State
-  SupplementType _selectedType = SupplementType.feedMix;
-  String _applyTo = "This Pond";
-  SupplementGoal _selectedGoal = SupplementGoal.growthBoost;
-
-  // Common Fields
   final _nameController = TextEditingController();
-  final _startDocController = TextEditingController();
-  final _endDocController = TextEditingController();
-  final _notesController = TextEditingController();
-
-  // Water Mix Fields
-  int _selectedFrequency = 7;
-  DateTime _selectedDate = DateTime.now();
-  final _customRepeatController = TextEditingController();
-
-  // Selection Lists
-  final List<String> _selectedFeedingTimes = [];
-  TimeOfDay _selectedTimeOfDay = const TimeOfDay(hour: 9, minute: 0);
-
-  // Items
-  final List<SupplementItem> _items = [];
-
-  // Item Input Controllers (Temp) – no initial text
-  final _itemNameController = TextEditingController();
   final _itemDoseController = TextEditingController();
-  final _itemUnitController = TextEditingController();  // 🔧 removed 'ml' default
+  String _selectedUnit = "g/kg";
+
+  SupplementType _selectedType = SupplementType.feedMix;
+  SupplementGoal? _selectedGoal;
+  String _applyTo = "This Pond";
+  final List<String> _selectedRounds = [];
+  final List<SupplementItem> _items = [];
+  DateTime _startDate = DateTime.now();
+  DateTime _endDate = DateTime.now();
+  DateTime _waterDate = DateTime.now();
+  TimeOfDay _waterTime = TimeOfDay.now();
+  int _waterFrequency = 0;
+  final _customRepeatController = TextEditingController();
+  bool _isSaving = false;
+
+  bool get _isEditing => widget.supplement != null;
 
   @override
   void initState() {
     super.initState();
+    final supplement = widget.supplement;
+    if (supplement == null) {
+      return;
+    }
 
-    // Set initial unit based on selected type (Feed Mix or Water Mix)
-    _itemUnitController.text = _selectedType == SupplementType.feedMix ? 'g/kg' : 'kg/acre';
+    _selectedType = supplement.type;
+    _selectedGoal = supplement.goal;
+    _applyTo = supplement.pondIds.contains('ALL') ? "All Ponds" : "This Pond";
+    _selectedRounds
+      ..clear()
+      ..addAll(supplement.feedingTimes);
+    _items
+      ..clear()
+      ..addAll(supplement.items.map((item) => item.copyWith()));
+    _startDate = supplement.startDate ?? _startDate;
+    _endDate = supplement.endDate ?? _endDate;
+    _waterDate = supplement.date ?? _waterDate;
+    _waterFrequency = supplement.frequencyDays ?? 0;
+    _selectedUnit =
+        supplement.items.isNotEmpty ? supplement.items.first.unit : _selectedUnit;
 
-    if (widget.supplement != null) {
-      final s = widget.supplement!;
-      _selectedType = s.type;
-      _selectedGoal = s.goal ?? SupplementGoal.growthBoost;
-      _nameController.text = s.name;
-      _startDocController.text = s.startDoc.toString();
-      _endDocController.text = s.endDoc.toString();
-      _items.addAll(s.items);
-      _selectedFeedingTimes.addAll(s.feedingTimes);
-      _notesController.text = s.notes;
-
-      if (s.type == SupplementType.waterMix) {
-        _selectedFrequency = s.frequencyDays ?? 7;
-        if (s.feedingTimes.isNotEmpty) {
-          try {
-            final parts = s.feedingTimes.first.split(':');
-            final hour = int.parse(parts[0]);
-            final minute = int.parse(parts[1]);
-            _selectedTimeOfDay = TimeOfDay(hour: hour, minute: minute);
-          } catch (_) {}
+    final waterTime = supplement.effectiveWaterTime;
+    if (waterTime != null && waterTime.contains(':')) {
+      final parts = waterTime.split(':');
+      if (parts.length == 2) {
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour != null && minute != null) {
+          _waterTime = TimeOfDay(hour: hour, minute: minute);
         }
       }
+    }
 
-      // For edit mode, set unit based on first item if available
-      if (_items.isNotEmpty) {
-        _itemUnitController.text = _items.first.unit;
-      } else {
-        _itemUnitController.text = _selectedType == SupplementType.feedMix ? 'g/kg' : 'kg/acre';
-      }
-    } else {
-      // For new supplement, ensure unit is valid
-      _itemUnitController.text = _selectedType == SupplementType.feedMix ? 'g/kg' : 'kg/acre';
+    if (_waterFrequency != 0 && _waterFrequency != 7) {
+      _customRepeatController.text = _waterFrequency.toString();
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _startDocController.dispose();
-    _endDocController.dispose();
-    _itemNameController.dispose();
-    _notesController.dispose();
-    _customRepeatController.dispose();
     _itemDoseController.dispose();
-    _itemUnitController.dispose();
+    _customRepeatController.dispose();
     super.dispose();
   }
 
-  void _addItem() {
-    final name = _itemNameController.text.trim();
-    final dose = double.tryParse(_itemDoseController.text);
-    final unit = _itemUnitController.text.trim();
-
-    if (name.isEmpty || dose == null || unit.isEmpty) {
+  void _addMixItem() {
+    if (_items.length >= 3) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid item name and quantity")),
+        const SnackBar(content: Text("Maximum 3 mix items allowed")),
       );
       return;
     }
 
+    final name = _nameController.text.trim();
+    final dose = double.tryParse(_itemDoseController.text.trim());
+    if (name.isEmpty || dose == null || dose <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Problem, mix product, and dose are mandatory")),
+      );
+      return;
+    }
+
+    final unit = _selectedUnit;
     setState(() {
-      _items.add(SupplementItem(
-        name: name,
-        quantity: dose,
-        unit: unit,
-        type: _selectedType == SupplementType.feedMix ? 'feed' : 'water',
-        isMandatory: true,
-        dosePerKg: 0.0,
-      ));
-      _itemNameController.clear();
+      _items.add(
+        SupplementItem(
+          name: name,
+          quantity: dose,
+          unit: unit,
+          type: _selectedType == SupplementType.feedMix ? 'feed' : 'water',
+        ),
+      );
+      _nameController.clear();
       _itemDoseController.clear();
     });
   }
 
-  void _save() {
-    if (!_formKey.currentState!.validate()) {
+  Future<void> _pickDate({
+    required DateTime current,
+    required ValueChanged<DateTime> onPicked,
+  }) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      onPicked(picked);
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _waterTime,
+    );
+    if (picked != null) {
+      setState(() => _waterTime = picked);
+    }
+  }
+
+  void _savePlan() {
+    if (_isSaving) {
       return;
     }
-    
+    if (_selectedGoal == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Problem is mandatory")),
+      );
+      return;
+    }
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please add at least one mix item")),
+        const SnackBar(content: Text("Mix details are mandatory")),
       );
       return;
     }
-
-    if (_selectedType == SupplementType.feedMix && _selectedFeedingTimes.isEmpty) {
+    if (_selectedType == SupplementType.feedMix && _selectedRounds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select at least one feeding round")),
+        const SnackBar(content: Text("Select at least one feed time")),
+      );
+      return;
+    }
+    if (_selectedType == SupplementType.feedMix && _endDate.isBefore(_startDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("End date must be after start date")),
+      );
+      return;
+    }
+    if (_selectedType == SupplementType.waterMix && _waterFrequency == -1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter valid custom repeat days")),
       );
       return;
     }
 
-    final newSupplement = Supplement(
+    final waterTimeString =
+        "${_waterTime.hour.toString().padLeft(2, '0')}:${_waterTime.minute.toString().padLeft(2, '0')}";
+    setState(() => _isSaving = true);
+    final supplement = Supplement(
       id: widget.supplement?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _nameController.text.trim(),
-      startDoc: int.tryParse(_startDocController.text) ?? 1,
-      endDoc: int.tryParse(_endDocController.text) ?? 30,
+      name: _selectedGoal == null ? "Supplement Mix" : _goalLabel(_selectedGoal!),
+      startDoc: widget.supplement?.startDoc ?? 1,
+      endDoc: widget.supplement?.endDoc ?? 999,
+      startDate: _selectedType == SupplementType.feedMix ? _startDate : null,
+      endDate: _selectedType == SupplementType.feedMix ? _endDate : null,
       type: _selectedType,
       goal: _selectedGoal,
-      items: List.from(_items),
-      
-      feedQty: _selectedType == SupplementType.feedMix ? 1.0 : 0.0, 
-      feedingTimes: _selectedType == SupplementType.feedMix 
-          ? List.from(_selectedFeedingTimes) 
-          : ["${_selectedTimeOfDay.hour.toString().padLeft(2, '0')}:${_selectedTimeOfDay.minute.toString().padLeft(2, '0')}"],
-
-      frequencyDays: _selectedType == SupplementType.waterMix ? _selectedFrequency : null,
-      preferredTime: null,
-      pondIds: _applyTo == "All Ponds" 
-          ? ['ALL'] 
-          : (widget.pondId != null ? [widget.pondId!] : (widget.supplement?.pondIds ?? [])),
-      date: _selectedType == SupplementType.waterMix ? _selectedDate : null,
-      notes: _notesController.text.trim(),
+      pondIds: _applyTo == "All Ponds" ? ['ALL'] : [widget.pondId],
+      feedQty: widget.supplement?.feedQty ?? 1.0,
+      feedingTimes: _selectedType == SupplementType.feedMix
+          ? List<String>.from(_selectedRounds)
+          : const [],
+      frequencyDays: _selectedType == SupplementType.waterMix ? _waterFrequency : null,
+      date: _selectedType == SupplementType.waterMix ? _waterDate : null,
+      waterTime: _selectedType == SupplementType.waterMix ? waterTimeString : null,
+      items: List<SupplementItem>.from(_items),
+      isPaused: widget.supplement?.isPaused ?? false,
     );
 
-    if (widget.supplement != null) {
-      ref.read(supplementProvider.notifier).editSupplement(newSupplement);
+    if (_isEditing) {
+      ref.read(supplementProvider.notifier).editSupplement(supplement);
     } else {
-      ref.read(supplementProvider.notifier).addSupplement(newSupplement);
+      ref.read(supplementProvider.notifier).addSupplement(supplement);
     }
-
-    Navigator.pop(context);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isSaving = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _isEditing
+              ? "Supplement plan updated"
+              : _selectedType == SupplementType.feedMix
+                  ? "Feed supplement saved"
+                  : "Water mix saved",
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.cardBg,
       appBar: AppBar(
-        title: Text(widget.supplement != null ? "Edit Supplement" : "Add Supplement"),
+        title: Text(_isEditing ? "Edit Supplement" : "Add Supplement"),
+        centerTitle: true,
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.base),
           children: [
-            // 1. TYPE TOGGLE
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade200,
@@ -197,300 +251,246 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               padding: const EdgeInsets.all(4),
               child: Row(
                 children: [
-                  _buildTypeOption(SupplementType.feedMix, "Feed Mix"),
-                  _buildTypeOption(SupplementType.waterMix, "Water Mix"),
+                  _typeOption(SupplementType.feedMix, "Feed Mix"),
+                  _typeOption(SupplementType.waterMix, "Water Mix"),
                 ],
               ),
             ),
             AppSpacing.hBase,
-
-            // GOAL SELECTOR
-            const Text("What problem are you solving?", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+            const Text("Problem", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: SupplementGoal.values.map((goal) {
-                final isSelected = _selectedGoal == goal;
+              runSpacing: 8,
+              children: _problemOptions().map((goal) {
                 return ChoiceChip(
-                  label: Text(_formatGoal(goal), style: const TextStyle(fontSize: 12)),
-                  selected: isSelected,
-                  onSelected: (val) => setState(() => _selectedGoal = goal),
+                  label: Text(_goalLabel(goal)),
+                  selected: _selectedGoal == goal,
+                  onSelected: (_) => setState(() => _selectedGoal = goal),
                 );
               }).toList(),
             ),
             AppSpacing.hBase,
-
-            // 2. BASIC INFO
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: "Supplement Name",
-                hintText: "e.g. Gut Health Mix / Mineral Mix",
-                prefixIcon: Icon(Icons.label_outline_rounded),
-              ),
-              textCapitalization: TextCapitalization.words,
-              validator: (v) => v!.isEmpty ? "Required" : null,
-            ),
-            AppSpacing.hBase,
-
-            // Apply To selection
-            const Text("Apply To", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+            const Text("Mix Details", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(
-              children: ["This Pond", "Multiple", "All Ponds"].map((opt) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(opt, style: const TextStyle(fontSize: 12)),
-                    selected: _applyTo == opt,
-                    onSelected: (val) => setState(() => _applyTo = opt),
-                  ),
-                ),
-              )).toList(),
-            ),
-            AppSpacing.hBase,
-
-            // 3. DOC RANGE (Feed Only)
-            if (_selectedType == SupplementType.feedMix) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _startDocController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: "DOC From", prefixIcon: Icon(Icons.play_arrow_outlined)),
-                      validator: (v) => v!.isEmpty ? "Required" : null,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _endDocController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: "DOC To", prefixIcon: Icon(Icons.stop_outlined)),
-                      validator: (v) => v!.isEmpty ? "Required" : null,
-                    ),
-                  ),
-                ],
-              ),
-              AppSpacing.hBase,
-              
-              const Text("Select Feeding Rounds", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
-              const SizedBox(height: 8),
-              Row(
-                children: [1, 2, 3, 4].map((round) {
-                  final label = "R$round";
-                  final isSelected = _selectedFeedingTimes.contains(label);
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(label),
-                        selected: isSelected,
-                        onSelected: (val) {
-                          setState(() {
-                            if (val) {
-                              _selectedFeedingTimes.add(label);
-                            } else {
-                              _selectedFeedingTimes.remove(label);
-                            }
-                          });
-                        },
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-
-            // 4. DATE & REPEAT (Water Only)
-            if (_selectedType == SupplementType.waterMix) ...[
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _selectedDate,
-                    firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                    lastDate: DateTime.now().add(const Duration(days: 90)),
-                  );
-                  if (picked != null) setState(() => _selectedDate = picked);
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: "Start Date", prefixIcon: Icon(Icons.calendar_month_outlined)),
-                  child: Text(DateFormat('dd MMM yyyy').format(_selectedDate)),
-                ),
-              ),
-              AppSpacing.hBase,
-
-              const Text("Frequency", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                children: [
-                  _frequencyChip(0, "No Repeat"),
-                  _frequencyChip(7, "7 Days"),
-                  _frequencyChip(15, "15 Days"),
-                  FilterChip(
-                    label: const Text("Custom"),
-                    selected: ![0, 7, 15].contains(_selectedFrequency),
-                    onSelected: (v) => setState(() => _selectedFrequency = 1),
-                  ),
-                ],
-              ),
-              if (![0, 7, 15].contains(_selectedFrequency)) ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _customRepeatController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: "Every [__] days"),
-                  onChanged: (v) => _selectedFrequency = int.tryParse(v) ?? 1,
-                ),
-              ],
-              AppSpacing.hBase,
-
-            const Text("Scheduled Application Time", style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () async {
-                final picked = await showTimePicker(
-                  context: context,
-                  initialTime: _selectedTimeOfDay,
-                );
-                if (picked != null) setState(() => _selectedTimeOfDay = picked);
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.access_time_rounded),
-                ),
-                child: Text(_selectedTimeOfDay.format(context)),
-              ),
-            ),
-            ],
-
-            AppSpacing.hBase,
-
-            // 5. MIX ITEMS
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Mix Details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                if (_items.isNotEmpty)
-                  Text("${_items.length} items", style: const TextStyle(color: AppColors.textTertiary, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            
-            // Add Item Row
             Row(
               children: [
                 Expanded(
                   flex: 3,
                   child: TextField(
-                    style: const TextStyle(fontSize: 13),
-                    controller: _itemNameController,
-                    decoration: const InputDecoration(hintText: "Mix Item", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+                    controller: _nameController,
+                    decoration: const InputDecoration(hintText: "Product"),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: TextField(
-                    style: const TextStyle(fontSize: 13),
                     controller: _itemDoseController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: "Qty", contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      hintText: "Dose",
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
-                    value: _itemUnitController.text,
-                    style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8)),
-                    items: (_selectedType == SupplementType.feedMix ? ["g/kg", "ml/kg"] : ["kg/acre", "ml/acre", "L/acre", "g/m3"])
-                        .map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-                    onChanged: (v) => _itemUnitController.text = v ?? "ml",
+                    value: _selectedUnit,
+                    decoration: const InputDecoration(),
+                    items: const [
+                      DropdownMenuItem(value: "g/kg", child: Text("g/kg")),
+                      DropdownMenuItem(
+                          value: "ml/liters", child: Text("ml/liters")),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedUnit = value);
+                      }
+                    },
                   ),
                 ),
                 IconButton(
+                  onPressed: _addMixItem,
                   icon: const Icon(Icons.add_circle, color: Colors.green, size: 32),
-                  onPressed: _addItem,
-                )
+                ),
               ],
             ),
-            
             const SizedBox(height: 12),
-            if (_items.isEmpty)
-               Padding(
-                 padding: const EdgeInsets.symmetric(vertical: 20),
-                 child: Center(child: Text("At least 1 item required", style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
-               ),
-
-            // List Items
-            ..._items.map<Widget>((item) => Card(
-              child: ListTile(
-                dense: true,
-                title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("${item.quantity} ${item.unit}"),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => setState(() => _items.remove(item)),
+            ..._items.map((item) => Card(
+                  child: ListTile(
+                    dense: true,
+                    title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text("${item.quantity} ${item.unit}"),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () => setState(() => _items.remove(item)),
+                    ),
+                  ),
+                )),
+            if (_selectedType == SupplementType.feedMix) ...[
+              AppSpacing.hBase,
+              const Text("Start Date & End Date", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _pickDate(
+                        current: _startDate,
+                        onPicked: (date) => setState(() => _startDate = date),
+                      ),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: "Start Date"),
+                        child: Text(DateFormat('dd MMM yyyy').format(_startDate)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _pickDate(
+                        current: _endDate,
+                        onPicked: (date) => setState(() => _endDate = date),
+                      ),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: "End Date"),
+                        child: Text(DateFormat('dd MMM yyyy').format(_endDate)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              AppSpacing.hBase,
+              const Text("Feed Time", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: ["R1", "R2", "R3", "R4"].map((round) {
+                  final isSelected = _selectedRounds.contains(round);
+                  return FilterChip(
+                    label: Text(round),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedRounds.add(round);
+                        } else {
+                          _selectedRounds.remove(round);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              AppSpacing.hBase,
+              const Text("Apply To", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: ["This Pond", "All Ponds"].map((opt) {
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(opt),
+                        selected: _applyTo == opt,
+                        onSelected: (_) => setState(() => _applyTo = opt),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ] else ...[
+              AppSpacing.hBase,
+              const Text("Date", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => _pickDate(
+                  current: _waterDate,
+                  onPicked: (date) => setState(() => _waterDate = date),
+                ),
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: "Date"),
+                  child: Text(DateFormat('dd MMM yyyy').format(_waterDate)),
                 ),
               ),
-            )),
-
-            AppSpacing.hBase,
-
-            // 6. NOTES
-            TextFormField(
-              controller: _notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: "Notes (Optional)",
-                hintText: "Add any special instructions...",
-                alignLabelWithHint: true,
+              AppSpacing.hBase,
+              const Text("Time", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _pickTime,
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: "Time"),
+                  child: Text(_waterTime.format(context)),
+                ),
               ),
-            ),
-
+              AppSpacing.hBase,
+              const Text("Repeat", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _repeatChip(0, "Today only"),
+                  _repeatChip(7, "Every 7 days"),
+                  _repeatChip(-1, "Custom"),
+                ],
+              ),
+              if (_waterFrequency == -1) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _customRepeatController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: "Every __ days"),
+                  onChanged: (value) {
+                    final days = int.tryParse(value);
+                    setState(() {
+                      _waterFrequency = (days != null && days > 0) ? days : -1;
+                    });
+                  },
+                ),
+              ],
+            ],
             AppSpacing.hXl,
-
-            // 7. FOOTER
             SizedBox(
-              width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _save,
+                onPressed: _isSaving ? null : _savePlan,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
                 ),
-                child: const Text("SAVE SUPPLEMENT", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 0.5)),
+                child: Text(
+                  _isSaving
+                      ? "SAVING..."
+                      : _isEditing
+                          ? "UPDATE PLAN"
+                          : _selectedType == SupplementType.feedMix
+                              ? "APPLY TO FEED"
+                              : "SAVE WATER MIX",
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("CANCEL", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTypeOption(SupplementType type, String label) {
+  Widget _typeOption(SupplementType type, String label) {
     final isSelected = _selectedType == type;
     return Expanded(
       child: GestureDetector(
         onTap: () {
           setState(() {
             _selectedType = type;
-            _itemUnitController.text = type == SupplementType.feedMix 
-                ? 'g/kg' 
-                : 'kg/acre';
+            _items.clear();
+            _selectedRounds.clear();
+            _nameController.clear();
+            _itemDoseController.clear();
+            _selectedUnit = "g/kg";
           });
         },
         child: Container(
@@ -498,31 +498,61 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
-            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)] : null,
           ),
-          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.black : Colors.grey)),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.black : Colors.grey,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  String _formatGoal(SupplementGoal goal) {
+  List<SupplementGoal> _problemOptions() {
+    return _selectedType == SupplementType.feedMix
+        ? const [
+            SupplementGoal.growthBoost,
+            SupplementGoal.diseasePrevention,
+            SupplementGoal.stressRecovery,
+          ]
+        : const [
+            SupplementGoal.waterCorrection,
+            SupplementGoal.stressRecovery,
+            SupplementGoal.growthBoost,
+          ];
+  }
+
+  String _goalLabel(SupplementGoal goal) {
     switch (goal) {
-      case SupplementGoal.growthBoost: return "Growth Boost";
-      case SupplementGoal.diseasePrevention: return "Disease Prevention";
-      case SupplementGoal.waterCorrection: return "Water Correction";
-      case SupplementGoal.stressRecovery: return "Stress Recovery";
+      case SupplementGoal.growthBoost:
+        return _selectedType == SupplementType.waterMix ? "Mineral" : "Growth";
+      case SupplementGoal.diseasePrevention:
+        return "Immunity";
+      case SupplementGoal.waterCorrection:
+        return "Water Quality";
+      case SupplementGoal.stressRecovery:
+        return "Stress";
     }
   }
 
-  Widget _frequencyChip(int days, String label) {
-    final isSelected = _selectedFrequency == days;
+  Widget _repeatChip(int days, String label) {
+    final selected = (days == -1 && _waterFrequency != 0 && _waterFrequency != 7) ||
+        _waterFrequency == days;
     return FilterChip(
       label: Text(label),
-      selected: isSelected,
-      onSelected: (v) => setState(() => _selectedFrequency = days),
-      checkmarkColor: AppColors.primary,
+      selected: selected,
+      onSelected: (_) {
+        setState(() {
+          _waterFrequency = days;
+          if (days != -1) {
+            _customRepeatController.clear();
+          }
+        });
+      },
     );
   }
-
 }

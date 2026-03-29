@@ -160,9 +160,10 @@ class ProfileScreen extends ConsumerWidget {
                           child: Text('Logout',
                               style: TextStyle(
                                   color: Theme.of(context).colorScheme.error)),
-                          onPressed: () {
-                            ref.read(authProvider.notifier).logout();
+                          onPressed: () async {
+                            await ref.read(authProvider.notifier).logout();
                             // Close the dialog first
+                            if (!context.mounted) return;
                             Navigator.of(dialogContext).pop();
                             // Navigate to login and remove all previous routes
                             Navigator.pushNamedAndRemoveUntil(

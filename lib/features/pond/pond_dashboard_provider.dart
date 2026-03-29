@@ -93,6 +93,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     _updateStateForPond(pondId);
   }
 
+  void resetPondState(String pondId) {
+    _pondCache.remove(pondId);
+    if (state.selectedPond == pondId) {
+      _updateStateForPond(pondId);
+    }
+  }
+
   // =========================================================
   // 🍽 FEED MARKING
   // =========================================================
@@ -112,7 +119,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     if (plan != null) {
       final dayPlan = plan.days.firstWhere((d) => d.doc == state.doc,
           orElse: () =>
-              FeedDayPlan(doc: state.doc, rounds: [1.0, 1.0, 1.0, 1.0]));
+              FeedDayPlan(doc: state.doc, rounds: [0.0, 0.0, 0.0, 0.0]));
 
       // Access round index (0-based)
       final roundIdx = round - 1;
@@ -127,6 +134,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           final mode = FeedStateEngine.getMode(state.doc);
           qty = FeedStateEngine.applyTrayAdjustment([prevTray], qty, mode);
         }
+      }
+
+      if (qty <= 0) {
+        return;
       }
 
       ref.read(feedHistoryProvider.notifier).logFeeding(

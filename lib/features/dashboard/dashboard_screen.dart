@@ -35,8 +35,6 @@ class DashboardScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildWeatherCard(),
-                          const SizedBox(height: 28),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -365,98 +363,6 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildWeatherCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade600, Colors.blue.shade800],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          )
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Icon(Icons.wb_sunny_rounded,
-                size: 120, color: Colors.white.withOpacity(0.15)),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20)),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.calendar_today_rounded,
-                        size: 12, color: Colors.white),
-                    SizedBox(width: 6),
-                    Text("Today's Climate",
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    "32°",
-                    style: TextStyle(
-                      fontSize: 48,
-                      height: 1,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      "C",
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: Colors.white.withOpacity(0.8),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Sunny • Humidity 65%",
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMetricsGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
@@ -513,6 +419,7 @@ class PondCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentDoc = ref.watch(docProvider(pond.id));
     final growthLogs = ref.watch(growthProvider(pond.id));
     final historyMap = ref.watch(feedHistoryProvider);
     final feedLogs = historyMap[pond.id] ?? [];
@@ -521,9 +428,9 @@ class PondCard extends ConsumerWidget {
     double abw = 0;
     double consumedFeed = feedLogs.fold(0.0, (sum, log) => sum + log.total);
     double survival = 1.0;
-    if (pond.doc > 60) {
+    if (currentDoc > 60) {
       survival = 0.90;
-    } else if (pond.doc > 30) {
+    } else if (currentDoc > 30) {
       survival = 0.95;
     } else {
       survival = 1.0;
@@ -638,7 +545,7 @@ class PondCard extends ConsumerWidget {
                           Row(
                             children: [
                               _PondTag(Icons.calendar_month_rounded,
-                                  "DOC ${pond.doc}"),
+                                  "DOC $currentDoc"),
                               const SizedBox(width: 12),
                               _PondTag(
                                   Icons.straighten_rounded, "${pond.area} ac"),

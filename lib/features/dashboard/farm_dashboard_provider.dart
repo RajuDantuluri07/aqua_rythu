@@ -40,6 +40,7 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
 
   // ✅ SINGLE CLEAN LOOP
   for (var pond in currentFarm.ponds) {
+    final currentDoc = ref.watch(docProvider(pond.id));
     final growthLogs = ref.watch(growthProvider(pond.id));
 
     // Biomass
@@ -48,9 +49,9 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
       // Estimate biomass: SeedCount * Survival * ABW / 1000
       // Assuming simple survival decay for dashboard view
       double survival = 1.0;
-      if (pond.doc > 60) {
+      if (currentDoc > 60) {
         survival = 0.90;
-      } else if (pond.doc > 30) {
+      } else if (currentDoc > 30) {
         survival = 0.95;
       } else {
         survival = 1.0;
@@ -60,8 +61,8 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
           (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
 
       // Growth
-      if (pond.doc > 0) {
-        totalGrowthRate += (lastLog.averageBodyWeight / pond.doc);
+      if (currentDoc > 0) {
+        totalGrowthRate += (lastLog.averageBodyWeight / currentDoc);
       }
     }
 
@@ -69,10 +70,10 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
     final plan = planMap[pond.id];
     if (plan != null && plan.days.isNotEmpty) {
       totalFeed += plan.days
-          .where((d) => d.doc <= pond.doc)
+          .where((d) => d.doc <= currentDoc)
           .fold(0.0, (sum, day) => sum + day.total);
     } else {
-      totalFeed += pond.seedCount * 0.0005 * pond.doc;
+      totalFeed += pond.seedCount * 0.0005 * currentDoc;
     }
   }
 

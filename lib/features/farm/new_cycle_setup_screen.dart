@@ -5,6 +5,12 @@ import 'farm_provider.dart';
 import '../feed/feed_plan_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../feed/feed_history_provider.dart';
+import '../tray/tray_provider.dart';
+import '../water/water_provider.dart';
+import '../supplements/supplement_provider.dart';
+import '../pond/pond_dashboard_provider.dart';
+import '../growth/growth_provider.dart' as growth_feature;
+import '../pond/growth_provider.dart' as growth_dashboard;
 import '../../core/theme/app_theme.dart';
 
 class NewCycleSetupScreen extends ConsumerStatefulWidget {
@@ -36,27 +42,40 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
       final plSize = int.parse(_plSizeCtrl.text);
 
       // 1. Reset Pond Status & Data
-      ref.read(farmProvider.notifier).resetPond(
-            widget.pondId,
-            seedCount: seedCount,
-            plSize: plSize,
-            stockingDate: _stockingDate,
-            numTrays: _selectedTrays,
-          );
+	      ref.read(farmProvider.notifier).resetPond(
+	            widget.pondId,
+	            seedCount: seedCount,
+	            plSize: plSize,
+	            stockingDate: _stockingDate,
+	            numTrays: _selectedTrays,
+	          );
 
-      // 2. Generate New Blind Plan (Overwrites old plan)
-      ref.read(feedPlanProvider.notifier).createPlan(
-            pondId: widget.pondId,
-            seedCount: seedCount,
-            plSize: plSize,
-          );
+	      // 2. Clear Old Pond-Linked Data
+	      ref.read(harvestProvider(widget.pondId).notifier).clearHarvests();
+	      ref.read(feedHistoryProvider.notifier).clearHistory(widget.pondId);
+	      ref.read(trayProvider(widget.pondId).notifier).clearLogs();
+	      ref.read(waterProvider(widget.pondId).notifier).clearLogs();
+	      ref
+	          .read(growth_feature.growthProvider(widget.pondId).notifier)
+	          .clearLogs();
+	      ref
+	          .read(growth_dashboard.growthProvider(widget.pondId).notifier)
+	          .clearLogs();
+	      ref.read(supplementProvider.notifier).clearForPond(widget.pondId);
+	      ref.read(supplementLogProvider.notifier).clearForPond(widget.pondId);
 
-      // 3. Clear Old Data
-      ref.read(harvestProvider(widget.pondId).notifier).clearHarvests();
-      ref.read(feedHistoryProvider.notifier).clearHistory(widget.pondId);
+	      // 3. Generate New Blind Plan (Overwrites old plan)
+	      ref.read(feedPlanProvider.notifier).createPlan(
+	            pondId: widget.pondId,
+	            seedCount: seedCount,
+	            plSize: plSize,
+	          );
 
-      // Navigate back to Dashboard
-      Navigator.pop(context);
+	      // 4. Clear any in-memory dashboard progress for this pond
+	      ref.read(pondDashboardProvider.notifier).resetPondState(widget.pondId);
+
+	      // Navigate back to Dashboard
+	      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

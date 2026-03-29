@@ -26,29 +26,17 @@ class WaterTaskEngine {
 
     return plans.where((p) {
       if (p.type != SupplementType.waterMix || p.date == null) return false;
-
-      final normalizedStartDate =
-          DateTime(p.date!.year, p.date!.month, p.date!.day);
-
-      if (normalizedToday.isBefore(normalizedStartDate)) return false;
-
-      // Repeat logic
-      if (p.frequencyDays != null && p.frequencyDays! > 0) {
-        final diff = normalizedToday.difference(normalizedStartDate).inDays;
-        return diff % p.frequencyDays! == 0;
-      }
-
-      // No repeat case: Only show on selected date
-      return normalizedToday.isAtSameMomentAs(normalizedStartDate);
+      return p.isActiveOnDate(normalizedToday);
     }).expand((plan) {
-      return plan.feedingTimes.map((time) {
-        return WaterTask(
+      final timeSlot = plan.effectiveWaterTime ?? '';
+      return [
+        WaterTask(
           name: plan.name,
-          timeSlot: time,
+          timeSlot: timeSlot,
           items: plan.items,
           preferredTime: plan.preferredTime,
-        );
-      });
+        ),
+      ];
     }).toList();
   }
 }

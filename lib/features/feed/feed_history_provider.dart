@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/enums/tray_status.dart';
+import 'feed_plan_provider.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -27,47 +28,22 @@ class FeedHistoryLog {
 
 class FeedHistoryNotifier
     extends StateNotifier<Map<String, List<FeedHistoryLog>>> {
-  FeedHistoryNotifier() : super({}) {
-    _loadInitialMockData();
-  }
+  FeedHistoryNotifier(this.ref) : super({});
 
-  void _loadInitialMockData() {
-    // Generate some history for 'Pond 1'
-    final now = DateTime.now();
-    final List<FeedHistoryLog> logs = [];
-    double runningCum = 0;
+  final Ref ref;
 
-    for (int i = 0; i < 31; i++) {
-      final doc = i + 1;
-      final date = now.subtract(Duration(days: 31 - i + 1)); // Past days
-
-      final double baseFeed = doc * 0.5 + 5;
-      final mockRounds = [
-        baseFeed * 0.25,
-        baseFeed * 0.25,
-        baseFeed * 0.25,
-        baseFeed * 0.25
-      ];
-
-      final total = mockRounds.reduce((a, b) => a + b);
-      runningCum += total;
-
-      logs.add(FeedHistoryLog(
-        date: date,
-        doc: doc,
-        rounds: mockRounds,
-        trayStatuses: List.filled(4, null),
-        expected: total,
-        cumulative: runningCum,
-      ));
+  double _expectedFeedForDoc(String pondId, int doc) {
+    final plan = ref.read(feedPlanProvider)[pondId];
+    if (plan == null) {
+      return 0.0;
     }
 
-    // Add Today as an empty placeholder or partially filled if needed
-    // But better to add it on the fly from Dashboard
+    final dayPlan = plan.days.where((day) => day.doc == doc);
+    if (dayPlan.isEmpty) {
+      return 0.0;
+    }
 
-    state = {
-      'Pond 1': logs.reversed.toList(),
-    };
+    return dayPlan.first.total;
   }
 
   /// 🍽 LOG REAL-TIME FEEDING
@@ -77,8 +53,13 @@ class FeedHistoryNotifier
     required int round,
     required double qty,
   }) {
+    if (qty <= 0) {
+      return;
+    }
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final expected = _expectedFeedForDoc(pondId, doc);
 
     final pondLogs = List<FeedHistoryLog>.from(state[pondId] ?? []);
 
@@ -113,7 +94,7 @@ class FeedHistoryNotifier
         doc: doc,
         rounds: newRounds,
         trayStatuses: newTrays,
-        expected: existing.expected,
+        expected: expected,
         cumulative: prevCum + newTotal,
       );
     } else {
@@ -131,7 +112,7 @@ class FeedHistoryNotifier
             doc: doc,
             rounds: newRounds,
             trayStatuses: newTrays,
-            expected: 10.0, // Mock expected
+            expected: expected,
             cumulative: prevCum + qty,
           ));
     }
@@ -196,5 +177,5 @@ class FeedHistoryNotifier
 
 final feedHistoryProvider = StateNotifierProvider<FeedHistoryNotifier,
     Map<String, List<FeedHistoryLog>>>((ref) {
-  return FeedHistoryNotifier();
+  return FeedHistoryNotifier(ref);
 });

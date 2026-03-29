@@ -12,6 +12,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final harvests = ref.watch(harvestProvider(pondId));
+    final currentDoc = ref.watch(docProvider(pondId));
     final pond = ref
         .watch(farmProvider)
         .farms
@@ -73,7 +74,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-                  _buildDetailsGrid(pond, survivalRate, totalExpenses, fcr),
+                  _buildDetailsGrid(currentDoc, survivalRate, totalExpenses, fcr),
                   const SizedBox(height: 32),
                   _buildActionButtons(context),
                 ],
@@ -144,7 +145,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
   }
 
   Widget _buildDetailsGrid(
-      Pond pond, double survival, double expenses, double fcr) {
+      int currentDoc, double survival, double expenses, double fcr) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -155,7 +156,7 @@ class HarvestSummaryScreen extends ConsumerWidget {
       children: [
         _detailCard("FCR", fcr.toStringAsFixed(2), Icons.trending_up_rounded,
             Colors.blue),
-        _detailCard("Duration", "${pond.doc} Days",
+        _detailCard("Duration", "$currentDoc Days",
             Icons.calendar_today_rounded, Colors.orange),
         _detailCard("Survival", "${survival.toStringAsFixed(1)}%",
             Icons.health_and_safety_rounded, Colors.green),
