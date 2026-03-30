@@ -27,6 +27,7 @@ import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import '../../core/engines/feed_state_engine.dart';
+import '../../core/engines/models/feed_output.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -371,14 +372,43 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final currentFarm = farmState.currentFarm;
     final ponds = currentFarm?.ponds ?? [];
 
-    final currentPond = ponds.firstWhere((p) => p.id == selectedPond,
-        orElse: () => ponds.isNotEmpty
-            ? ponds.first
-            : Pond(
-                id: "Dummy",
-                name: "No Pond",
-                area: 1.0,
-                stockingDate: DateTime.now()));
+    final currentPond = ponds.isNotEmpty
+        ? ponds.firstWhere(
+            (p) => p.id == selectedPond,
+            orElse: () => ponds.first,
+          )
+        : null;  // ✅ CLEANED: Return null if no ponds - let UI handle gracefully
+
+    /// ⚠️ HANDLED: If no pond exists, show empty state instead of dummy
+    if (currentPond == null) {
+      return SizedBox(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.water_drop_outlined, size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              const Text(
+                "No ponds found",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Create a new pond to get started",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     final isCompleted = currentPond.status == PondStatus.completed;
 
@@ -1168,9 +1198,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             plannedFeed: qty,
             smartFeed: smartFeed,
             engineOutput: engineOutput,
-            onMarkFed: () {
+            doc: currentDoc,
+            showTrayCTA: roundState.showTrayCTA,
+            onMarkFed: (double overrideFeed) {
               if (!roundState.isLocked) {
-                if (qty <= 0) {
+                if (overrideFeed <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text("Feed quantity must be greater than zero"),
@@ -1179,46 +1211,27 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   );
                   return;
                 }
-                // Log the feed (smart or planned)
+                // Log the feed with the override amount
                 ref.read(feedHistoryProvider.notifier).logFeeding(
                   pondId: selectedPond,
                   doc: currentDoc,
                   round: round,
-                  qty: smartFeed ?? qty,
+                  qty: overrideFeed,
                   smartFeedQty: smartFeed,
                 );
                 _logFeedSupplementApplication(
                   pondId: dashboardState.selectedPond,
                   pondName: pondName,
                   round: round,
-                  feedQty: smartFeed ?? qty,
+                  feedQty: overrideFeed,
                   activePlansToday: activePlansToday,
                 );
                 ref.read(pondDashboardProvider.notifier).markFeedDone(round);
               }
             },
-            onOverride: () {
-              // Override functionality can be handled via SmartFeedRoundCard
-              if (!roundState.isLocked) {
-                if (qty <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Feed quantity must be greater than zero"),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                  return;
-                }
-                _logFeedSupplementApplication(
-                  pondId: dashboardState.selectedPond,
-                  pondName: pondName,
-                  round: round,
-                  feedQty: qty,
-                  activePlansToday: activePlansToday,
-                );
-                ref.read(pondDashboardProvider.notifier).markFeedDone(round);
-              }
-            },
+            onLogTray: roundState.showTrayCTA
+                ? () => openTray(round, false)
+                : null,
           );
         }
       } else {

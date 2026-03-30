@@ -25,8 +25,23 @@ class FeedRoundState {
 }
 
 class FeedStateEngine {
-  /// MODE DECIDER
-  static FeedMode getMode(int doc) {
+  /// MODE DECIDER with sampling override capability
+  /// 
+  /// Standard logic:
+  /// - DOC 1-15: Beginner (no sampling yet)
+  /// - DOC 16-30: Habit (still blind, building behaviors)
+  /// - DOC 31+: Precision (post-sampling, use real ABW)
+  /// 
+  /// Sampling Override:
+  /// - If ABW is provided (sampling logged), FORCE precision mode
+  /// - This ensures smart mode is used as soon as data is available
+  static FeedMode getMode(int doc, {double? abwSampled}) {
+    // ✅ OVERRIDE: If sampling data available, use precision immediately
+    if (abwSampled != null && abwSampled > 0) {
+      return FeedMode.precision;  // Force smart mode
+    }
+
+    // Standard progression based on DOC
     if (doc <= 15) return FeedMode.beginner;
     if (doc <= 30) return FeedMode.habit;
     return FeedMode.precision;

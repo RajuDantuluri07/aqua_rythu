@@ -20,25 +20,40 @@ class FeedCalculationEngine {
 
   /// SURVIVAL CURVE
   static double _survivalRate(int doc) {
+    if (doc <= 1) return FeedEngineConstants.survivalRates[1]!;
     if (doc >= 120) return FeedEngineConstants.survivalRates[120]!;
-    if (doc >= 90) return FeedEngineConstants.survivalRates[90]!;
-    if (doc >= 60) return FeedEngineConstants.survivalRates[60]!;
-    if (doc >= 30) return FeedEngineConstants.survivalRates[30]!;
-    if (doc >= 15) return FeedEngineConstants.survivalRates[15]!;
-    return FeedEngineConstants.survivalRates[1]!;
+
+    final points = [1, 15, 30, 60, 90, 120];
+    for (int i = 0; i < points.length - 1; i++) {
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      if (doc >= p1 && doc <= p2) {
+        final t = (doc - p1) / (p2 - p1);
+        final v1 = FeedEngineConstants.survivalRates[p1]!;
+        final v2 = FeedEngineConstants.survivalRates[p2]!;
+        return v1 + t * (v2 - v1);
+      }
+    }
+    return FeedEngineConstants.survivalRates[120]!;
   }
 
   /// STANDARD WEIGHT CURVE (Blind Mode fallback)
   static double _avgWeight(int doc) {
+    if (doc <= 1) return FeedEngineConstants.abwTargets[1]!;
     if (doc >= 120) return FeedEngineConstants.abwTargets[120]!;
-    if (doc >= 105) return FeedEngineConstants.abwTargets[105]!;
-    if (doc >= 90) return FeedEngineConstants.abwTargets[90]!;
-    if (doc >= 75) return FeedEngineConstants.abwTargets[75]!;
-    if (doc >= 60) return FeedEngineConstants.abwTargets[60]!;
-    if (doc >= 45) return FeedEngineConstants.abwTargets[45]!;
-    if (doc >= 30) return FeedEngineConstants.abwTargets[30]!;
-    if (doc >= 15) return FeedEngineConstants.abwTargets[15]!;
-    return FeedEngineConstants.abwTargets[1]!;
+
+    final points = [1, 15, 30, 45, 60, 75, 90, 105, 120];
+    for (int i = 0; i < points.length - 1; i++) {
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      if (doc >= p1 && doc <= p2) {
+        final t = (doc - p1) / (p2 - p1);
+        final v1 = FeedEngineConstants.abwTargets[p1]!;
+        final v2 = FeedEngineConstants.abwTargets[p2]!;
+        return v1 + t * (v2 - v1);
+      }
+    }
+    return FeedEngineConstants.abwTargets[120]!;
   }
 
   /// FEED % TABLE (PRD 5.3) based on ABW

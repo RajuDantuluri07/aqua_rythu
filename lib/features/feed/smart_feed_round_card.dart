@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/engines/models/feed_output.dart';
 import 'smart_feed_provider.dart';
-import 'feed_history_provider.dart';
 
 /// 🎯 ENHANCED ROUND CARD with Planned vs Smart vs Actual comparison
 /// 
@@ -12,7 +10,7 @@ import 'feed_history_provider.dart';
 /// - Smart feed (real-time calculation)
 /// - Actual feed (logged by user)
 /// - Reasons for adjustment
-/// - Override capability
+/// - Override capability with dialog
 
 class SmartFeedRoundCard extends ConsumerStatefulWidget {
   final String pondId;
@@ -21,8 +19,11 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
   final double plannedFeed;
   final double? smartFeed;
   final FeedOutput? engineOutput;
-  final VoidCallback onMarkFed;
-  final VoidCallback onOverride;
+  final int doc;  // ✅ Days on cluster (for DOC-based tray logic)
+  final bool showTrayCTA;  // ✅ Whether to show tray CTA after feeding
+  final Function(double overrideFeed) onMarkFed;  // ✅ Now accepts override amount
+  final VoidCallback? onLogTray;  // ✅ Callback to log tray (optional)
+  final Function(double suggestedFeed)? onShowOverrideDialog;  // Optional callback
 
   const SmartFeedRoundCard({
     super.key,
@@ -30,10 +31,13 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
     required this.round,
     required this.time,
     required this.plannedFeed,
+    required this.doc,
+    required this.showTrayCTA,
     this.smartFeed,
     this.engineOutput,
     required this.onMarkFed,
-    required this.onOverride,
+    this.onLogTray,
+    this.onShowOverrideDialog,
   });
 
   @override
@@ -42,7 +46,191 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
 }
 
 class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
-  bool _showDetails = false;
+  late double _overrideAmount;
+  bool _isMarked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _overrideAmount = widget.smartFeed ?? widget.plannedFeed;
+    // If tray CTA should be shown immediately (e.g., after pre-marking)
+    if (widget.showTrayCTA && _isMarked) {
+      // Auto-enable tray CTA display
+    }
+  }
+
+  void _showOverrideDialog() {
+    _overrideAmount = widget.smartFeed ?? widget.plannedFeed;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Manual Feed Override"),
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 20),
+              // Stepper: [ − ] VALUE [ + ]
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Minus button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _overrideAmount = double.parse(
+                          (_overrideAmount - 0.25).clamp(0.0, 1000.0).toStringAsFixed(1),
+                        );
+                      });
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.remove, size: 24, color: Color(0xFF1E293B)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  // Value display (tappable for manual input)
+                  GestureDetector(
+                    onTap: () {
+                      _showManualInputDialog(context, setState);
+                    },
+                    child: Column(
+                      children: [
+                        Text(
+                          "${_overrideAmount.toStringAsFixed(1)} kg",
+                          style: const TextStyle(
+                            fontSize: 40,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "tap to edit",
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  // Plus button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _overrideAmount = double.parse(
+                          (_overrideAmount + 0.25).clamp(0.0, 1000.0).toStringAsFixed(1),
+                        );
+                      });
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.add, size: 24, color: Color(0xFF1E293B)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Mark feed with manual override amount
+              widget.onMarkFed(_overrideAmount);
+              setState(() {
+                _isMarked = true;
+              });
+              // Success feedback
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "✅ Logged ${_overrideAmount.toStringAsFixed(1)} kg",
+                  ),
+                  backgroundColor: Colors.green[700],
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+            ),
+            child: const Text("Confirm"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showManualInputDialog(BuildContext parentContext, Function(VoidCallback) setDialogState) {
+    final controller = TextEditingController(text: _overrideAmount.toStringAsFixed(1));
+
+    showDialog(
+      context: parentContext,
+      builder: (context) => AlertDialog(
+        title: const Text("Enter Feed Amount"),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            hintText: "e.g., 2.5",
+            labelText: "Feed (kg)",
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              double? value = double.tryParse(controller.text);
+              if (value != null && value >= 0 && value <= 1000) {
+                value = double.parse(value.toStringAsFixed(1));
+                setDialogState(() {
+                  _overrideAmount = value!;
+                });
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Enter a value between 0 and 1000 kg"),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              }
+            },
+            child: const Text("Set"),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -209,8 +397,8 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
                   ),
 
                 /// ⚠️ CRITICAL ALERTS
-                if (smartFeed.whenData((data) => data?.isStopFeeding).maybeWhen(
-                  data: (isStop) => isStop,
+                if (smartFeed.maybeWhen(
+                  data: (data) => data?.isStopFeeding ?? false,
                   orElse: () => false,
                 ))
                   Container(
@@ -256,23 +444,69 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
             ),
             child: Row(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onMarkFed,
-                    icon: const Icon(Icons.check_circle),
-                    label: const Text("Mark as Fed"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
+                /// 1️⃣ MARK AS FED (always available before marking)
+                if (!_isMarked)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        // Mark as Fed with the smart/planned amount
+                        final feedAmount = widget.smartFeed ?? widget.plannedFeed;
+                        widget.onMarkFed(feedAmount);
+                        setState(() {
+                          _isMarked = true;
+                        });
+                        // Show success feedback
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "✅ Logged ${feedAmount.toStringAsFixed(2)} kg",
+                            ),
+                            backgroundColor: Colors.green[700],
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.check_circle),
+                      label: const Text("Mark as Fed"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: widget.onOverride,
-                  icon: const Icon(Icons.edit),
-                  label: const Text("Override"),
-                ),
+
+                /// 2️⃣ EDIT BUTTON (only before marking)
+                if (!_isMarked)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: IconButton(
+                      tooltip: "Edit feed amount",
+                      onPressed: () {
+                        _showOverrideDialog();
+                      },
+                      icon: const Icon(Icons.edit_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.grey[100],
+                        foregroundColor: const Color(0xFF1E293B),
+                      ),
+                    ),
+                  ),
+
+                /// 3️⃣ LOG TRAY CTA (after marking + DOC > 15)
+                if (_isMarked && widget.showTrayCTA && widget.onLogTray != null)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: widget.onLogTray,
+                      icon: const Icon(Icons.checklist_rounded),
+                      label: Text(
+                        widget.doc > 30 ? "Log Tray (Required)" : "Log Tray"
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange[50],
+                        foregroundColor: Colors.orange[700],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

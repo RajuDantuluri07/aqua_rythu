@@ -12,6 +12,7 @@ class Pond {
   final int plSize;
   final int numTrays;
   final PondStatus status;
+  final double? currentAbw;  // Latest sampled average body weight
 
   Pond({
     required this.id,
@@ -22,6 +23,7 @@ class Pond {
     this.plSize = 10,
     this.numTrays = 4,
     this.status = PondStatus.active,
+    this.currentAbw,
   });
 
   Pond copyWith({
@@ -33,6 +35,7 @@ class Pond {
     int? plSize,
     int? numTrays,
     PondStatus? status,
+    double? currentAbw,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -43,6 +46,7 @@ class Pond {
       plSize: plSize ?? this.plSize,
       numTrays: numTrays ?? this.numTrays,
       status: status ?? this.status,
+      currentAbw: currentAbw ?? this.currentAbw,
     );
   }
 
@@ -106,25 +110,8 @@ class FarmState {
 class FarmNotifier extends StateNotifier<FarmState> {
   FarmNotifier()
       : super(FarmState(
-          farms: [
-            Farm(
-              id: '1',
-              name: 'Sri Rama Farm',
-              location: 'Nellore',
-              ponds: [
-                Pond(
-                  id: 'Pond 1',
-                  name: 'Pond 1',
-                  area: 2.5,
-                  stockingDate:
-                      DateTime.now().subtract(const Duration(days: 21)),
-                  seedCount: 100000,
-                  plSize: 10,
-                ),
-              ],
-            ),
-          ],
-          selectedId: '1',
+          farms: [],  // ✅ CLEANED: Empty list - will load from Supabase
+          selectedId: '',
         ));
 
   void selectFarm(String id) {

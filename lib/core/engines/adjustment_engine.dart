@@ -19,7 +19,7 @@ class AdjustmentEngine {
       factor -= 0.25;
     }
 
-    // 🚨 Water rules
+    // 🚨 Water rules - CRITICAL STOP
     if (input.dissolvedOxygen < 4) return 0.0;
     if (input.dissolvedOxygen < 5) factor -= 0.30;
 
@@ -27,8 +27,22 @@ class AdjustmentEngine {
     if (input.phChange > 0.5) factor -= 0.10;
     if (input.ammonia > 0.1) factor -= 0.20;
 
-    // Mortality
-    if (input.mortality > 0) factor -= 0.20;
+    // ✅ IMPROVED: Mortality is now proportional, not binary
+    // Receives daily mortality count, not boolean
+    if (input.mortality > 0 && input.seedCount > 0) {
+      final mortalityPercent = input.mortality / input.seedCount;
+      
+      if (mortalityPercent >= 0.05) {
+        // 5%+ mortality per day: significant concern → -20%
+        factor -= 0.20;
+      } else if (mortalityPercent >= 0.02) {
+        // 2-5% mortality per day: concerning → -10%
+        factor -= 0.10;
+      } else if (mortalityPercent > 0) {
+        // < 2% mortality per day: minor issue → -5%
+        factor -= 0.05;
+      }
+    }
 
     return _clamp(factor);
   }

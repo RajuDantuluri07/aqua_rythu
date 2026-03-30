@@ -6,8 +6,12 @@ import '../../core/enums/tray_status.dart';
 import '../farm/farm_provider.dart';
 import '../tray/tray_provider.dart';
 import '../water/water_provider.dart';
+import '../growth/mortality_provider.dart';
 import 'feed_history_provider.dart';
 import 'feed_plan_provider.dart';
+
+// Import needed for distribution
+import '../../core/engines/feed_calculation_engine.dart';
 
 /// ✨ TODAY'S SMART FEED (Real-time calculation)
 /// 
@@ -48,6 +52,12 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
     // Get current DOC
     final doc = pond.doc;
 
+    // ✅ FIX: Get CURRENT population after mortality
+    final mortalityNotifier = ref.watch(mortalityProvider);
+    final currentPopulation = mortalityNotifier[pondId]
+        ?.fold<int>(0, (sum, log) => sum + log.count) ?? 0;
+    final livePopulation = pond.seedCount - currentPopulation;
+
     // Get base plan
     final feedPlanMap = ref.watch(feedPlanProvider);
     final basePlan = feedPlanMap[pondId];
@@ -79,13 +89,25 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
     final temp = latestWater?.ph ?? 7.8;
 
     // Get tray statuses or default to partial
-    final trayStatuses = latestTray?.trays ?? [TrayStatus.partial, TrayStatus.partial, TrayStatus.partial, TrayStatus.partial];
+    final trayStatuses = latestTray?.trays ?? 
+        [TrayStatus.partial, TrayStatus.partial, TrayStatus.partial, TrayStatus.partial];
 
-    // Create input
+    // ✅ FIX: Support sampling data (ABW) to trigger sampling override in FeedStateEngine
+    double? sampledAbw;
+    if (pond.currentAbw != null && pond.currentAbw! > 0) {
+      sampledAbw = pond.currentAbw;  // Use latest sampled ABW if available
+    }
+
+    // ✅ FIX: Get today's mortality for this DOC
+    final todayMortality = mortalityNotifier[pondId]
+        ?.where((log) => log.doc == doc)
+        .fold<int>(0, (sum, log) => sum + log.count) ?? 0;
+
+    // Create input with UPDATED population and sampling data
     final input = FeedInput(
-      seedCount: pond.seedCount,
+      seedCount: livePopulation > 0 ? livePopulation : pond.seedCount,  // Use current population
       doc: doc,
-      abw: null,  // Will use standard curve
+      abw: sampledAbw,  // Pass sampled ABW to trigger sampling override
 
       feedingScore: 3.0,  // Default (could be captured from UI)
       intakePercent: 85.0,  // Default
@@ -95,7 +117,7 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
       phChange: 0.0,
       ammonia: ammonia,
 
-      mortality: 0,  // Default
+      mortality: todayMortality,  // Today's mortality count
       trayStatuses: trayStatuses,
 
       lastFcr: null,  // TODO: Calculate from historical data
@@ -122,6 +144,3 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
     return null;
   }
 });
-
-// Import needed for distribution
-import '../../core/engines/feed_calculation_engine.dart';

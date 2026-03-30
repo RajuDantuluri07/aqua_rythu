@@ -21,8 +21,8 @@ void main() {
       );
 
       // Expected Biomass = 100,000 * 0.93 (survival) * 0.5g (ABW) = 46.5 kg
-      // Expected Feed = 46.5 kg * 0.08 (Feeding Rate) = 3.72 kg
-      expect(feed, closeTo(3.72, 0.01));
+      // Expected Feed = 46.5 kg * 0.15 (Feeding Rate for ABW < 1g) = 6.975 kg
+      expect(feed, closeTo(6.975, 0.01));
     });
 
     test('Meal Split Logic - 4 Meals', () {
