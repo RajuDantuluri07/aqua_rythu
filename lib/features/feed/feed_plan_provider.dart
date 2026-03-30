@@ -1,3 +1,6 @@
+import '../../core/engines/master_feed_engine.dart';
+import '../../core/engines/models/feed_input.dart';
+import '../../core/enums/tray_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/engines/feed_calculation_engine.dart';
 
@@ -141,6 +144,84 @@ class FeedPlanNotifier extends StateNotifier<Map<String, FeedPlan>> {
     if (plan == null) return null;
     return plan.days.firstWhere((d) => d.doc == doc,
         orElse: () => FeedDayPlan(doc: doc, rounds: [0.0, 0.0, 0.0, 0.0]));
+  }
+
+  FeedDayPlan getTodaySmartFeed({
+    required String pondId,
+    required int doc,
+    required int seedCount,
+    required double? abw,
+
+    required double feedingScore,
+    required double intakePercent,
+
+    required double dissolvedOxygen,
+    required double temperature,
+    required double phChange,
+    required double ammonia,
+
+    required int mortality,
+    required List<TrayStatus> trayStatuses,
+
+    double? lastFcr,
+    double? actualFeedYesterday,
+  }) {
+    // 🔹 Step 1: Get base plan
+    final baseDay = getDayPlan(pondId, doc);
+
+    // fallback if no plan
+    final baseTotal = baseDay?.total ??
+        FeedCalculationEngine.calculateFeed(
+          seedCount: seedCount,
+          doc: doc,
+          currentAbw: abw,
+        );
+
+    // 🔹 Step 2: Run MASTER ENGINE
+    final input = FeedInput(
+      seedCount: seedCount,
+      doc: doc,
+      abw: abw,
+      feedingScore: feedingScore,
+      intakePercent: intakePercent,
+      dissolvedOxygen: dissolvedOxygen,
+      temperature: temperature,
+      phChange: phChange,
+      ammonia: ammonia,
+      mortality: mortality,
+      trayStatuses: trayStatuses,
+      lastFcr: lastFcr,
+      actualFeedYesterday: actualFeedYesterday,
+    );
+
+    final output = MasterFeedEngine.run(input);
+
+    final smartTotal = output.recommendedFeed;
+
+    // 🔹 Step 3: Distribute into rounds
+    final rounds = FeedCalculationEngine.distributeFeed(smartTotal, 4);
+
+    return FeedDayPlan(
+      doc: doc,
+      rounds: rounds,
+    );
+  }
+
+  /// 🔄 HELPER: Convert String data from UI/DB to TrayStatus enum
+  /// Usage: When trayStatuses come as ["full", "partial", "empty"] from database
+  List<TrayStatus> mapTrayStatuses(List<String> raw) {
+    return raw.map((e) {
+      switch (e.toLowerCase()) {
+        case 'full':
+          return TrayStatus.full;
+        case 'partial':
+          return TrayStatus.partial;
+        case 'empty':
+          return TrayStatus.empty;
+        default:
+          return TrayStatus.empty;
+      }
+    }).toList();
   }
 }
 

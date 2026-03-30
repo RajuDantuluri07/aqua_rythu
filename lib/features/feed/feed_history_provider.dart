@@ -5,7 +5,8 @@ import 'feed_plan_provider.dart';
 class FeedHistoryLog {
   final DateTime date;
   final int doc;
-  final List<double> rounds; // Use a list for flexibility
+  final List<double> rounds; // Actual feed logged
+  final List<double>? smartFeedRecommendations; // Smart recommendations
   final List<TrayStatus?> trayStatuses;
   final double expected;
   final double cumulative;
@@ -14,6 +15,7 @@ class FeedHistoryLog {
     required this.date,
     required this.doc,
     required this.rounds,
+    this.smartFeedRecommendations,
     required this.trayStatuses,
     required this.expected,
     required this.cumulative,
@@ -52,6 +54,7 @@ class FeedHistoryNotifier
     required int doc,
     required int round,
     required double qty,
+    double? smartFeedQty,
   }) {
     if (qty <= 0) {
       return;
@@ -73,14 +76,21 @@ class FeedHistoryNotifier
       final existing = pondLogs[todayIdx];
       final newRounds = List<double>.from(existing.rounds);
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
+      final newSmartFeeds = existing.smartFeedRecommendations != null
+          ? List<double>.from(existing.smartFeedRecommendations!)
+          : List<double>.filled(4, 0.0);
 
       // Expand rounds if needed (e.g. if rounds was [0,0,0,0])
       if (newRounds.length < round) {
         final diff = round - newRounds.length;
         newRounds.addAll(List.filled(diff, 0.0));
         newTrays.addAll(List.filled(diff, null));
+        newSmartFeeds.addAll(List.filled(diff, 0.0));
       }
       newRounds[round - 1] = qty;
+      if (smartFeedQty != null) {
+        newSmartFeeds[round - 1] = smartFeedQty;
+      }
 
       // Recalculate Cumulative
       double prevCum = 0.0;
@@ -93,6 +103,7 @@ class FeedHistoryNotifier
         date: existing.date,
         doc: doc,
         rounds: newRounds,
+        smartFeedRecommendations: newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
         trayStatuses: newTrays,
         expected: expected,
         cumulative: prevCum + newTotal,
@@ -102,6 +113,10 @@ class FeedHistoryNotifier
       final newRounds = List.filled(4, 0.0);
       newRounds[round - 1] = qty;
       final newTrays = List<TrayStatus?>.filled(4, null);
+      final newSmartFeeds = List.filled(4, 0.0);
+      if (smartFeedQty != null) {
+        newSmartFeeds[round - 1] = smartFeedQty;
+      }
 
       final prevCum = pondLogs.isNotEmpty ? pondLogs.first.cumulative : 0.0;
 
@@ -111,6 +126,7 @@ class FeedHistoryNotifier
             date: today,
             doc: doc,
             rounds: newRounds,
+            smartFeedRecommendations: newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
             trayStatuses: newTrays,
             expected: expected,
             cumulative: prevCum + qty,
@@ -143,10 +159,14 @@ class FeedHistoryNotifier
     if (todayIdx != -1) {
       final existing = pondLogs[todayIdx];
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
+      final newSmartFeeds = existing.smartFeedRecommendations != null
+          ? List<double>.from(existing.smartFeedRecommendations!)
+          : List<double>.filled(4, 0.0);
 
       // Ensure capacity if rounds are expanding dynamically
       if (newTrays.length < round) {
         newTrays.addAll(List.filled(round - newTrays.length, null));
+        newSmartFeeds.addAll(List.filled(round - newSmartFeeds.length, 0.0));
       }
 
       newTrays[round - 1] = status;
@@ -155,6 +175,7 @@ class FeedHistoryNotifier
         date: existing.date,
         doc: existing.doc,
         rounds: existing.rounds,
+        smartFeedRecommendations: newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
         trayStatuses: newTrays,
         expected: existing.expected,
         cumulative: existing.cumulative,

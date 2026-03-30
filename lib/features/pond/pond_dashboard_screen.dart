@@ -17,6 +17,8 @@ import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_round_card.dart';
 import '../feed/completed_round_card.dart';
 import '../feed/upcoming_round_card.dart';
+import '../feed/smart_feed_provider.dart';
+import '../feed/smart_feed_round_card.dart';
 import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
@@ -457,6 +459,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     }
 
     final currentDoc = ref.watch(docProvider(selectedPond));
+
+    /// ✅ SMART FEED (Real-time calculation)
+    final smartFeedAsync = ref.watch(smartFeedProvider(selectedPond));
+    SmartFeedOutput? smartFeedOutput;
+    smartFeedAsync.whenData((data) {
+      smartFeedOutput = data;
+    });
 
     /// ✅ CURRENT STATS
     final history = ref.watch(feedHistoryProvider)[selectedPond] ?? [];
@@ -982,6 +991,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       activePlansToday: activePlansToday,
                       todaySupplementLogs: todaySupplementLogs,
                       feedMode: feedMode,
+                      selectedPond: selectedPond,
+                      smartFeedOutput: smartFeedOutput,
                     ),
                   ],
                 ),
@@ -1005,6 +1016,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     required List<Supplement> activePlansToday,
     required List<SupplementLog> todaySupplementLogs,
     required FeedMode feedMode,
+    required String selectedPond,
+    required SmartFeedOutput? smartFeedOutput,
   }) {
     final feedRoundsData = _getFeedRounds();
     final List<Map<String, dynamic>> timelineItems = [];
@@ -1139,22 +1152,53 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
           card = UpcomingRoundCard(
               round: round, time: time, feedQty: qty, isNext: isRoundNext);
         } else {
-          card = FeedRoundCard(
-            key: ValueKey("round_$round"),
+          // Extract smart feed data if available
+          double? smartFeed;
+          FeedOutput? engineOutput;
+          
+          if (smartFeedOutput != null && round - 1 < smartFeedOutput.roundDistribution.length) {
+            smartFeed = smartFeedOutput.roundDistribution[round - 1];
+            engineOutput = smartFeedOutput.engineOutput;
+          }
+
+          card = SmartFeedRoundCard(
+            pondId: selectedPond,
             round: round,
             time: time,
-            feedQty: qty,
-            originalQty: isAutoAdjusted ? baseQty : null,
-            isAutoAdjusted: isAutoAdjusted,
-            isDone: roundState.isDone,
-            isCurrent: roundState.isCurrent,
-            isLocked: roundState.isLocked,
-            showTrayCTA: roundState.showTrayCTA,
-            isPendingTray: roundState.isDone && roundState.showTrayCTA,
-            onOpenTray: (r) => openTray(r, false),
-            supplements:
-                _getPlannedFeedSupplements(activePlansToday, timeKey, qty),
-            onMarkDone: () {
+            plannedFeed: qty,
+            smartFeed: smartFeed,
+            engineOutput: engineOutput,
+            onMarkFed: () {
+              if (!roundState.isLocked) {
+                if (qty <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Feed quantity must be greater than zero"),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                // Log the feed (smart or planned)
+                ref.read(feedHistoryProvider.notifier).logFeeding(
+                  pondId: selectedPond,
+                  doc: currentDoc,
+                  round: round,
+                  qty: smartFeed ?? qty,
+                  smartFeedQty: smartFeed,
+                );
+                _logFeedSupplementApplication(
+                  pondId: dashboardState.selectedPond,
+                  pondName: pondName,
+                  round: round,
+                  feedQty: smartFeed ?? qty,
+                  activePlansToday: activePlansToday,
+                );
+                ref.read(pondDashboardProvider.notifier).markFeedDone(round);
+              }
+            },
+            onOverride: () {
+              // Override functionality can be handled via SmartFeedRoundCard
               if (!roundState.isLocked) {
                 if (qty <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
