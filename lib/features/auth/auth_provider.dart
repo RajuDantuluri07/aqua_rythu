@@ -68,6 +68,7 @@ if (user == null) {
 
 final userId = user.id;
 final userPhone = user.phone ?? phone;
+        print('✅ AUTH SUCCESS: $userId | $userPhone');
         
         // ✅ Check if user already exists in users table
         final existing = await _supabase
@@ -82,10 +83,9 @@ final userPhone = user.phone ?? phone;
             await _supabase.from('users').insert({
               'id': userId,
               'phone': userPhone,
-              'name': 'User $phone',
-              'email': '',
               'created_at': DateTime.now().toIso8601String(),
             });
+            print('✅ USER CREATED IN DB');
           } catch (e) {
             print('⚠️ Warning: Failed to create user record: $e');
             // Continue anyway - user auth succeeded
@@ -147,10 +147,10 @@ final userPhone = user.phone ?? phone;
             await _supabase.from('users').insert({
               'id': userId,
               'phone': session?.user.phone ?? '',
-              'name': 'User',
-              'email': session?.user.email ?? '',
               'created_at': DateTime.now().toIso8601String(),
-            }).onError((error, stackTrace) {
+            }).then((_) {
+              print('✅ USER CREATED IN DB (SESSION)');
+            }).catchError((error) {
               print('⚠️ Warning: Could not create user record: $error');
             });
           }

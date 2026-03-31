@@ -41,6 +41,18 @@ class PondService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getPonds(String farmId) async {
+    // Get today's date in YYYY-MM-DD format to filter nested feed plans
+    final today = DateTime.now().toIso8601String().split('T')[0];
+
+    return await supabase
+        .from('ponds')
+        .select('*, feed_plans(*)')
+        .eq('farm_id', farmId)
+        .eq('feed_plans.date', today)
+        .order('round', referencedTable: 'feed_plans');
+  }
+
   Future<void> _generateFeedPlan({
     required String pondId,
     required int seedCount,

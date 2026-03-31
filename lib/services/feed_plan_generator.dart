@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../feed_plan_constants.dart';
+import 'feed_plan_constants.dart';
 
 // Assuming supabase client is accessible via instance
 final supabase = Supabase.instance.client;
