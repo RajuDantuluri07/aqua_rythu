@@ -62,7 +62,7 @@ class MasterFeedEngine {
     double feed = baseFeed * adjustmentFactor;
 
     // 3. Tray adjustment
-    final mode = FeedStateEngine.getMode(input.doc, abwSampled: input.abw);
+    final mode = FeedStateEngine.getMode(input.doc);
     final originalFeed = feed;
     feed = TrayEngine.apply(
       input.trayStatuses,

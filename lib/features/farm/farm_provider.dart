@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
+import 'package:aqua_rythu/services/farm_service.dart';
 
 enum PondStatus { active, completed }
 
@@ -118,53 +119,34 @@ class FarmNotifier extends StateNotifier<FarmState> {
     state = state.copyWith(selectedId: id);
   }
 
-  void addFarm(String name, String location) {
-    final newFarm = Farm(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      location: location,
-      ponds: [],
-    );
+  Future<void> loadFarms({String? setAsSelectedId}) async {
+    try {
+      final data = await FarmService().getFarmsWithPonds();
+      
+      final loadedFarms = data.map((f) => Farm(
+        id: f['id'].toString(),
+        name: f['name'],
+        location: f['location'],
+        ponds: (f['ponds'] as List).map((p) => Pond(
+          id: p['id'].toString(),
+          name: p['name'],
+          area: (p['area'] as num).toDouble(),
+          stockingDate: DateTime.parse(p['stocking_date']),
+          seedCount: p['seed_count'] ?? 100000,
+          plSize: p['pl_size'] ?? 10,
+          numTrays: p['num_trays'] ?? 4,
+          status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
+          currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
+        )).toList(),
+      )).toList();
 
-    state = state.copyWith(
-      farms: [...state.farms, newFarm],
-      selectedId: newFarm.id,
-    );
-  }
-
-  /// ✅ CLEAN VERSION (NO REF)
-  void addPond(
-    String farmId,
-    String name,
-    double area, {
-    int seedCount = 100000,
-    int plSize = 10,
-    int numTrays = 4,
-    DateTime? stockingDate,
-  }) {
-    final newPond = Pond(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      area: area,
-      stockingDate: stockingDate ?? DateTime.now(),
-      seedCount: seedCount,
-      plSize: plSize,
-      numTrays: numTrays,
-    );
-
-    state = state.copyWith(
-      farms: state.farms.map((f) {
-        if (f.id == farmId) {
-          return Farm(
-            id: f.id,
-            name: f.name,
-            location: f.location,
-            ponds: [...f.ponds, newPond],
-          );
-        }
-        return f;
-      }).toList(),
-    );
+      state = state.copyWith(
+        farms: loadedFarms,
+        selectedId: setAsSelectedId ?? (loadedFarms.isNotEmpty ? loadedFarms.first.id : ''),
+      );
+    } catch (e) {
+      print("Error loading farms: $e");
+    }
   }
 
   void deletePond(String farmId, String pondId) {

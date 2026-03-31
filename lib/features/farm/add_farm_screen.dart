@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'farm_provider.dart';
+import 'package:aqua_rythu/features/farm/farm_provider.dart';
+import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/features/pond/add_pond_screen.dart';
 
 class AddFarmScreen extends ConsumerStatefulWidget {
   const AddFarmScreen({super.key});
@@ -13,6 +15,8 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
+  String _selectedFarmType = 'Shrimp';
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -21,24 +25,53 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
     super.dispose();
   }
 
-  void _saveFarm() {
+  Future<void> _saveFarm() async {
     if (_formKey.currentState?.validate() ?? false) {
-      ref.read(farmProvider.notifier).addFarm(
-            _nameController.text.trim(),
-            _locationController.text.trim(),
-          );
+      setState(() => _isLoading = true);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("New Farm Added Successfully"),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          backgroundColor: Colors.green.shade600,
-        ),
-      );
+      try {
+        final farmService = FarmService();
 
-      Navigator.pop(context);
+        final farmId = await farmService.createFarm(
+          name: _nameController.text.trim(),
+          location: _locationController.text.trim(),
+          farmType: _selectedFarmType,
+        );
+
+        // Refresh the provider to sync with Supabase
+        // We pass farmId to make it the active selection
+        await ref.read(farmProvider.notifier).loadFarms(setAsSelectedId: farmId);
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Farm created successfully"),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            backgroundColor: Colors.green.shade600,
+          ),
+        );
+
+        // After farm created: Pass farmId to pond screen for a smooth setup flow
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddPondScreen(farmId: farmId),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red.shade600,
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -138,6 +171,39 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                       validator: (value) =>
                           value == null || value.isEmpty ? "Required" : null,
                     ),
+                    const SizedBox(height: 20),
+                    DropdownButtonFormField<String>(
+                      value: _selectedFarmType,
+                      decoration: InputDecoration(
+                        labelText: "Farm Type",
+                        prefixIcon: Icon(Icons.category_rounded,
+                            color: Theme.of(context).primaryColor),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor, width: 2),
+                        ),
+                      ),
+                      items: ['Shrimp', 'Fish', 'Semi-Intensive', 'Intensive']
+                          .map((type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedFarmType = value);
+                        }
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -146,7 +212,7 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _saveFarm,
+                  onPressed: _isLoading ? null : _saveFarm,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
@@ -157,13 +223,20 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    "Create Farm",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text(
+                          "Create Farm",
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5),
+                        ),
                 ),
               ),
             ],

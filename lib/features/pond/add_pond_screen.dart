@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
+import '../../services/pond_service.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
-  const AddPondScreen({super.key});
+  final String? farmId;
+  const AddPondScreen({super.key, this.farmId});
 
   @override
   ConsumerState<AddPondScreen> createState() => _AddPondScreenState();
@@ -18,6 +20,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   final _plSizeController = TextEditingController();
 
   DateTime _stockingDate = DateTime.now();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -106,12 +109,11 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     return null;
   }
 
-  void _savePond() {
+  Future<void> _savePond() async {
     if (_formKey.currentState?.validate() ?? false) {
-      final farmState = ref.read(farmProvider);
-      final currentFarm = farmState.currentFarm;
+      final selectedFarmId = widget.farmId ?? ref.read(farmProvider).currentFarm?.id;
 
-      if (currentFarm == null) {
+      if (selectedFarmId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text("No Farm Selected"),
@@ -124,7 +126,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         return;
       }
 
-      final area = double.parse(_areaController.text);
+      final area = double.tryParse(_areaController.text) ?? 0.0;
       final seedCount = _seedCountController.text.isEmpty 
           ? 100000 
           : int.parse(_seedCountController.text);
@@ -132,27 +134,46 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           ? 10 
           : int.parse(_plSizeController.text);
 
-      // Add Pond to Farm
-      ref.read(farmProvider.notifier).addPond(
-            currentFarm.id,
-            _nameController.text.trim(),
-            area,
-            seedCount: seedCount,
-            plSize: plSize,
-            stockingDate: _stockingDate,
-          );
+      setState(() => _isLoading = true);
+      try {
+        final pondService = PondService();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Pond Added Successfully"),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          backgroundColor: Colors.green.shade600,
-        ),
-      );
+        await pondService.createPond(
+          farmId: selectedFarmId,
+          name: _nameController.text.trim(),
+          area: area,
+          stockingDate: _stockingDate,
+          seedCount: seedCount,
+          plSize: plSize,
+        );
 
-      Navigator.pop(context);
+        // Refresh the provider to sync the new pond from Supabase
+        await ref.read(farmProvider.notifier).loadFarms(setAsSelectedId: selectedFarmId);
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Pond created successfully"),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            backgroundColor: Colors.green.shade600,
+          ),
+        );
+
+        Navigator.pop(context);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade600,
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -321,7 +342,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _savePond,
+                  onPressed: _isLoading ? null : _savePond,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
@@ -332,13 +353,20 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    "Create Pond",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text(
+                          "Create Pond",
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5),
+                        ),
                 ),
               ),
             ],

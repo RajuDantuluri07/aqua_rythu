@@ -1,9 +1,9 @@
 import '../enums/tray_status.dart';
 
 enum FeedMode {
-  beginner,
-  habit,
-  precision,
+  blind,
+  transitional,
+  smart,
 }
 
 class FeedRoundState {
@@ -12,7 +12,9 @@ class FeedRoundState {
   final bool isLocked;
   final bool showMarkFeed;
   final bool showTrayCTA;
+  final bool showOptionalTray;
   final bool isTrayLogged;
+  final List<TrayStatus>? trayResults;
 
   const FeedRoundState({
     required this.isDone,
@@ -20,31 +22,45 @@ class FeedRoundState {
     required this.isLocked,
     required this.showMarkFeed,
     required this.showTrayCTA,
+    required this.showOptionalTray,
     required this.isTrayLogged,
+    this.trayResults,
   });
+
+  FeedRoundState copyWith({
+    bool? isDone,
+    bool? isCurrent,
+    bool? isLocked,
+    bool? showMarkFeed,
+    bool? showTrayCTA,
+    bool? showOptionalTray,
+    bool? isTrayLogged,
+    List<TrayStatus>? trayResults,
+  }) {
+    return FeedRoundState(
+      isDone: isDone ?? this.isDone,
+      isCurrent: isCurrent ?? this.isCurrent,
+      isLocked: isLocked ?? this.isLocked,
+      showMarkFeed: showMarkFeed ?? this.showMarkFeed,
+      showTrayCTA: showTrayCTA ?? this.showTrayCTA,
+      showOptionalTray: showOptionalTray ?? this.showOptionalTray,
+      isTrayLogged: isTrayLogged ?? this.isTrayLogged,
+      trayResults: trayResults ?? this.trayResults,
+    );
+  }
 }
 
 class FeedStateEngine {
-  /// MODE DECIDER with sampling override capability
+  /// MODE DECIDER (DOC-Based)
   /// 
-  /// Standard logic:
-  /// - DOC 1-15: Beginner (no sampling yet)
-  /// - DOC 16-30: Habit (still blind, building behaviors)
-  /// - DOC 31+: Precision (post-sampling, use real ABW)
-  /// 
-  /// Sampling Override:
-  /// - If ABW is provided (sampling logged), FORCE precision mode
-  /// - This ensures smart mode is used as soon as data is available
-  static FeedMode getMode(int doc, {double? abwSampled}) {
-    // ✅ OVERRIDE: If sampling data available, use precision immediately
-    if (abwSampled != null && abwSampled > 0) {
-      return FeedMode.precision;  // Force smart mode
-    }
-
-    // Standard progression based on DOC
-    if (doc <= 15) return FeedMode.beginner;
-    if (doc <= 30) return FeedMode.habit;
-    return FeedMode.precision;
+  /// Logic:
+  /// - < 15: Blind
+  /// - 15–30: Transitional
+  /// - > 30: Smart
+  static FeedMode getMode(int doc) {
+    if (doc < 15) return FeedMode.blind;
+    if (doc <= 30) return FeedMode.transitional;
+    return FeedMode.smart;
   }
 
   /// CORE STATE ENGINE
@@ -54,6 +70,7 @@ class FeedStateEngine {
     required int totalRounds,
     required Map<int, bool> feedDone,
     required Map<int, bool> trayDone,
+    Map<int, List<TrayStatus>>? trayResultsMap,
   }) {
     final mode = getMode(doc);
 
@@ -67,17 +84,18 @@ class FeedStateEngine {
       feedDone: feedDone,
       trayDone: trayDone,
     );
-    
+
     final isTrayLogged = trayDone[round] ?? false;
+    final trayResults = trayResultsMap?[round];
 
     final showMarkFeed = isCurrent && !isDone && !isLocked;
 
-    // ✅ TRAY CTA LOGIC: 
-    // - Never show in Beginner Mode (DOC <= 15)
-    // - Always show after feeding in other modes unless already logged
-    final showTrayCTA = isDone &&
-        mode != FeedMode.beginner &&
-        !isTrayLogged;
+    // 🟠 TRANSITIONAL MODE TRAY (Optional - DOC 15-30)
+    final showOptionalTray =
+        isDone && mode == FeedMode.transitional && !isTrayLogged;
+
+    // 🟢 SMART MODE TRAY (Mandatory - DOC >= 31)
+    final showTrayCTA = isDone && mode == FeedMode.smart && !isTrayLogged;
 
     return FeedRoundState(
       isDone: isDone,
@@ -85,7 +103,9 @@ class FeedStateEngine {
       isLocked: isLocked,
       showMarkFeed: showMarkFeed,
       showTrayCTA: showTrayCTA,
+      showOptionalTray: showOptionalTray,
       isTrayLogged: isTrayLogged,
+      trayResults: trayResults,
     );
   }
 
@@ -109,9 +129,9 @@ class FeedStateEngine {
       return true;
     }
 
-    // 2. PRECISION MODE TRAY LOCK
-    // If in Precision Mode, also require Tray(n-1) to be logged
-    if (mode == FeedMode.precision) {
+    // 2. SMART MODE TRAY LOCK
+    // If in Smart Mode, require Tray(n-1) to be logged before starting Round(n)
+    if (mode == FeedMode.smart) {
       final prevTrayDone = trayDone[prevRound] ?? false;
       if (!prevTrayDone) {
         return true;

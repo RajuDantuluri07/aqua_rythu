@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../farm/farm_provider.dart';
-import '../../widgets/app_bottom_bar.dart';
-import '../../routes/app_routes.dart';
-import '../feed/feed_history_provider.dart';
-import '../growth/growth_provider.dart';
+import 'package:aqua_rythu/features/farm/farm_provider.dart';
+import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
+import 'package:aqua_rythu/routes/app_routes.dart';
+import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/services/dashboard_service.dart';
+import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
+import 'package:aqua_rythu/features/growth/growth_provider.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -279,12 +281,28 @@ class DashboardScreen extends ConsumerWidget {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameCtrl.text.isNotEmpty) {
-                ref
-                    .read(farmProvider.notifier)
-                    .addFarm(nameCtrl.text, locCtrl.text);
-                Navigator.pop(context);
+                try {
+                  final farmService = FarmService();
+                  await farmService.createFarm(
+                    name: nameCtrl.text.trim(),
+                    location: locCtrl.text.trim(),
+                    farmType: 'Semi-Intensive',
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Farm created successfully')),
+                    );
+                    Navigator.pop(context);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
               }
             },
             style: ElevatedButton.styleFrom(
@@ -371,7 +389,7 @@ class DashboardScreen extends ConsumerWidget {
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
       childAspectRatio: 1.15,
-      children: const [
+      children: [
         _StatCard(
           title: "TOTAL BIOMASS",
           value: "2,180",
@@ -425,7 +443,8 @@ class PondCard extends ConsumerWidget {
     final feedLogs = historyMap[pond.id] ?? [];
 
     // Metrics Calculation
-    double abw = 0;
+    // ✅ Use synced currentAbw as primary source, fallback to growth logs
+    double abw = pond.currentAbw ?? 0;
     double consumedFeed = feedLogs.fold(0.0, (sum, log) => sum + log.total);
     double survival = 1.0;
     if (currentDoc > 60) {
@@ -436,7 +455,7 @@ class PondCard extends ConsumerWidget {
       survival = 1.0;
     }
 
-    if (growthLogs.isNotEmpty) {
+    if (abw == 0 && growthLogs.isNotEmpty) {
       abw = growthLogs.first.averageBodyWeight;
     }
 

@@ -26,10 +26,11 @@ import '../growth/sampling_screen.dart';
 import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
-import '../../core/engines/feed_state_engine.dart';
-import '../../core/engines/models/feed_output.dart';
+import 'package:aqua_rythu/core/engines/feed_state_engine.dart';
+import 'package:aqua_rythu/core/engines/models/feed_output.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
-import '../../core/theme/app_theme.dart';
+import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/core/theme/app_theme.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -330,12 +331,28 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameCtrl.text.isNotEmpty) {
-                ref
-                    .read(farmProvider.notifier)
-                    .addFarm(nameCtrl.text, locCtrl.text);
-                Navigator.pop(context);
+                try {
+                  final farmService = FarmService();
+                  await farmService.createFarm(
+                    name: nameCtrl.text.trim(),
+                    location: locCtrl.text.trim(),
+                    farmType: 'Semi-Intensive',
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Farm created successfully')),
+                    );
+                    Navigator.pop(context);
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
               }
             },
             style: ElevatedButton.styleFrom(
@@ -1141,7 +1158,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 : const Color(0xFFCBD5E1));
 
         final bool isDoneInHabitOrBeginner =
-            roundState.isDone && feedMode != FeedMode.precision;
+            roundState.isDone && feedMode != FeedMode.smart;
         final bool isActuallyDoneInPrecision =
             roundState.isDone && !roundState.showTrayCTA;
         final appliedSupplements = _getAppliedFeedSupplements(
@@ -1161,8 +1178,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             originalQty: isAutoAdjusted ? baseQty : null,
             trayStatuses: thisRoundLog?.trays,
             supplements: supplementStrings,
-            showTraySummary: feedMode != FeedMode.beginner,
-            onLogTray: (feedMode == FeedMode.habit && !roundState.isTrayLogged)
+            showTraySummary: feedMode != FeedMode.blind,
+            onLogTray: (feedMode == FeedMode.transitional && !roundState.isTrayLogged)
                 ? () => openTray(round, false)
                 : null,
           );
@@ -1419,12 +1436,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
   String _getTrayInfoText(FeedMode mode) {
     switch (mode) {
-      case FeedMode.beginner:
-        return "Tray feeding optional (habit phase)";
-      case FeedMode.habit:
-        return "Tray observation Recommended";
-      case FeedMode.precision:
-        return "Tray based adjustments Active";
+      case FeedMode.blind:
+        return "Starter phase (Tray hidden)";
+      case FeedMode.transitional:
+        return "Tray observation optional";
+      case FeedMode.smart:
+        return "Smart feeding active (Tray mandatory)";
     }
   }
 
