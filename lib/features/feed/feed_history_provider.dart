@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/enums/tray_status.dart';
 import 'feed_plan_provider.dart';
+import '../../services/feed_service.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -33,6 +35,7 @@ class FeedHistoryNotifier
   FeedHistoryNotifier(this.ref) : super({});
 
   final Ref ref;
+  final _feedService = FeedService();
 
   double _expectedFeedForDoc(String pondId, int doc) {
     final plan = ref.read(feedPlanProvider)[pondId];
@@ -133,10 +136,39 @@ class FeedHistoryNotifier
           ));
     }
 
+    // ✅ Update local state
     state = {
       ...state,
       pondId: pondLogs,
     };
+    
+    // ✅ Persist to database (fire-and-forget with error handling)
+    final logToSave = pondLogs[todayIdx != -1 ? todayIdx : 0];
+    _persistFeedLog(
+      pondId: pondId,
+      log: logToSave,
+    );
+  }
+  
+  /// ✅ Persist feed log to database
+  Future<void> _persistFeedLog({
+    required String pondId,
+    required FeedHistoryLog log,
+  }) async {
+    try {
+      await _feedService.saveFeed(
+        pondId: pondId,
+        date: log.date,
+        doc: log.doc,
+        rounds: log.rounds,
+        expectedFeed: log.expected,
+        cumulativeFeed: log.cumulative,
+      );
+      print('✅ Feed log saved to DB: $pondId DOC ${log.doc}');
+    } catch (e) {
+      print('❌ Failed to save feed log to DB: $e');
+      // Data is still in local state, can retry later
+    }
   }
 
   /// 📥 LOG TRAY STATUS

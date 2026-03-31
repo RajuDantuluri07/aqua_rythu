@@ -245,7 +245,35 @@ class FarmNotifier extends StateNotifier<FarmState> {
       }).toList(),
     );
   }
-}
+  void updateFarm({
+    required String farmId,
+    required String name,
+    required String location,
+  }) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        if (f.id == farmId) {
+          return Farm(
+            id: f.id,
+            name: name,
+            location: location,
+            ponds: f.ponds,
+          );
+        }
+        return f;
+      }).toList(),
+    );
+  }
+
+  void deleteFarm(String farmId) {
+    final updatedFarms = state.farms.where((f) => f.id != farmId).toList();
+    final newSelectedId = updatedFarms.isNotEmpty ? updatedFarms.first.id : '';
+    
+    state = state.copyWith(
+      farms: updatedFarms,
+      selectedId: newSelectedId,
+    );
+  }}
 
 final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
   return FarmNotifier();

@@ -20,6 +20,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   final _plSizeController = TextEditingController();
 
   DateTime _stockingDate = DateTime.now();
+  int _numTrays = 4;
   bool _isLoading = false;
 
   @override
@@ -145,6 +146,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           stockingDate: _stockingDate,
           seedCount: seedCount,
           plSize: plSize,
+          numTrays: _numTrays,
         );
 
         // Refresh the provider to sync the new pond from Supabase
@@ -293,6 +295,39 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                       keyboardType: TextInputType.number,
                       required: false,
                       validator: _validatePlSize,
+                    ),
+                    const SizedBox(height: 20),
+                    DropdownButtonFormField<int>(
+                      value: _numTrays,
+                      decoration: InputDecoration(
+                        labelText: "Number of Trays",
+                        prefixIcon: Icon(Icons.storage_rounded,
+                            color: Theme.of(context).primaryColor),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor, width: 2),
+                        ),
+                      ),
+                      items: [1, 2, 3, 4, 5, 6]
+                          .map((tray) => DropdownMenuItem(
+                                value: tray,
+                                child: Text("$tray"),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _numTrays = value);
+                        }
+                      },
                     ),
                     const SizedBox(height: 20),
                     InkWell(

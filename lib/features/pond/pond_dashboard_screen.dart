@@ -396,32 +396,88 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
           )
         : null;  // ✅ CLEANED: Return null if no ponds - let UI handle gracefully
 
-    /// ⚠️ HANDLED: If no pond exists, show empty state instead of dummy
+    /// ⚠️ HANDLED: Check for no farms first, then no ponds
     if (currentPond == null) {
-      return SizedBox(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.water_drop_outlined, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              const Text(
-                "No ponds found",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF64748B),
-                ),
+      // Case 1: No farms exist - show message without CTA
+      if (farmState.farms.isEmpty) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F7FA),
+          appBar: AppBar(
+            title: const Text("Ponds"),
+            centerTitle: true,
+          ),
+          bottomNavigationBar: const AppBottomBar(currentIndex: 1),
+          body: SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.landscape_outlined, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "No farms created",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Create a farm first to add ponds",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                "Create a new pond to get started",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
+            ),
+          ),
+        );
+      }
+
+      // Case 2: Farm exists but no ponds - show Add First Pond button
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F7FA),
+        appBar: AppBar(
+          title: const Text("Ponds"),
+          centerTitle: true,
+        ),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 1),
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.water_drop_outlined, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                const Text(
+                  "No ponds found",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF64748B),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  "Create a new pond to get started",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(context, AppRoutes.addPond);
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text("Add First Pond"),
+                ),
+              ],
+            ),
           ),
         ),
       );

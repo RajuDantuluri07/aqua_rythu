@@ -15,7 +15,6 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
-  String _selectedFarmType = 'Shrimp';
   bool _isLoading = false;
 
   @override
@@ -35,7 +34,6 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
         final farmId = await farmService.createFarm(
           name: _nameController.text.trim(),
           location: _locationController.text.trim(),
-          farmType: _selectedFarmType,
         );
 
         // Refresh the provider to sync with Supabase
@@ -170,39 +168,6 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
                       ),
                       validator: (value) =>
                           value == null || value.isEmpty ? "Required" : null,
-                    ),
-                    const SizedBox(height: 20),
-                    DropdownButtonFormField<String>(
-                      value: _selectedFarmType,
-                      decoration: InputDecoration(
-                        labelText: "Farm Type",
-                        prefixIcon: Icon(Icons.category_rounded,
-                            color: Theme.of(context).primaryColor),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: Theme.of(context).primaryColor, width: 2),
-                        ),
-                      ),
-                      items: ['Shrimp', 'Fish', 'Semi-Intensive', 'Intensive']
-                          .map((type) => DropdownMenuItem(
-                                value: type,
-                                child: Text(type),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _selectedFarmType = value);
-                        }
-                      },
                     ),
                   ],
                 ),

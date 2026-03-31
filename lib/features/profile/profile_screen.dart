@@ -5,7 +5,9 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_provider.dart';
 import '../farm/farm_provider.dart';
+import '../farm/edit_farm_dialog.dart';
 import 'user_provider.dart';
+import 'package:aqua_rythu/services/farm_service.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -91,8 +93,8 @@ class ProfileScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: _farmTile(
                       context,
-                      title: farm.name,
-                      status: "${farm.ponds.length} Ponds • ${farm.location}",
+                      ref,
+                      farm: farm,
                       active: isActive,
                     ),
                   );
@@ -192,12 +194,14 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Widget _farmTile(
-    BuildContext context, {
-    required String title,
-    required String status,
+    BuildContext context,
+    WidgetRef ref, {
+    required Farm farm,
     required bool active,
   }) {
     final theme = Theme.of(context);
+    final status = "${farm.ponds.length} Ponds • ${farm.location}";
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -223,7 +227,7 @@ class ProfileScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
+                  Text(farm.name,
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   Text(
                     status,
@@ -235,7 +239,101 @@ class ProfileScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') {
+                  showDialog(
+                    context: context,
+                    builder: (dialogContext) => EditFarmDialog(
+                      farmId: farm.id,
+                      initialName: farm.name,
+                      initialLocation: farm.location,
+                    ),
+                  );
+                } else if (value == 'delete') {
+                  showDialog(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Delete Farm?'),
+                      content: Text(
+                        'Are you sure you want to delete "${farm.name}" and all its ponds? This action cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.of(dialogContext).pop();
+                            try {
+                              final farmService = FarmService();
+                              await farmService.deleteFarm(farm.id);
+                              
+                              // Update local state
+                              ref.read(farmProvider.notifier).deleteFarm(farm.id);
+
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text("Farm deleted successfully"),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  backgroundColor: Colors.green.shade600,
+                                ),
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Error: $e"),
+                                  backgroundColor: Colors.red.shade600,
+                                ),
+                              );
+                            }
+                          },
+                          child: Text(
+                            'Delete',
+                            style: TextStyle(
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, size: 18),
+                      SizedBox(width: 10),
+                      Text('Edit Farm'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, size: 18, color: Color(0xFFE53935)),
+                      SizedBox(width: 10),
+                      Text(
+                        'Delete Farm',
+                        style: TextStyle(color: Color(0xFFE53935)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              icon: const Icon(Icons.more_vert),
+              position: PopupMenuPosition.over,
+            ),
           ],
         ),
       ),

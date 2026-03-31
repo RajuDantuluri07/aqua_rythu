@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../profile/user_provider.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -25,7 +26,9 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final _supabase = Supabase.instance.client;
-  AuthNotifier() : super(const AuthState()) {
+  final Ref ref;
+  
+  AuthNotifier(this.ref) : super(const AuthState()) {
     checkSession();
   }
 
@@ -49,7 +52,50 @@ class AuthNotifier extends StateNotifier<AuthState> {
         token: otp.trim(),
         type: OtpType.sms,
       );
-      final ok = res.session != null;
+      final user = res.user;
+final ok = user != null;
+      
+      if (ok) {
+        final user = res.user;
+
+if (user == null) {
+  state = state.copyWith(
+    isLoading: false,
+    errorMessage: 'User not found after OTP',
+  );
+  return false;
+}
+
+final userId = user.id;
+final userPhone = user.phone ?? phone;
+        
+        // ✅ Check if user already exists in users table
+        final existing = await _supabase
+          .from('users')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        // ✅ If not exist, create new user record
+        if (existing == null) {
+          try {
+            await _supabase.from('users').insert({
+              'id': userId,
+              'phone': userPhone,
+              'name': 'User $phone',
+              'email': '',
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          } catch (e) {
+            print('⚠️ Warning: Failed to create user record: $e');
+            // Continue anyway - user auth succeeded
+          }
+        }
+        
+        // ✅ Update userProvider with userId
+        ref.read(userProvider.notifier).setUserId(userId);
+      }
+      
       state = state.copyWith(
         isLoading: false,
         isAuthenticated: ok,
@@ -81,8 +127,44 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> checkSession() async {
     final session = _supabase.auth.currentSession;
+    final isLoggedIn = session != null;
+    
+    if (isLoggedIn) {
+      final userId = session?.user.id ?? '';
+      
+      // ✅ Sync existing user on session restore
+      if (userId.isNotEmpty) {
+        try {
+          // Check if user exists
+          final existing = await _supabase
+            .from('users')
+            .select('id')
+            .eq('id', userId)
+            .maybeSingle();
+          
+          // Create if doesn't exist
+          if (existing == null) {
+            await _supabase.from('users').insert({
+              'id': userId,
+              'phone': session?.user.phone ?? '',
+              'name': 'User',
+              'email': session?.user.email ?? '',
+              'created_at': DateTime.now().toIso8601String(),
+            }).onError((error, stackTrace) {
+              print('⚠️ Warning: Could not create user record: $error');
+            });
+          }
+          
+          // Update userProvider
+          ref.read(userProvider.notifier).setUserId(userId);
+        } catch (e) {
+          print('⚠️ Warning: Session sync failed: $e');
+        }
+      }
+    }
+    
     state = state.copyWith(
-      isAuthenticated: session != null,
+      isAuthenticated: isLoggedIn,
       phoneNumber: session?.user.phone,
     );
   }
@@ -94,5 +176,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(ref),
 );
