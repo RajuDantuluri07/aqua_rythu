@@ -2,8 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../supplements/supplement_provider.dart';
 import '../supplements/water_task_engine.dart';
 import '../farm/farm_provider.dart';
-import '../feed/feed_plan_provider.dart';
-import '../pond/growth_provider.dart';
+import '../growth/growth_provider.dart';
 import '../profile/farm_settings_provider.dart';
 import '../../core/utils/logger.dart';
 
@@ -46,8 +45,6 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   final survivalMiddleStage = isSemiIntensive ? 0.95 : 0.90;
   final survivalLateStage = isSemiIntensive ? 0.92 : 0.85;
 
-  final planMap = ref.watch(feedPlanProvider);
-
   // ✅ SINGLE CLEAN LOOP - Only count active ponds
   for (var pond in currentFarm.ponds.where((p) => p.status.name == 'active')) {
     final currentDoc = ref.watch(docProvider(pond.id));
@@ -60,30 +57,24 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
       // Estimate biomass: SeedCount * Survival * ABW / 1000
       // Survival rates based on farm type and DOC stage
       double survival = survivalEarlyStage;
-      if (currentDoc > 60) {
+      if (currentDoc > 60 && lastLog.doc > 60) { // Added lastLog.doc check for robustness
         survival = survivalLateStage;
-      } else if (currentDoc > 30) {
+      } else if (currentDoc > 30 && lastLog.doc > 30) { // Added lastLog.doc check for robustness
         survival = survivalMiddleStage;
       }
 
-      totalBiomass +=
-          (pond.seedCount * survival * lastLog.averageBodyWeight) / 1000;
+      totalBiomass += (pond.seedCount * survival * lastLog.abw) / 1000;
 
       // Growth rate (ABW per day)
       if (currentDoc > 0) {
-        totalGrowthRate += (lastLog.averageBodyWeight / currentDoc);
+        totalGrowthRate += (lastLog.abw / currentDoc);
       }
     }
 
     // Feed calculation
-    final plan = planMap[pond.id];
-    if (plan != null && plan.days.isNotEmpty) {
-      totalFeed += plan.days
-          .where((d) => d.doc <= currentDoc)
-          .fold(0.0, (sum, day) => sum + day.total);
-    } else {
-      totalFeed += pond.seedCount * 0.0005 * currentDoc;
-    }
+    // TODO: Implement totalFeed calculation from history or database service
+    // For now, using a simple estimation as a placeholder after removing feedPlanProvider
+    totalFeed += pond.seedCount * 0.0005 * currentDoc;
   }
 
   final double avgGrowth = pondCount > 0 ? totalGrowthRate / pondCount : 0;

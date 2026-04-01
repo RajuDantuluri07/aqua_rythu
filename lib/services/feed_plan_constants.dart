@@ -2,8 +2,8 @@
 const Map<int, double> roundDistribution = {
   1: 0.25,
   2: 0.25,
-  3: 0.30,
-  4: 0.20,
+  3: 0.25,
+  4: 0.25,
 };
 
 /// Default feeding times for each round.

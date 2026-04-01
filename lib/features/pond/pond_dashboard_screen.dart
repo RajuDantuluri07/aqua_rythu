@@ -1,7 +1,6 @@
 import '../supplements/supplement_mix_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../feed/feed_plan_provider.dart';
 import '../feed/feed_schedule_screen.dart';
 import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
@@ -28,6 +27,7 @@ import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/engines/feed_state_engine.dart';
 import 'package:aqua_rythu/core/engines/models/feed_output.dart';
+import 'package:aqua_rythu/services/pond_service.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
 import 'package:aqua_rythu/services/farm_service.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
@@ -41,6 +41,28 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
+  List<Map<String, dynamic>> _todayFeeds = [];
+  bool _isLoadingFeeds = true;
+
+  Future<void> _loadData(String pondId, String stockingDate) async {
+    setState(() => _isLoadingFeeds = true);
+    final pondService = PondService();
+    try {
+      final feeds = await pondService.getTodayFeed(
+        pondId: pondId,
+        stockingDate: stockingDate,
+      );
+      if (mounted) {
+        setState(() {
+          _todayFeeds = feeds;
+          _isLoadingFeeds = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingFeeds = false);
+    }
+  }
+
   List<SupplementItem> _getPlannedFeedSupplements(
       List<Supplement> supplements, String feedingTime, double feedQty) {
     final items = <SupplementItem>[];
@@ -382,6 +404,19 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       final args = route?.settings.arguments as String?;
       if (args != null && args.isNotEmpty && args != selectedPond) {
         ref.read(pondDashboardProvider.notifier).selectPond(args);
+
+        // Fix: Implement DOC-based feed retrieval for dashboard
+        final pond = ref.read(farmProvider).currentFarm?.ponds.firstWhere((p) => p.id == args);
+        if (pond != null) {
+          _loadData(pond.id, pond.stockingDate.toIso8601String());
+        }
+      } else if (selectedPond.isNotEmpty && _todayFeeds.isEmpty && _isLoadingFeeds) {
+        // Handle initial load for already selected pond
+        final currentFarm = ref.read(farmProvider).currentFarm;
+        if (currentFarm != null && currentFarm.ponds.isNotEmpty) {
+          final pond = currentFarm.ponds.firstWhere((p) => p.id == selectedPond, orElse: () => currentFarm.ponds.first);
+          _loadData(pond.id, pond.stockingDate.toIso8601String());
+        }
       }
     });
 
@@ -535,32 +570,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       );
     }
 
-    /// ✅ NEW: FEED PLAN (Auto-generate if missing)
-    final planMap = ref.watch(feedPlanProvider);
-    var plan = planMap[selectedPond];
-
-    // Auto-create plan if no plan exists for this pond
-    if (plan == null) {
-      Pond? pondObj;
-      for (var farm in farmState.farms) {
-        for (var p in farm.ponds) {
-          if (p.id == selectedPond) {
-            pondObj = p;
-            break;
-          }
-        }
-      }
-      if (pondObj != null) {
-        Future.microtask(() {
-          ref.read(feedPlanProvider.notifier).createPlan(
-                pondId: selectedPond,
-                seedCount: pondObj?.seedCount ?? 0,
-                plSize: pondObj?.plSize ?? 0,
-              );
-        });
-      }
-    }
-
     final currentDoc = ref.watch(docProvider(selectedPond));
 
     /// ✅ SMART FEED (Real-time calculation)
@@ -581,7 +590,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
     if (growthLogs.isNotEmpty) {
       final lastLog = growthLogs.first;
-      currentAbw = lastLog.averageBodyWeight;
+      currentAbw = lastLog.abw;
       double survival = 1.0;
       if (currentDoc > 60) {
         survival = 0.90;
@@ -620,7 +629,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
     double prevAbw = 0.0;
     if (prevHistoryLog.doc > 0 && prevGrowthLog != null) {
-      prevAbw = prevGrowthLog.averageBodyWeight;
+      prevAbw = prevGrowthLog.abw;
       double prevSurvival = 1.0;
       if (prevGrowthLog.doc > 60) {
         prevSurvival = 0.90;
@@ -637,7 +646,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       }
     } else if (prevGrowthLog != null) {
       // Fallback for ABW if no history log found but growth log exists
-      prevAbw = prevGrowthLog.averageBodyWeight;
+      prevAbw = prevGrowthLog.abw;
     }
 
     // Trend: Current - Previous
@@ -658,21 +667,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             l.timestamp.day == now.day)
         .toList();
 
-    // Feed plan details
-    final dayPlan = plan?.days.firstWhere(
-      (d) => d.doc == currentDoc,
-      orElse: () => FeedDayPlan(doc: currentDoc, rounds: [0, 0, 0, 0]),
-    );
-
-    final plannedFeed = dayPlan?.total ?? 0.0;
+    final plannedFeed = dashboardState.roundFeedAmounts.values.fold(0.0, (a, b) => a + b);
 
     double consumedFeed = 0.0;
-    if (dayPlan != null) {
-      for (int i = 1; i <= 4; i++) {
-        if (dashboardState.feedDone[i] == true) {
-          consumedFeed +=
-              _calculateAdjustedQty(dayPlan, i, todayTrayMap, currentDoc);
-        }
+    for (int i = 1; i <= 4; i++) {
+      if (dashboardState.feedDone[i] == true) {
+        consumedFeed += dashboardState.roundFeedAmounts[i] ?? 0.0;
       }
     }
 
@@ -763,7 +763,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                     ...ponds.map((pond) {
                       bool isSelected = pond.id == selectedPond;
 
-                      final hasFeed = planMap[pond.id] != null;
+                      final hasFeed = true;
                       final hasHarvest =
                           ref.watch(harvestProvider(pond.id)).isNotEmpty;
 
@@ -1057,6 +1057,31 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
                 AppSpacing.hM,
 
+                if (currentDoc > 120) ...[
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: AppRadius.rs,
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade800),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Extended Culture Mode (DOC > 120). Efficiency may reduce - increase sampling frequency.",
+                            style: TextStyle(color: Colors.orange.shade800, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AppSpacing.hS,
+                ],
+
                 /// TRAY INFO HINT (Moved)
                 Container(
                   margin: const EdgeInsets.symmetric(
@@ -1080,25 +1105,52 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 AppSpacing.hS,
 
                 /// DAILY TASKS TIMELINE
-                Column(
-                  children: [
-                    ..._buildTimeline(
-                      today: today,
-                      currentDoc: currentDoc,
-                      pondName: currentPond.name,
-                      pondArea: currentPond.area,
-                      dayPlan: dayPlan,
-                      todayTrayMap: todayTrayMap,
-                      dashboardState: dashboardState,
-                      trayDone: trayDone,
-                      activePlansToday: activePlansToday,
-                      todaySupplementLogs: todaySupplementLogs,
-                      feedMode: feedMode,
-                      selectedPond: selectedPond,
-                      smartFeedOutput: smartFeedOutput,
+                if (_isLoadingFeeds)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: CircularProgressIndicator(),
                     ),
-                  ],
-                ),
+                  )
+                else if (_todayFeeds.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Column(
+                        children: [
+                          Icon(Icons.event_busy_rounded, size: 48, color: Colors.grey[400]),
+                          const SizedBox(height: 12),
+                          const Text(
+                            "No feed plan for today",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Column(
+                    children: [
+                      ..._buildTimeline(
+                        today: today,
+                        currentDoc: currentDoc,
+                        pondName: currentPond.name,
+                        pondArea: currentPond.area,
+                        todayTrayMap: todayTrayMap,
+                        dashboardState: dashboardState,
+                        trayDone: trayDone,
+                        activePlansToday: activePlansToday,
+                        todaySupplementLogs: todaySupplementLogs,
+                        feedMode: feedMode,
+                        selectedPond: selectedPond,
+                        smartFeedOutput: smartFeedOutput,
+                      ),
+                    ],
+                  ),
               ],
             ],
           ),
@@ -1112,7 +1164,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     required int currentDoc,
     required String pondName,
     required double pondArea,
-    required FeedDayPlan? dayPlan,
     required Map<int, TrayLog> todayTrayMap,
     required PondDashboardState dashboardState,
     required Map<int, bool> trayDone,
@@ -1195,10 +1246,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
         final round = itemData['round'] as int;
         final time = itemData['time'] as String;
         final timeKey = itemData['key'] as String;
-        final double baseQty = _getFeedQty(dayPlan, round);
-        final double qty =
-            _calculateAdjustedQty(dayPlan, round, todayTrayMap, currentDoc);
-        final bool isAutoAdjusted = (qty - baseQty).abs() > 0.01;
+        // Pull feed amount directly from Supabase record cached in state
+        final double qty = dashboardState.roundFeedAmounts[round] ?? 0.0;
         final thisRoundLog = todayTrayMap[round];
         final roundState = FeedStateEngine.getRoundState(
             doc: currentDoc,
@@ -1231,7 +1280,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             round: round,
             time: time,
             feedQty: qty,
-            originalQty: isAutoAdjusted ? baseQty : null,
+            originalQty: null, // DB value is the final value
             trayStatuses: thisRoundLog?.trays,
             supplements: supplementStrings,
             showTraySummary: feedMode != FeedMode.blind,
@@ -1395,35 +1444,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
         ],
       );
     }).toList();
-  }
-
-  /// 🧠 CORE LOGIC: Calculates feed quantity for a round, applying tray adjustments if needed.
-  double _calculateAdjustedQty(
-      FeedDayPlan? plan, int round, Map<int, TrayLog> todayTrayMap, int doc) {
-    double qty = _getFeedQty(plan, round);
-
-    // Adjustment Logic: Round N is adjusted by Tray N-1
-    if (round > 1) {
-      final prevLog = todayTrayMap[round - 1];
-      if (prevLog != null) {
-        final mode = FeedStateEngine.getMode(doc);
-        qty = FeedStateEngine.applyTrayAdjustment(prevLog.trays, qty, mode);
-      }
-    }
-    return qty;
-  }
-
-  // This method was already present in the provided context, but added here
-  // to address the user's reported "CRITICAL ERROR" as if it were missing.
-  double _getFeedQty(FeedDayPlan? plan, int round) {
-    if (plan == null) {
-      return 0;
-    }
-    final index = round - 1;
-    if (index >= 0 && index < plan.rounds.length) {
-      return plan.rounds[index];
-    }
-    return 0;
   }
 
   Widget _kpi(String title, String value, IconData icon, Color color,

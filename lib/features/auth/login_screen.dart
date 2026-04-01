@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_provider.dart';
+import 'forgot_password_dialog.dart';
 import '../../core/theme/app_theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -13,37 +15,54 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isLogin = true;
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
-    final phone = _phoneController.text.trim();
-    if (phone.length != 10) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || !email.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter a valid 10-digit number")),
+        const SnackBar(content: Text("Enter a valid email address")),
+      );
+      return;
+    }
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Password must be at least 6 characters")),
       );
       return;
     }
 
+    print("AUTH START");
     setState(() => _isLoading = true);
-    final success = await ref.read(authProvider.notifier).signInWithOtp(phone);
+    final authNotifier = ref.read(authProvider.notifier);
+    
+    _isLogin 
+        ? await authNotifier.signIn(email, password)
+        : await authNotifier.signUp(email, password);
+
+    final user = Supabase.instance.client.auth.currentUser;
+    print("USER: ${user?.id}");
+
     if (mounted) {
       setState(() => _isLoading = false);
-      if (success) {
-        Navigator.pushNamed(context, AppRoutes.otp, arguments: phone);
-      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authProvider, (previous, next) {
+    ref.listen<AppAuthState>(authProvider, (previous, next) {
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -51,6 +70,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
+      }
+      if (next.isAuthenticated && (previous == null || !previous.isAuthenticated)) {
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (route) => false);
       }
     });
 
@@ -64,7 +86,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             padding: const EdgeInsets.all(AppSpacing.l),
             child: Column(
               children: [
-                const SizedBox(height: AppSpacing.hXxl),
+                const SizedBox(height: AppSpacing.xl),
+                // Hero logo for smooth transition from SplashScreen
+                Hero(
+                  tag: 'app_logo',
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    height: 90,
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      Icons.water_drop_rounded,
+                      size: 60,
+                      color: theme.primaryColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s),
                 Text(
                   "AquaRythu",
                   style: theme.textTheme.headlineLarge?.copyWith(
@@ -80,70 +116,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.hXxl),
-                // PHONE INPUT
-                Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
-                    borderRadius: AppRadius.rBase,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 4),
-                  child: Row(
-                    children: [
-                      Text(
-                        "+91",
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(width: 1, height: 24, color: theme.dividerColor),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          maxLength: 10,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          decoration: const InputDecoration(
-                            hintText: "Mobile Number",
-                            border: InputBorder.none,
-                            counterText: "",
-                          ),
-                        ),
-                      ),
-                    ],
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    hintText: "Email",
+                    border: OutlineInputBorder(),
                   ),
                 ),
-
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    hintText: "Password",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.l),
-                // SEND OTP BUTTON
+                // LOGIN / SIGN UP BUTTON
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _handleLogin,
                     child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text("SEND OTP"),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                // GOOGLE BUTTON
-                OutlinedButton.icon(
-                  onPressed: () => ref.read(authProvider.notifier).signInWithGoogle(),
-                  icon: const Icon(Icons.login),
-                  label: const Text("CONTINUE WITH GOOGLE"),
-                  style: theme.outlinedButtonTheme.style?.copyWith(
-                    minimumSize: WidgetStateProperty.all(const Size(double.infinity, 56)),
+                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        : Text(_isLogin ? "LOGIN" : "SIGN UP"),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.l),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () => setState(() => _isLogin = !_isLogin),
+                      child: Text(_isLogin ? "Don't have an account? Sign Up" : "Already have an account? Login"),
+                    ),
+                    TextButton(
+                      onPressed: () => showDialog(context: context, builder: (_) => const ForgotPasswordDialog()),
+                      child: const Text("Forgot Password?"),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xl),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

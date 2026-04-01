@@ -121,7 +121,8 @@ class MasterFeedEngine {
     }
 
     final originalFeedBeforeClamp = feed;
-    final clampedFeed = feed.clamp(minFeed, maxFeed);
+    // Ensure feed is never negative and stays within safety bounds
+    final clampedFeed = feed.clamp(minFeed, maxFeed).toDouble();
     
     if ((clampedFeed - originalFeedBeforeClamp).abs() > 0.01) {
       final clampPercent = ((clampedFeed - originalFeedBeforeClamp) / originalFeedBeforeClamp * 100).toStringAsFixed(0);
@@ -133,15 +134,17 @@ class MasterFeedEngine {
     }
     feed = clampedFeed;
 
-    // 7. Final validation
+    // 7. Final validation (Production Safety Wrapper)
+    final alerts = _generateAlerts(input);
     try {
       FeedInputValidator.validateOutput(feed, baseFeed);
     } catch (e) {
-      reasons.add("⚠️ Output validation: ${e.toString()}");
+      // Log critical warning but do not crash. 
+      // Fallback to safe base feed to allow the UI to function.
+      reasons.add("🚨 CRITICAL CALCULATION ANOMALY: ${e.toString()}");
+      alerts.add("🚨 System warning: Feed calculation anomaly - using safety base feed");
+      feed = baseFeed;
     }
-
-    // 8. Alerts
-    final alerts = _generateAlerts(input);
 
     return FeedOutput(
       recommendedFeed: feed,

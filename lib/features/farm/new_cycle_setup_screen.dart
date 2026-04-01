@@ -9,8 +9,7 @@ import '../tray/tray_provider.dart';
 import '../water/water_provider.dart';
 import '../supplements/supplement_provider.dart';
 import '../pond/pond_dashboard_provider.dart';
-import '../growth/growth_provider.dart' as growth_feature;
-import '../pond/growth_provider.dart' as growth_dashboard;
+import '../growth/growth_provider.dart';
 import '../../core/theme/app_theme.dart';
 
 class NewCycleSetupScreen extends ConsumerStatefulWidget {
@@ -56,20 +55,12 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
 	      ref.read(trayProvider(widget.pondId).notifier).clearLogs();
 	      ref.read(waterProvider(widget.pondId).notifier).clearLogs();
 	      ref
-	          .read(growth_feature.growthProvider(widget.pondId).notifier)
-	          .clearLogs();
-	      ref
-	          .read(growth_dashboard.growthProvider(widget.pondId).notifier)
+	          .read(growthProvider(widget.pondId).notifier)
 	          .clearLogs();
 	      ref.read(supplementProvider.notifier).clearForPond(widget.pondId);
 	      ref.read(supplementLogProvider.notifier).clearForPond(widget.pondId);
 
-	      // 3. Generate New Blind Plan (Overwrites old plan)
-	      ref.read(feedPlanProvider.notifier).createPlan(
-	            pondId: widget.pondId,
-	            seedCount: seedCount,
-	            plSize: plSize,
-	          );
+	
 
 	      // 4. Clear any in-memory dashboard progress for this pond
 	      ref.read(pondDashboardProvider.notifier).resetPondState(widget.pondId);

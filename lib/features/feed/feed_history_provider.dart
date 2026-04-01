@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/enums/tray_status.dart';
-import 'feed_plan_provider.dart';
 import '../../services/feed_service.dart';
 
 class FeedHistoryLog {
@@ -38,17 +37,8 @@ class FeedHistoryNotifier
   final _feedService = FeedService();
 
   double _expectedFeedForDoc(String pondId, int doc) {
-    final plan = ref.read(feedPlanProvider)[pondId];
-    if (plan == null) {
-      return 0.0;
-    }
-
-    final dayPlan = plan.days.where((day) => day.doc == doc);
-    if (dayPlan.isEmpty) {
-      return 0.0;
-    }
-
-    return dayPlan.first.total;
+    // Expected feed should now be derived from the database-stored feed plan
+    return 0.0; // Placeholder until integrated with Supabase feed plan fetch
   }
 
   /// 🍽 LOG REAL-TIME FEEDING

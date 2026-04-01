@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum PondStatus { active, completed }
 
@@ -57,10 +58,11 @@ class Pond {
   }
 
   int calculateDoc(DateTime now) {
-    final today = DateTime(now.year, now.month, now.day);
-    final start =
-        DateTime(stockingDate.year, stockingDate.month, stockingDate.day);
-    final diff = today.difference(start).inDays + 1;
+    // Normalize both dates to midnight UTC to ensure consistency
+    final date1 = DateTime.utc(now.year, now.month, now.day);
+    final date2 = DateTime.utc(stockingDate.year, stockingDate.month, stockingDate.day);
+    
+    final diff = date1.difference(date2).inDays + 1;
     return diff > 0 ? diff : 1; // Default to Day 1 if date is in future
   }
 }
@@ -120,6 +122,13 @@ class FarmNotifier extends StateNotifier<FarmState> {
   }
 
   Future<void> loadFarms({String? setAsSelectedId}) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    print("USER ID: ${user?.id}");
+
+    if (user == null) {
+      return;
+    }
+
     try {
       final data = await FarmService().getFarmsWithPonds();
       

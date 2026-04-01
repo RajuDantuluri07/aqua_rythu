@@ -8,7 +8,6 @@ import '../tray/tray_provider.dart';
 import '../water/water_provider.dart';
 import '../growth/mortality_provider.dart';
 import 'feed_history_provider.dart';
-import 'feed_plan_provider.dart';
 
 // Import needed for distribution
 import '../../core/engines/feed_calculation_engine.dart';
@@ -59,7 +58,7 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
     final livePopulation = pond.seedCount - currentPopulation;
 
     // Get base plan
-    final feedPlanMap = ref.watch(feedPlanProvider);
+    final feedPlanMap = {};
     final basePlan = feedPlanMap[pondId];
     if (basePlan == null) return null;
 

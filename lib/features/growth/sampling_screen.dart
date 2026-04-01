@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../pond/growth_provider.dart';
+import 'growth_provider.dart';
+import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -96,10 +97,11 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
   void _saveSampling(int doc) {
     if (_formKey.currentState?.validate() ?? false) {
       ref.read(growthProvider(widget.pondId).notifier).addLog(
-            doc: doc,
-            weightKg: _weightKg,
-            countGroups: _countGroups,
-            piecesPerGroup: _piecesPerGroup,
+            SamplingLog(
+              doc: doc,
+              abw: _avgWeight,
+              date: DateTime.now(),
+            ),
           );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

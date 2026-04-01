@@ -7,12 +7,16 @@ import 'package:aqua_rythu/services/farm_service.dart';
 import 'package:aqua_rythu/services/dashboard_service.dart';
 import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:aqua_rythu/features/growth/growth_provider.dart';
+import 'package:aqua_rythu/features/dashboard/farm_dashboard_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = Supabase.instance.client.auth.currentUser;
+
     final farmState = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
 
@@ -53,7 +57,7 @@ class DashboardScreen extends ConsumerWidget {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          _buildMetricsGrid(context),
+                          _buildMetricsGrid(context, ref),
                           const SizedBox(height: 32),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -381,7 +385,9 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMetricsGrid(BuildContext context) {
+  Widget _buildMetricsGrid(BuildContext context, WidgetRef ref) {
+    final metrics = ref.watch(farmDashboardProvider);
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -392,38 +398,38 @@ class DashboardScreen extends ConsumerWidget {
       children: [
         _StatCard(
           title: "TOTAL BIOMASS",
-          value: "2,180",
+          value: metrics.totalBiomass.toStringAsFixed(0),
           unit: " kg",
           icon: Icons.monitor_weight_outlined,
           color: Colors.indigo,
-          subtitle: "+120 kg this week",
+          subtitle: metrics.healthIndicator,
           positive: true,
         ),
         _StatCard(
           title: "FEED CONSUMED",
-          value: "1,245",
+          value: metrics.totalFeed.toStringAsFixed(0),
           unit: " kg",
           icon: Icons.grain_rounded,
           color: Colors.orange,
-          subtitle: "Normal consumption",
+          subtitle: "Total this cycle",
           positive: true,
         ),
         _StatCard(
           title: "EST. FCR",
-          value: "1.18",
+          value: metrics.fcr.toStringAsFixed(2),
           unit: "",
           icon: Icons.trending_up_rounded,
           color: Colors.green,
-          subtitle: "Better than target",
-          positive: true,
+          subtitle: metrics.fcr > 2.0 ? "High" : "Optimal",
+          positive: metrics.fcr <= 2.0,
         ),
         _StatCard(
           title: "AVG GROWTH",
-          value: "0.28",
+          value: metrics.avgGrowth.toStringAsFixed(2),
           unit: " g/day",
           icon: Icons.show_chart_rounded,
           color: Colors.teal,
-          subtitle: "Last 7 days",
+          subtitle: "Average per day",
           positive: true,
         ),
       ],
@@ -456,11 +462,16 @@ class PondCard extends ConsumerWidget {
     }
 
     if (abw == 0 && growthLogs.isNotEmpty) {
-      abw = growthLogs.first.averageBodyWeight;
+      abw = growthLogs.first.abw;
     }
 
     final double biomass = (pond.seedCount * survival * abw) / 1000;
-    final double fcr = biomass > 0 ? consumedFeed / biomass : 0;
+    
+    // Production Guard: Prevent division by zero and handle infinity
+    double fcr = 0.0;
+    if (biomass > 0.1 && consumedFeed > 0) {
+      fcr = consumedFeed / biomass;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),

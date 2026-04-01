@@ -1,82 +1,52 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:aqua_rythu/routes/app_routes.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'auth_provider.dart';
 
-class SplashScreen extends ConsumerStatefulWidget {
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
-  ConsumerState<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends ConsumerState<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacity;
-  late Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-
-    _opacity = Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
-    _scale = Tween<double>(begin: 0.5, end: 1.0).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
-
-    _controller.forward();
-    _bootstrap();
-  }
-
-  Future<void> _bootstrap() async {
-    await Future.delayed(const Duration(milliseconds: 1200));
-    await ref.read(authProvider.notifier).checkSession();
-
-    if (!mounted) return;
-
-    final isLoggedIn = ref.read(authProvider).isAuthenticated;
-
-    if (isLoggedIn) {
-      Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-    } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.login);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      body: Center(
-        child: FadeTransition(
-          opacity: _opacity,
-          child: ScaleTransition(
-            scale: _scale,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.water_drop,
-                size: 80,
-                color: Theme.of(context).primaryColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: Container(
+        width: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // App Logo
+            Hero(
+              tag: 'app_logo',
+              child: Image.asset(
+                'assets/images/logo.png',
+                height: 120,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.water_drop_rounded,
+                  size: 80,
+                  color: theme.primaryColor,
+                ),
               ),
             ),
-          ),
+            const SizedBox(height: 24),
+            // App Branding
+            Text(
+              "AquaRythu",
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.primaryColor,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Smart Shrimp Farming",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 64),
+            const CircularProgressIndicator.adaptive(),
+          ],
         ),
       ),
     );

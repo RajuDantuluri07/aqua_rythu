@@ -1,25 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
-import 'feed_plan_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
+import '../../services/pond_service.dart';
 
-class FeedScheduleScreen extends ConsumerWidget {
+// ✅ ADD TEMP CLASS (TOP OF FILE):
+class FeedDayPlan {
+  final int doc;
+  final List<double> rounds;
+
+  FeedDayPlan({required this.doc, required this.rounds});
+
+  double get total => rounds.fold(0.0, (sum, qty) => sum + qty);
+}
+class FeedScheduleScreen extends ConsumerStatefulWidget {
   final String pondId;
   const FeedScheduleScreen({super.key, required this.pondId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final planMap = ref.watch(feedPlanProvider);
-    final plan = planMap[pondId];
-    final days = plan?.days ?? [];
+  ConsumerState<FeedScheduleScreen> createState() => _FeedScheduleScreenState();
+}
 
+class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
+  List<Map<String, dynamic>> feeds = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadFeed();
+  }
+
+  Future<void> loadFeed() async {
+    try {
+      final pondService = PondService();
+
+      final farmState = ref.read(farmProvider);
+
+      final pond = farmState.farms
+          .expand((f) => f.ponds)
+          .firstWhere((p) => p.id == widget.pondId);
+
+      final data = await pondService.getTodayFeed(
+        pondId: widget.pondId,
+        stockingDate: pond.stockingDate.toIso8601String(),
+      );
+
+      setState(() {
+        feeds = data;
+        isLoading = false;
+      });
+    } catch (e) {
+      print("Error loading feed: $e");
+      setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final farmState = ref.watch(farmProvider);
-    String pondName = pondId;
+    String pondName = widget.pondId;
     for (var farm in farmState.farms) {
       try {
-        final pond = farm.ponds.firstWhere((p) => p.id == pondId);
+        final pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
         pondName = pond.name;
         break;
       } catch (e, stack) {
@@ -27,8 +71,7 @@ class FeedScheduleScreen extends ConsumerWidget {
       }
     }
 
-    final docRange =
-        days.isEmpty ? "" : "DOC ${days.first.doc}-${days.last.doc}";
+    final docRange = ""; // No plan, so no doc range
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -71,48 +114,25 @@ class FeedScheduleScreen extends ConsumerWidget {
           child: Container(color: Colors.grey.shade200, height: 1),
         ),
       ),
-      body: days.isEmpty
-          ? const Center(child: Text("No plan generated yet."))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.base),
-              child: Column(
-                children: [
-                  // Main Table Card
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBg,
-                      borderRadius: AppRadius.rBase,
-                      border: Border.all(color: Colors.grey.shade200),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // Table Header
-                        _buildTableHeader(),
-                        // Data Rows (Show all days for full reference)
-                        ...(days.asMap().entries.map((entry) => _FeedRow(
-                          pondId: pondId,
-                          day: entry.value,
-                          index: entry.key,
-                        )).toList()),
-                      ],
-                    ),
-                  ),
-                  AppSpacing.hXl,
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : feeds.isEmpty
+              ? const Center(child: Text("No feed plan for today"))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: feeds.length,
+                  itemBuilder: (context, index) {
+                    final feed = feeds[index];
 
-                  // Total Summary Card
-                  _buildTotalSummaryCard(plan?.totalProjected ?? 0),
-                  const SizedBox(height: 100),
-                ],
-              ),
-            ),
-      bottomSheet: _buildSaveButton(context, ref),
+                    return Card(
+                      child: ListTile(
+                        title: Text("Round ${feed['round']}"),
+                        subtitle: Text("Feed: ${feed['feed_amount']} kg"),
+                      ),
+                    );
+                  },
+                ),
+      bottomSheet: _buildSaveButton(context),
     );
   }
 
@@ -196,7 +216,7 @@ class FeedScheduleScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSaveButton(BuildContext context, WidgetRef ref) {
+  Widget _buildSaveButton(BuildContext context) {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.only(
@@ -205,15 +225,7 @@ class FeedScheduleScreen extends ConsumerWidget {
           bottom: AppSpacing.xl,
           top: AppSpacing.l),
       child: ElevatedButton.icon(
-        onPressed: () {
-          ref.read(feedPlanProvider.notifier).savePlan(pondId);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Feed Schedule Saved Successfully"),
-              backgroundColor: Color(0xFF22C55E),
-            ),
-          );
-        },
+        onPressed: () { /* no-op */ }, // ✅ REPLACE: ref.read(feedPlanProvider.notifier).savePlan(pondId);
         icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
         label: const Text(
           "Save Schedule",
@@ -292,12 +304,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
 
   void _onChanged(int index) {
     final val = double.tryParse(_controllers[index].text) ?? 0;
-    ref.read(feedPlanProvider.notifier).updateFeed(
-          pondId: widget.pondId,
-          doc: widget.day.doc,
-          roundIndex: index,
-          qty: val,
-        );
+    // no-op // ✅ REPLACE: ref.read(feedPlanProvider.notifier).updateFeed(...)
   }
 
   @override

@@ -30,7 +30,7 @@ class FeedService {
     try {
       return await supabase
           .from('feed_plans')
-          .select()
+          .select('id, doc, round, feed_amount, is_completed')
           .eq('pond_id', pondId)
           .order('doc', ascending: true)
           .order('round', ascending: true);

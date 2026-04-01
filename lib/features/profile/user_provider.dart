@@ -45,7 +45,7 @@ class UserProfile {
     return UserProfile(
       userId: json['userId'] ?? 'default_user',
       name: json['name'] ?? 'User',
-      phoneNumber: json['phoneNumber'] ?? '',
+      phoneNumber: json['phoneNumber'] ?? json['phone'] ?? '',
       email: json['email'] ?? '',
       profileImageUrl: json['profileImageUrl'],
     );
@@ -73,7 +73,7 @@ void initializeUserProvider(SharedPreferences prefs) {
 class UserNotifier extends StateNotifier<UserProfile> {
   static const String _storageKey = 'user_profile';
 
-  UserNotifier() : super(UserProfile.demo()) {
+  UserNotifier() : super(UserProfile(userId: '', name: 'Loading...', phoneNumber: '', email: '')) {
     _loadProfile();
   }
 

@@ -87,22 +87,23 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     /// ✅ LISTEN TO AUTH STATE
-    ref.listen<AuthState>(authProvider, (previous, next) {
-      if (next.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.errorMessage!),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      } else if (next.isAuthenticated) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.dashboard,
-          (route) => false,
-        );
-      }
-    });
+    ref.listen<AppAuthState>(authProvider, (previous, next) {
+  if (next.errorMessage != null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(next.errorMessage!),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
+  } else if (next.isAuthenticated) {
+    // ✅ FIX: FORCE NAVIGATION
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.dashboard,
+      (route) => false,
+    );
+  }
+});
 
     final phone = ModalRoute.of(context)?.settings.arguments as String? ?? "";
 

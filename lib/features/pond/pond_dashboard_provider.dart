@@ -2,9 +2,10 @@ import '../../core/enums/tray_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/engines/feed_state_engine.dart';
 import '../farm/farm_provider.dart';
-import '../feed/feed_plan_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
+import '../../services/pond_service.dart';
+import '../../services/feed_service.dart';
 
 /// =======================
 /// STATE
@@ -16,12 +17,16 @@ class PondDashboardState {
   final double currentFeed;
   final Map<int, bool> feedDone;
   final Map<int, TrayStatus> trayResults;
+  final Map<int, String> roundToFeedId;
+  final Map<int, double> roundFeedAmounts;
   PondDashboardState({
     required this.selectedPond,
     required this.doc,
     required this.currentFeed,
     required this.feedDone,
     required this.trayResults,
+    this.roundToFeedId = const {},
+    this.roundFeedAmounts = const {},
   });
 
   PondDashboardState copyWith({
@@ -30,6 +35,8 @@ class PondDashboardState {
     double? currentFeed,
     final Map<int, bool>? feedDone,
     final Map<int, TrayStatus>? trayResults,
+    Map<int, String>? roundToFeedId,
+    Map<int, double>? roundFeedAmounts,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -37,6 +44,8 @@ class PondDashboardState {
       currentFeed: currentFeed ?? this.currentFeed,
       feedDone: feedDone ?? this.feedDone,
       trayResults: trayResults ?? this.trayResults,
+      roundToFeedId: roundToFeedId ?? this.roundToFeedId,
+      roundFeedAmounts: roundFeedAmounts ?? this.roundFeedAmounts,
     );
   }
 }
@@ -58,6 +67,8 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           currentFeed: 15.0,
           feedDone: {},
           trayResults: <int, TrayStatus>{},
+          roundToFeedId: {},
+          roundFeedAmounts: {},
         )) {
     _updateStateForPond(state.selectedPond);
   }
@@ -70,16 +81,48 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     _pondCache[state.selectedPond] = {
       'feedDone': Map<int, bool>.from(state.feedDone),
       'trayResults': Map<int, TrayStatus>.from(state.trayResults),
+      'roundToFeedId': Map<int, String>.from(state.roundToFeedId),
+      'roundFeedAmounts': Map<int, double>.from(state.roundFeedAmounts),
     };
   }
 
-  void _updateStateForPond(String pondId) {
+  Future<void> loadTodayFeed(String pondId) async {
+    final farmState = ref.read(farmProvider);
+    final pond = farmState.currentFarm?.ponds.firstWhere((p) => p.id == pondId);
+    
+    if (pond == null) return;
+
+    final data = await PondService().getTodayFeed(
+      pondId: pondId,
+      stockingDate: pond.stockingDate.toIso8601String(),
+    );
+
+    Map<int, double> feedMap = {};
+    Map<int, String> idMap = {};
+    Map<int, bool> doneMap = {};
+
+    for (var item in data) {
+      final round = item['round'] as int;
+      feedMap[round] = (item['feed_amount'] as num).toDouble();
+      idMap[round] = item['id'].toString();
+      doneMap[round] = item['is_completed'] ?? false;
+    }
+
+    state = state.copyWith(
+      roundFeedAmounts: feedMap,
+      roundToFeedId: idMap,
+      feedDone: doneMap,
+    );
+  }
+
+  Future<void> _updateStateForPond(String pondId) async {
     final doc = ref.read(docProvider(pondId));
     final cached = _pondCache[pondId];
 
+    await loadTodayFeed(pondId);
+
     state = state.copyWith(
       doc: doc,
-      feedDone: cached != null ? Map<int, bool>.from(cached['feedDone']) : {},
       currentFeed: 15.0,
       trayResults: cached != null
           ? Map<int, TrayStatus>.from(cached['trayResults'])
@@ -104,42 +147,24 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // 🍽 FEED MARKING
   // =========================================================
 
-  void markFeedDone(int round) {
-    // 🔒 SAFETY: Prevent duplicate actions
+  Future<void> markFeedDone(int round) async {
     if (state.feedDone[round] == true) return;
+
+    final feedId = state.roundToFeedId[round];
+    if (feedId == null) return;
+
+    await FeedService().markFeedPlanCompleted(
+      feedPlanId: feedId,
+    );
 
     final newMap = Map<int, bool>.from(state.feedDone);
     newMap[round] = true;
 
     state = state.copyWith(feedDone: newMap);
 
-    // 🕒 Persistence to History Ledger
-    final planMap = ref.read(feedPlanProvider);
-    final plan = planMap[state.selectedPond];
-    if (plan != null) {
-      final dayPlan = plan.days.firstWhere((d) => d.doc == state.doc,
-          orElse: () =>
-              FeedDayPlan(doc: state.doc, rounds: [0.0, 0.0, 0.0, 0.0]));
-
-      // Access round index (0-based)
-      final roundIdx = round - 1;
-      double qty =
-          (dayPlan.rounds.length > roundIdx) ? dayPlan.rounds[roundIdx] : 0.0;
-
-      // Apply adjustment if round > 1
-      if (round > 1) {
-        final prevTray = state.trayResults[round - 1];
-        if (prevTray != null) {
-          // ✅ VERIFIED: Passing single aggregated tray as list to satisfy engine signature
-          final mode = FeedStateEngine.getMode(state.doc);
-          qty = FeedStateEngine.applyTrayAdjustment([prevTray], qty, mode);
-        }
-      }
-
-      if (qty <= 0) {
-        return;
-      }
-
+    // Optional: Keep history logging using the actual DB amount
+    final qty = state.roundFeedAmounts[round] ?? 0.0;
+    if (qty > 0) {
       ref.read(feedHistoryProvider.notifier).logFeeding(
           pondId: state.selectedPond, doc: state.doc, round: round, qty: qty);
     }

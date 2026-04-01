@@ -127,7 +127,10 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         return;
       }
 
-      final area = double.tryParse(_areaController.text) ?? 0.0;
+      // Sanitize input: replace commas with dots for universal parsing
+      final sanitizedArea = _areaController.text.replaceAll(',', '.');
+      final area = double.tryParse(sanitizedArea) ?? 0.0;
+      
       final seedCount = _seedCountController.text.isEmpty 
           ? 100000 
           : int.parse(_seedCountController.text);
