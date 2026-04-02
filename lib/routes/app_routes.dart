@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../features/auth/splash_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/farm/add_farm_screen.dart';
@@ -17,8 +16,9 @@ class AppRoutes {
   static const editPond = '/edit-pond';
   static const dashboard = '/dashboard';
   static const pondDashboard = '/pond-dashboard';
+  static const feedSchedule = '/feed-schedule';
 
-  static Map<String, WidgetBuilder> routes = {
+  static Map<String, Widget Function(BuildContext)> routes = {
     login: (context) => const LoginScreen(),
     profile: (context) => const ProfileScreen(),
     addFarm: (context) => const AddFarmScreen(),
@@ -26,5 +26,6 @@ class AppRoutes {
     editPond: (context) => const EditPondScreen(),
     dashboard: (context) => const DashboardScreen(),
     pondDashboard: (context) => const PondDashboardScreen(),
+    feedSchedule: (context) => throw UnimplementedError('FeedScheduleScreen requires pondId argument'),
   };
 }

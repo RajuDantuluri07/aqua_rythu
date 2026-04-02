@@ -117,4 +117,60 @@ class PondService {
 
     return response;
   }
+
+  // ================================
+  // ✅ FEED SCHEDULE METHODS
+  // ================================
+  
+  Future<void> saveFeedSchedule(String pondId, List<Map<String, dynamic>> scheduleData) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      throw Exception('User not logged in');
+    }
+
+    try {
+      // Delete existing schedule for this pond
+      await supabase
+          .from('feed_schedules')
+          .delete()
+          .eq('pond_id', pondId);
+
+      // Insert new schedule
+      final scheduleWithMeta = {
+        'pond_id': pondId,
+        'schedule_data': scheduleData,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+        'user_id': user.id,
+      };
+
+      await supabase
+          .from('feed_schedules')
+          .insert(scheduleWithMeta);
+
+      print('✅ Feed schedule saved for pond: $pondId');
+    } catch (e) {
+      throw Exception('Failed to save feed schedule: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFeedSchedule(String pondId) async {
+    try {
+      final response = await supabase
+          .from('feed_schedules')
+          .select('schedule_data')
+          .eq('pond_id', pondId)
+          .order('updated_at', ascending: false)
+          .limit(1);
+
+      if (response.isEmpty) {
+        return [];
+      }
+
+      final scheduleData = response.first['schedule_data'] as List<dynamic>;
+      return scheduleData.cast<Map<String, dynamic>>();
+    } catch (e) {
+      throw Exception('Failed to load feed schedule: $e');
+    }
+  }
 }

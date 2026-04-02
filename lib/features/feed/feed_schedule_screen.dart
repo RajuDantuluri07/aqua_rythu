@@ -3,17 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
-import '../../services/pond_service.dart';
-
-// ✅ ADD TEMP CLASS (TOP OF FILE):
-class FeedDayPlan {
-  final int doc;
-  final List<double> rounds;
-
-  FeedDayPlan({required this.doc, required this.rounds});
-
-  double get total => rounds.fold(0.0, (sum, qty) => sum + qty);
-}
+import 'feed_schedule_provider.dart';
 class FeedScheduleScreen extends ConsumerStatefulWidget {
   final String pondId;
   const FeedScheduleScreen({super.key, required this.pondId});
@@ -23,43 +13,19 @@ class FeedScheduleScreen extends ConsumerStatefulWidget {
 }
 
 class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
-  List<Map<String, dynamic>> feeds = [];
-  bool isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    loadFeed();
-  }
-
-  Future<void> loadFeed() async {
-    try {
-      final pondService = PondService();
-
-      final farmState = ref.read(farmProvider);
-
-      final pond = farmState.farms
-          .expand((f) => f.ponds)
-          .firstWhere((p) => p.id == widget.pondId);
-
-      final data = await pondService.getTodayFeed(
-        pondId: widget.pondId,
-        stockingDate: pond.stockingDate.toIso8601String(),
-      );
-
-      setState(() {
-        feeds = data;
-        isLoading = false;
-      });
-    } catch (e) {
-      print("Error loading feed: $e");
-      setState(() => isLoading = false);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final farmState = ref.watch(farmProvider);
+    final feedScheduleState = ref.watch(feedScheduleProvider);
+    
     String pondName = widget.pondId;
     for (var farm in farmState.farms) {
       try {
@@ -71,7 +37,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
       }
     }
 
-    final docRange = ""; // No plan, so no doc range
+    final docRange = "DOC 1–30";
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -114,25 +80,76 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
           child: Container(color: Colors.grey.shade200, height: 1),
         ),
       ),
-      body: isLoading
+      body: feedScheduleState.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : feeds.isEmpty
-              ? const Center(child: Text("No feed plan for today"))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: feeds.length,
-                  itemBuilder: (context, index) {
-                    final feed = feeds[index];
-
-                    return Card(
-                      child: ListTile(
-                        title: Text("Round ${feed['round']}"),
-                        subtitle: Text("Feed: ${feed['feed_amount']} kg"),
+          : feedScheduleState.error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Error loading feed schedule",
+                        style: TextStyle(color: Colors.red.shade600),
                       ),
-                    );
-                  },
+                      const SizedBox(height: 8),
+                      Text(
+                        feedScheduleState.error!,
+                        style: const TextStyle(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+                        },
+                        child: const Text("Retry"),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            _buildTableHeader(),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: const BorderRadius.only(
+                                  bottomLeft: Radius.circular(15),
+                                  bottomRight: Radius.circular(15),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                children: feedScheduleState.days.asMap().entries.map((entry) {
+                                  return _FeedRow(
+                                    pondId: widget.pondId,
+                                    day: entry.value,
+                                    index: entry.key,
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildTotalSummaryCard(feedScheduleState.totalProjectedFeed),
+                            const SizedBox(height: 100), // Space for save button
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-      bottomSheet: _buildSaveButton(context),
+      bottomSheet: _buildSaveButton(context, feedScheduleState),
     );
   }
 
@@ -216,7 +233,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     );
   }
 
-  Widget _buildSaveButton(BuildContext context) {
+  Widget _buildSaveButton(BuildContext context, FeedScheduleState feedScheduleState) {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.only(
@@ -224,21 +241,46 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
           right: AppSpacing.base,
           bottom: AppSpacing.xl,
           top: AppSpacing.l),
-      child: ElevatedButton.icon(
-        onPressed: () { /* no-op */ }, // ✅ REPLACE: ref.read(feedPlanProvider.notifier).savePlan(pondId);
-        icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
-        label: const Text(
-          "Save Schedule",
-          style: TextStyle(
-              fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF22C55E),
-          minimumSize: const Size(double.infinity, 56),
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
-          elevation: 3,
-        ),
-      ),
+      child: feedScheduleState.isSaving
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  await ref.read(feedScheduleProvider.notifier).saveFeedSchedule(widget.pondId);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Feed schedule saved successfully!"),
+                        backgroundColor: Color(0xFF22C55E),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Failed to save: $e"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
+              label: const Text(
+                "Save Schedule",
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF22C55E),
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
+                elevation: 3,
+              ),
+            ),
     );
   }
 }
@@ -304,7 +346,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
 
   void _onChanged(int index) {
     final val = double.tryParse(_controllers[index].text) ?? 0;
-    // no-op // ✅ REPLACE: ref.read(feedPlanProvider.notifier).updateFeed(...)
+    ref.read(feedScheduleProvider.notifier).updateFeed(widget.index, index, val);
   }
 
   @override
