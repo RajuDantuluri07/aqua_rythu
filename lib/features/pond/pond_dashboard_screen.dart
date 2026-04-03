@@ -663,7 +663,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
     double plannedFeed = 0.0;
     for (var feed in _todayFeeds) {
-      plannedFeed += (feed['expected_feed'] as num?)?.toDouble() ?? 0.0;
+      plannedFeed += (feed['feed_amount'] as num?)?.toDouble() ?? 0.0;
     }
 
     // Calculate consumed feed from DB data only
@@ -1260,10 +1260,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
         // Pull feed amount directly from Supabase record cached in state
         final feedData = _todayFeeds.firstWhere(
   (f) => f['round'] == round,
-  orElse: () => {'expected_feed': 0},
+  orElse: () => {'feed_amount': 0},
 );
 
-final double qty = (feedData['expected_feed'] as num?)?.toDouble() ?? 0.0;
+final double qty = (feedData['feed_amount'] as num?)?.toDouble() ?? 0.0;
         
         final thisRoundLog = todayTrayMap[round];
         final roundState = FeedStateEngine.getRoundState(
@@ -1322,64 +1322,110 @@ final double qty = (feedData['expected_feed'] as num?)?.toDouble() ?? 0.0;
           card = UpcomingRoundCard(
               round: round, time: time, feedQty: qty, isNext: isRoundNext);
         } else {
-          // TEMP: Smart feed engine disabled - keep UI only
-          // Extract smart feed data if available
-          double? smartFeed;
-          FeedOutput? engineOutput;
-
-          card = SmartFeedRoundCard(
-            pondId: selectedPond,
-            round: round,
-            time: time,
-            plannedFeed: qty,
-            smartFeed: smartFeed,
-            engineOutput: engineOutput,
-            doc: currentDoc,
-            showTrayCTA: roundState.showTrayCTA,
-            isFeedDone: roundState.isDone, // Pass the actual done status
-            onMarkFed: (double overrideFeed) {
-              if (!roundState.isLocked) {
-                if (overrideFeed <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Feed quantity must be greater than zero"),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                  return;
-                }
-                // Log the feed with the override amount
-                ref.read(feedHistoryProvider.notifier).logFeeding(
-                  pondId: selectedPond,
-                  doc: currentDoc,
-                  round: round,
-                  qty: overrideFeed,
-                  smartFeedQty: smartFeed,
-                );
-                _logFeedSupplementApplication(
-                  pondId: selectedPond,
-                  pondName: pondName,
-                  round: round,
-                  feedQty: overrideFeed,
-                  activePlansToday: activePlansToday,
-                );
-                ref.read(pondDashboardProvider.notifier).markFeedDone(round).then((_) async {
-                  // Reload data from DB after marking feed done
-                  final currentFarm = ref.read(farmProvider).currentFarm;
-                  final pond = currentFarm?.ponds.firstWhere(
-                    (p) => p.id == selectedPond,
-                    orElse: () => currentFarm!.ponds.first,
-                  );
-                  if (pond != null) {
-                    await _loadData(selectedPond, pond.stockingDate.toIso8601String());
+          // 🔧 FIX: Use appropriate card based on feed mode
+          // - Blind mode (DOC 1-30): SimpleFeedRoundCard with only Planned Feed
+          // - Smart/Transitional mode (DOC > 30): SmartFeedRoundCard with comparison
+          if (feedMode == FeedMode.blind) {
+            // DOC 1-30: Show simple card with only Planned Feed
+            card = FeedRoundCard(
+              round: round,
+              time: time,
+              feedQty: qty,
+              isDone: roundState.isDone,
+              isCurrent: roundState.isCurrent,
+              isLocked: roundState.isLocked,
+              showTrayCTA: false,
+              onOpenTray: (int round) { },
+              onMarkDone: () {
+                if (!roundState.isLocked) {
+                  if (qty <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Feed quantity must be greater than zero"),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
                   }
-                });
-              }
-            },
-            onLogTray: roundState.showTrayCTA
-                ? () => openTray(round, false)
-                : null,
-          );
+                  // Log the feed with planned amount (blind feeding)
+                  ref.read(feedHistoryProvider.notifier).logFeeding(
+                    pondId: selectedPond,
+                    doc: currentDoc,
+                    round: round,
+                    qty: qty,
+                  );
+                  _logFeedSupplementApplication(
+                    pondId: selectedPond,
+                    pondName: pondName,
+                    round: round,
+                    feedQty: qty,
+                    activePlansToday: activePlansToday,
+                  );
+                  ref.read(pondDashboardProvider.notifier).markFeedDone(round).then((_) async {
+                    final currentFarm = ref.read(farmProvider).currentFarm;
+                    final pond = currentFarm?.ponds.firstWhere(
+                      (p) => p.id == selectedPond,
+                      orElse: () => currentFarm!.ponds.first,
+                    );
+                    if (pond != null) {
+                      await _loadData(selectedPond, pond.stockingDate.toIso8601String());
+                    }
+                  });
+                }
+              },
+            );
+          } else {
+            // DOC > 30: Show simplified smart feed card for MVP
+            card = SmartFeedRoundCard(
+              pondId: selectedPond,
+              round: round,
+              time: time,
+              plannedFeed: qty,
+              doc: currentDoc,
+              showTrayCTA: roundState.showTrayCTA,
+              isFeedDone: roundState.isDone,
+              onMarkFed: (double overrideFeed) {
+                if (!roundState.isLocked) {
+                  if (overrideFeed <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Feed quantity must be greater than zero"),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
+                  // Log the feed with the override amount
+                  ref.read(feedHistoryProvider.notifier).logFeeding(
+                    pondId: selectedPond,
+                    doc: currentDoc,
+                    round: round,
+                    qty: overrideFeed,
+                  );
+                  _logFeedSupplementApplication(
+                    pondId: selectedPond,
+                    pondName: pondName,
+                    round: round,
+                    feedQty: overrideFeed,
+                    activePlansToday: activePlansToday,
+                  );
+                  ref.read(pondDashboardProvider.notifier).markFeedDone(round).then((_) async {
+                    final currentFarm = ref.read(farmProvider).currentFarm;
+                    final pond = currentFarm?.ponds.firstWhere(
+                      (p) => p.id == selectedPond,
+                      orElse: () => currentFarm!.ponds.first,
+                    );
+                    if (pond != null) {
+                      await _loadData(selectedPond, pond.stockingDate.toIso8601String());
+                    }
+                  });
+                }
+              },
+              onLogTray: (feedMode == FeedMode.transitional && !roundState.isTrayLogged)
+                  ? () => openTray(round, false)
+                  : null,
+            );
+          }
         }
       } else {
         final log = itemData['log'] as SupplementLog?;

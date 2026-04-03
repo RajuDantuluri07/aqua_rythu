@@ -29,7 +29,7 @@ class FeedService {
     
     try {
       return await supabase
-          .from('feed_plans')
+          .from('feed_rounds')
           .select('id, doc, round, feed_amount, is_completed')
           .eq('pond_id', pondId)
           .order('doc', ascending: true)
@@ -50,7 +50,7 @@ class FeedService {
 
     try {
       return await supabase
-          .from('feed_plans')
+          .from('feed_rounds')
           .select()
           .eq('pond_id', pondId)
           .eq('doc', doc)
@@ -75,7 +75,7 @@ class FeedService {
 
     try {
       return await supabase
-          .from('feed_plans')
+          .from('feed_rounds')
           .select()
           .eq('pond_id', pondId)
           .gte('date', startDateStr)
@@ -97,7 +97,7 @@ class FeedService {
 
     try {
       await supabase
-          .from('feed_plans')
+          .from('feed_rounds')
           .update({
             'is_completed': true,
             'updated_at': DateTime.now().toIso8601String(),
@@ -119,7 +119,7 @@ class FeedService {
 
     try {
       await supabase
-          .from('feed_plans')
+          .from('feed_rounds')
           .update({
             'feed_amount': newAmount,
             'is_manual': true,
@@ -140,7 +140,7 @@ class FeedService {
     try {
       // Delete existing feed plans for this pond
       await supabase
-          .from('feed_plans')
+          .from('feed_rounds')
           .delete()
           .eq('pond_id', pondId);
 
@@ -174,7 +174,7 @@ class FeedService {
 
       if (plansToInsert.isNotEmpty) {
         await supabase
-            .from('feed_plans')
+            .from('feed_rounds')
             .insert(plansToInsert);
       }
 

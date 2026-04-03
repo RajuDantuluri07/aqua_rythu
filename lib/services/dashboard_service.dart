@@ -17,33 +17,28 @@ class DashboardService {
           num_trays,
           current_abw,
           stocking_date,
-          feed_plans (
+          feed_rounds (
             doc,
-            r1,
-            r2,
-            r3,
-            r4,
-            total
+            feed_amount
           )
         ''').eq('is_deleted', false);
 
     final ponds = List<Map<String, dynamic>>.from(response);
 
     for (final pond in ponds) {
-      final feedPlans = pond['feed_plans'] as List?;
+      final feedRounds = pond['feed_rounds'] as List?;
       
-      if (feedPlans != null && feedPlans.isNotEmpty) {
+      if (feedRounds != null && feedRounds.isNotEmpty) {
         // Calculate today's DOC
         final stockingDate = DateTime.parse(pond['stocking_date'] as String);
         final todayDoc = DateTime.now().difference(stockingDate).inDays + 1;
         
-        // Find today's feed plan
-        final todayPlan = feedPlans.firstWhere(
-          (plan) => (plan['doc'] as int) == todayDoc,
-          orElse: () => {'total': 0},
-        );
-        
-        pond['today_feed'] = todayPlan['total'] ?? 0;
+        // Calculate today's total feed from rounds
+        final todayTotal = feedRounds
+            .where((r) => r['doc'] == todayDoc)
+            .fold(0.0, (sum, r) => sum + ((r['feed_amount'] as num?)?.toDouble() ?? 0.0));
+
+        pond['today_feed'] = todayTotal;
       } else {
         pond['today_feed'] = 0;
       }

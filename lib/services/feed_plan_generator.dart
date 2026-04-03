@@ -27,7 +27,7 @@ Future<void> generateFeedPlan({
 
   // Edge Case: If any part of this range already exists -> DO NOT duplicate
   final List<dynamic> existing = await supabase
-      .from('feed_plans')
+      .from('feed_rounds')
       .select('id')
       .eq('pond_id', pondId)
       .gte('doc', startDoc)
@@ -90,6 +90,6 @@ Future<void> generateFeedPlan({
   }
 
   if (batchData.isNotEmpty) {
-    await supabase.from('feed_plans').insert(batchData);
+    await supabase.from('feed_rounds').insert(batchData);
   }
 }

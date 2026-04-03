@@ -1,31 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/engines/models/feed_output.dart';
-import '../../services/feed_calculation_service.dart';
 import 'smart_feed_provider.dart';
 
-/// 🎯 ENHANCED ROUND CARD with Planned vs Smart vs Actual comparison
+/// 🎯 SIMPLIFIED ROUND CARD for MVP
 /// 
 /// Shows:
-/// - Planned feed (from blind plan)
-/// - Smart feed (real-time calculation)
-/// - Actual feed (logged by user)
-/// - Reasons for adjustment
-/// - Override capability with dialog
+/// - Planned feed (from feed_plans table - single source of truth)
+/// - Manual override capability
+/// - Basic feed logging functionality
 
 class SmartFeedRoundCard extends ConsumerStatefulWidget {
   final String pondId;
   final int round;
   final String time;
   final double plannedFeed;
-  final double? smartFeed;
-  final FeedOutput? engineOutput;
   final int doc;  // ✅ Days on cluster (for DOC-based tray logic)
   final bool showTrayCTA;  // ✅ Whether to show tray CTA after feeding
   final Function(double overrideFeed) onMarkFed;  // ✅ Now accepts override amount
   final bool isFeedDone; // ✅ Indicates if the feed for this round is already marked done
   final VoidCallback? onLogTray;  // ✅ Callback to log tray (optional)
-  final Function(double suggestedFeed)? onShowOverrideDialog;  // Optional callback
 
   const SmartFeedRoundCard({
     super.key,
@@ -35,12 +29,9 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
     required this.plannedFeed,
     required this.doc,
     required this.showTrayCTA,
-    this.smartFeed,
     required this.isFeedDone,
-    this.engineOutput,
     required this.onMarkFed,
     this.onLogTray,
-    this.onShowOverrideDialog,
   });
 
   @override
@@ -54,18 +45,11 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> { // No
   @override
   void initState() {
     super.initState();
-    _overrideAmount = widget.smartFeed ?? widget.plannedFeed;
-    // 🧪 DEBUG: Verify smart feed card consistency
-    final calculatedFeed = FeedCalculationService.getFeedAmount(
-      doc: widget.doc,
-      pondArea: 1000.0, // This should come from pond data
-    );
-    final roundFeed = calculatedFeed * 0.25; // 25% per round
-    print("🧪 DEBUG SMART FEED ROUND ${widget.round}: Planned=${widget.plannedFeed.toStringAsFixed(2)} | Smart=${widget.smartFeed?.toStringAsFixed(2) ?? 'null'} | Calculated=${roundFeed.toStringAsFixed(2)}");
+    _overrideAmount = widget.plannedFeed; // Use planned feed as default for MVP
   }
 
   void _showOverrideDialog() {
-    _overrideAmount = widget.smartFeed ?? widget.plannedFeed;
+    _overrideAmount = widget.plannedFeed; // Use planned feed for MVP
 
     showDialog(
       context: context,
@@ -236,8 +220,6 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> { // No
 
   @override
   Widget build(BuildContext context) {
-    final smartFeed = ref.watch(smartFeedProvider(widget.pondId));
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -298,140 +280,48 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> { // No
             ),
           ),
 
-          /// 📊 COMPARISON SECTION
+          /// 📊 FEED AMOUNT SECTION (MVP - Simple)
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                /// Planned vs Smart vs Actual
+                /// Planned Feed Amount
                 Row(
                   children: [
-                    _buildFeedColumn("Planned", widget.plannedFeed, Colors.grey),
-                    const SizedBox(width: 12),
-                    if (smartFeed.when(
-                      data: (data) => data != null,
-                      loading: () => false,
-                      error: (_, __) => false,
-                    ))
-                      _buildFeedColumn(
-                        "Smart",
-                        smartFeed.whenData((data) => data?.engineOutput.recommendedFeed ?? 0).maybeWhen(
-                          data: (v) => v,
-                          orElse: () => 0,
-                        ),
-                        Colors.blue,
-                      )
-                    else
-                      _buildFeedColumn("Smart", widget.plannedFeed, Colors.grey),
-                    const SizedBox(width: 12),
-                    _buildFeedColumn("Actual", 0, Colors.green),
+                    Expanded(
+                      child: _buildFeedColumn("Planned Feed", widget.plannedFeed, Colors.blue),
+                    ),
                   ],
                 ),
 
                 const SizedBox(height: 16),
 
-                /// 📝 REASONS
-                if (smartFeed.whenData((data) => data?.engineOutput.reasons).maybeWhen(
-                  data: (reasons) => reasons != null && reasons.isNotEmpty,
-                  orElse: () => false,
-                ))
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.lightbulb_outline,
-                                size: 14, color: Color(0xFF0284C7)),
-                            SizedBox(width: 6),
-                            Text(
-                              "ADJUSTMENT REASONS",
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0284C7),
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ...smartFeed.whenData((data) => data?.engineOutput.reasons).maybeWhen(
-                          data: (reasons) => reasons
-                              ?.map((r) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 4,
-                                          height: 4,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF0284C7),
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            r,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: Color(0xFF1E293B),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ))
-                              .toList() ??
-                              [],
-                          orElse: () => [],
-                        ),
-                      ],
-                    ),
+                /// 📝 INFO
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue[200]!),
                   ),
-
-                /// ⚠️ CRITICAL ALERTS
-                if (smartFeed.maybeWhen(
-                  data: (data) => data?.isStopFeeding ?? false,
-                  orElse: () => false,
-                ))
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red[300]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_rounded,
-                            size: 18, color: Colors.red[700]),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            smartFeed.whenData((data) => data?.stopReason).maybeWhen(
-                              data: (reason) => reason ?? "Stop feeding",
-                              orElse: () => "Stop feeding",
-                            ),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red[700],
-                            ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 14, color: Color(0xFF0284C7)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "Feed amount based on farm plan for DOC ${widget.doc}",
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF0284C7),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
@@ -450,8 +340,8 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> { // No
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        // Always mark feed first
-                        final feedAmount = widget.smartFeed ?? widget.plannedFeed;
+                        // Use planned feed for MVP
+                        final feedAmount = widget.plannedFeed;
                         widget.onMarkFed(feedAmount);
                         // Then log tray if available
                         if (widget.onLogTray != null) {

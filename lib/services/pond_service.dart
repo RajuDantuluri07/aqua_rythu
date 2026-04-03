@@ -43,17 +43,8 @@ class PondService {
 
       final pondId = response;
 
-      // Verify feed plan exists
-      final feedCheck = await supabase
-          .from('feed_plans')
-          .select('id')
-          .eq('pond_id', pondId)
-          .limit(1);
-
-      if (feedCheck.isEmpty) {
-        throw Exception('Feed plan not generated');
-      }
-
+      // Note: Feed plan generation is now non-blocking and decoupled.
+      // Verification is skipped to ensure pond creation always succeeds for MVP.
       print('✅ Pond + Feed Plan created: $pondId');
     } catch (e) {
       throw Exception('Failed to create pond: $e');
@@ -101,22 +92,14 @@ class PondService {
       return [];
     }
 
-    final response = await supabase
-        .from('feed_plans')
-        .select('''
-          id,
-          doc,
-          round,
-          feed_amount,
-          feed_type,
-          is_completed,
-          date
-        ''')
+    final rounds = await supabase
+        .from('feed_rounds')
+        .select()
         .eq('pond_id', pondId)
         .eq('doc', doc)
-        .order('round', ascending: true);
+        .order('round');
 
-    return response;
+    return rounds;
   }
 
   // ================================

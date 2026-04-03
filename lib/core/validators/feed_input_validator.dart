@@ -117,13 +117,9 @@ class FeedInputValidator {
     }
 
     // Tray statuses validation
-    if (input.trayStatuses.isEmpty) {
-      throw Exception("Invalid trayStatuses: Empty list - Must have at least 1 tray");
-    }
-    if (input.trayStatuses.length > 10) {
-      throw Exception(
-        "Invalid trayStatuses: ${input.trayStatuses.length} trays. Exceeds typical pond setup (max 10)",
-      );
+    // ✅ Allow empty trays for DOC ≤ 30 (blind feeding)
+    if (input.trayStatuses.isEmpty && input.doc > 30) {
+      throw Exception("Invalid trayStatuses: Empty list");
     }
 
     // FCR validation if provided

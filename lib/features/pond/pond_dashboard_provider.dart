@@ -92,7 +92,8 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     // Use existing database data
     for (var item in data) {
       final round = item['round'] as int;
-      feedMap[round] = (item['expected_feed'] as num?)?.toDouble() ?? 0.0;
+      feedMap[round] = (item['feed_amount'] as num?)?.toDouble() ?? 0.0;
+      idMap[round] = item['id'] as String? ?? '';
     }
     
     print("📥 LOADED FEED FROM DB: ${feedMap.values.map((v) => v.toStringAsFixed(2)).join(' kg | ')}");

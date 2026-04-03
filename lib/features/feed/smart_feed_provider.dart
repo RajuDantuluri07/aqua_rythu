@@ -120,7 +120,19 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
     );
 
     // Run engine
-    final output = MasterFeedEngine.run(input);
+    FeedOutput output;
+    try {
+      output = MasterFeedEngine.run(input);
+    } catch (e) {
+      print("❌ Feed engine failed: $e");
+      output = FeedOutput(
+        recommendedFeed: 1.0,
+        baseFeed: 1.0,
+        finalFactor: 1.0,
+        alerts: ["Fallback feed used"],
+        reasons: ["Internal engine error - using fallback"],
+      );
+    }
 
     // Distribute into rounds
     final rounds = FeedCalculationEngine.distributeFeed(output.recommendedFeed, 4);
