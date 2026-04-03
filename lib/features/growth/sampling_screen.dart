@@ -5,6 +5,7 @@ import 'growth_provider.dart';
 import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/smart_feed_engine.dart';
 
 class SamplingScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -103,6 +104,12 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
               date: DateTime.now(),
             ),
           );
+      
+      // 🔄 SMART FEED TRIGGER: Recalculate after sampling logged
+      SmartFeedEngine.recalculateFeedPlan(widget.pondId).catchError((e) {
+        print('❌ Smart Feed recalculation trigger failed: $e');
+      });
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Growth data saved successfully!"),

@@ -130,4 +130,57 @@ class FeedService {
       throw Exception('Failed to override feed amount: $e');
     }
   }
+
+  /// Save bulk feed plans for a pond (replaces existing plans)
+  Future<void> saveFeedPlans(String pondId, List<dynamic> feedPlans) async {
+    if (pondId.isEmpty) {
+      throw Exception('Invalid pondId');
+    }
+
+    try {
+      // Delete existing feed plans for this pond
+      await supabase
+          .from('feed_plans')
+          .delete()
+          .eq('pond_id', pondId);
+
+      // Insert new feed plans
+      final List<Map<String, dynamic>> plansToInsert = [];
+      
+      for (final plan in feedPlans) {
+        // Handle both FeedDayPlan objects and JSON maps
+        final doc = plan.doc is int ? plan.doc as int : plan['doc'] as int;
+        final rounds = plan.rounds is List ? 
+            plan.rounds as List<double> : 
+            [
+              (plan['r1'] as num?)?.toDouble() ?? 0.0,
+              (plan['r2'] as num?)?.toDouble() ?? 0.0,
+              (plan['r3'] as num?)?.toDouble() ?? 0.0,
+              (plan['r4'] as num?)?.toDouble() ?? 0.0,
+            ];
+        
+        for (int round = 0; round < rounds.length; round++) {
+          plansToInsert.add({
+            'pond_id': pondId,
+            'doc': doc,
+            'round': round + 1,
+            'feed_amount': rounds[round],
+            'is_completed': false,
+            'created_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          });
+        }
+      }
+
+      if (plansToInsert.isNotEmpty) {
+        await supabase
+            .from('feed_plans')
+            .insert(plansToInsert);
+      }
+
+      print('✅ Feed plans saved for pond: $pondId (${plansToInsert.length} records)');
+    } catch (e) {
+      throw Exception('Failed to save feed plans: $e');
+    }
+  }
 }

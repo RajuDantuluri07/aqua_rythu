@@ -57,11 +57,6 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
         ?.fold<int>(0, (sum, log) => sum + log.count) ?? 0;
     final livePopulation = pond.seedCount - currentPopulation;
 
-    // Get base plan
-    final feedPlanMap = {};
-    final basePlan = feedPlanMap[pondId];
-    if (basePlan == null) return null;
-
     // Get today's water quality (latest)
     final waterLogs = ref.watch(waterProvider(pondId));
     final latestWater = waterLogs.isNotEmpty ? waterLogs.last : null;
@@ -85,7 +80,8 @@ final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, 
     // Default water values (if no data)
     final do_ = latestWater?.dissolvedOxygen ?? 6.0;
     final ammonia = latestWater?.ammonia ?? 0.05;
-    final temp = latestWater?.ph ?? 7.8;
+    // FIX: Using pH (~8.0) as temperature causes FeedInputValidator to throw (min 10°C), returning null.
+    final temp = 28.0; // Use a standard optimal temperature until specifically tracked.
 
     // Get tray statuses or default to partial
     final trayStatuses = latestTray?.trays ?? 

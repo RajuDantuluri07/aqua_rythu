@@ -53,6 +53,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
         stockingDate: stockingDate,
       );
       if (mounted) {
+        print("📥 [DB LOAD] Pond: $pondId | Rounds: ${feeds.map((f) => 'R${f['round']}:${f['is_completed']}').join(', ')}");
         setState(() {
           _todayFeeds = feeds;
           _isLoadingFeeds = false;
@@ -572,13 +573,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
     final currentDoc = ref.watch(docProvider(selectedPond));
 
-    /// ✅ SMART FEED (Real-time calculation)
-    final smartFeedAsync = ref.watch(smartFeedProvider(selectedPond));
-    SmartFeedOutput? smartFeedOutput;
-    smartFeedAsync.whenData((data) {
-      smartFeedOutput = data;
-    });
-
     /// ✅ CURRENT STATS
     final history = ref.watch(feedHistoryProvider)[selectedPond] ?? [];
     final totalFeedToDate = history.isNotEmpty ? history.first.cumulative : 0.0;
@@ -667,16 +661,23 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             l.timestamp.day == now.day)
         .toList();
 
-    final plannedFeed = dashboardState.roundFeedAmounts.values.fold(0.0, (a, b) => a + b);
+    double plannedFeed = 0.0;
+    for (var feed in _todayFeeds) {
+      plannedFeed += (feed['expected_feed'] as num?)?.toDouble() ?? 0.0;
+    }
 
+    // Calculate consumed feed from DB data only
     double consumedFeed = 0.0;
-    for (int i = 1; i <= 4; i++) {
-      if (dashboardState.feedDone[i] == true) {
-        consumedFeed += dashboardState.roundFeedAmounts[i] ?? 0.0;
+    for (var feed in _todayFeeds) {
+      if (feed['is_completed'] == true) {
+        final round = feed['round'] as int;
+        consumedFeed += dashboardState.roundFeedAmounts[round] ?? 0.0;
       }
     }
 
-    final feedMode = FeedStateEngine.getMode(currentDoc);
+    // Enable Smart Feed when DOC is 30 or when pond has Smart Feed enabled
+    final isSmartFeedEnabled = (currentPond?.isSmartFeedEnabled ?? false) || (currentDoc >= 30);
+    final feedMode = FeedStateEngine.getMode(currentDoc, isSmartFeedEnabled: isSmartFeedEnabled);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -1147,7 +1148,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         todaySupplementLogs: todaySupplementLogs,
                         feedMode: feedMode,
                         selectedPond: selectedPond,
-                        smartFeedOutput: smartFeedOutput,
+                        smartFeedOutput: null, // Smart feed engine disabled - MVP
+                        currentPond: currentPond,
+                        isSmartFeedEnabled: isSmartFeedEnabled,
                       ),
                     ],
                   ),
@@ -1172,9 +1175,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     required FeedMode feedMode,
     required String selectedPond,
     required SmartFeedOutput? smartFeedOutput,
+    required Pond? currentPond,
+    required bool isSmartFeedEnabled,
   }) {
     final feedRoundsData = _getFeedRounds();
     final List<Map<String, dynamic>> timelineItems = [];
+
 
     // Add Feed Rounds
     for (var data in feedRoundsData) {
@@ -1243,19 +1249,31 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
       Widget card;
 
       if (isFeed) {
+        final Map<int, bool> feedDoneMap = {
+          for (var feed in _todayFeeds)
+            feed['round'] as int: (feed['is_completed'] == true)
+        };
+        print("🧱 [TIMELINE BUILD] Round: ${itemData['round']} | feedDoneMap: $feedDoneMap");
         final round = itemData['round'] as int;
         final time = itemData['time'] as String;
         final timeKey = itemData['key'] as String;
         // Pull feed amount directly from Supabase record cached in state
-        final double qty = dashboardState.roundFeedAmounts[round] ?? 0.0;
+        final feedData = _todayFeeds.firstWhere(
+  (f) => f['round'] == round,
+  orElse: () => {'expected_feed': 0},
+);
+
+final double qty = (feedData['expected_feed'] as num?)?.toDouble() ?? 0.0;
+        
         final thisRoundLog = todayTrayMap[round];
         final roundState = FeedStateEngine.getRoundState(
             doc: currentDoc,
             round: round,
             totalRounds: 4,
-            feedDone: dashboardState.feedDone,
-            trayDone: trayDone);
-
+            feedDone: feedDoneMap,
+            trayDone: trayDone,
+            isSmartFeedEnabled: isSmartFeedEnabled,
+          );
         timelineColor = roundState.isDone && !roundState.showTrayCTA
             ? const Color(0xFF10B981)
             : (roundState.isCurrent
@@ -1295,7 +1313,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 doc: currentDoc,
                 round: round - 1,
                 totalRounds: 4,
-                feedDone: dashboardState.feedDone,
+                feedDone: feedDoneMap,
                 trayDone: trayDone);
             if (prevRoundState.isDone || prevRoundState.isCurrent) {
               isRoundNext = true;
@@ -1304,14 +1322,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
           card = UpcomingRoundCard(
               round: round, time: time, feedQty: qty, isNext: isRoundNext);
         } else {
+          // TEMP: Smart feed engine disabled - keep UI only
           // Extract smart feed data if available
           double? smartFeed;
           FeedOutput? engineOutput;
-          
-          if (smartFeedOutput != null && round - 1 < smartFeedOutput.roundDistribution.length) {
-            smartFeed = smartFeedOutput.roundDistribution[round - 1];
-            engineOutput = smartFeedOutput.engineOutput;
-          }
 
           card = SmartFeedRoundCard(
             pondId: selectedPond,
@@ -1322,6 +1336,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             engineOutput: engineOutput,
             doc: currentDoc,
             showTrayCTA: roundState.showTrayCTA,
+            isFeedDone: roundState.isDone, // Pass the actual done status
             onMarkFed: (double overrideFeed) {
               if (!roundState.isLocked) {
                 if (overrideFeed <= 0) {
@@ -1342,13 +1357,23 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                   smartFeedQty: smartFeed,
                 );
                 _logFeedSupplementApplication(
-                  pondId: dashboardState.selectedPond,
+                  pondId: selectedPond,
                   pondName: pondName,
                   round: round,
                   feedQty: overrideFeed,
                   activePlansToday: activePlansToday,
                 );
-                ref.read(pondDashboardProvider.notifier).markFeedDone(round);
+                ref.read(pondDashboardProvider.notifier).markFeedDone(round).then((_) async {
+                  // Reload data from DB after marking feed done
+                  final currentFarm = ref.read(farmProvider).currentFarm;
+                  final pond = currentFarm?.ponds.firstWhere(
+                    (p) => p.id == selectedPond,
+                    orElse: () => currentFarm!.ponds.first,
+                  );
+                  if (pond != null) {
+                    await _loadData(selectedPond, pond.stockingDate.toIso8601String());
+                  }
+                });
               }
             },
             onLogTray: roundState.showTrayCTA
@@ -1513,11 +1538,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
   String _getTrayInfoText(FeedMode mode) {
     switch (mode) {
       case FeedMode.blind:
-        return "Starter phase (Tray hidden)";
+        return "Blind Feed (Tray optional)";
       case FeedMode.transitional:
-        return "Tray observation optional";
+        return "Transitional Feed (Tray optional)";
       case FeedMode.smart:
-        return "Smart feeding active (Tray mandatory)";
+        return "Smart Feed Active (Tray mandatory)";
     }
   }
 

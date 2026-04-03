@@ -17,28 +17,36 @@ class DashboardService {
           num_trays,
           current_abw,
           stocking_date,
-          feed_history_logs (
-            date,
-            expected_feed,
-            rounds
+          feed_plans (
+            doc,
+            r1,
+            r2,
+            r3,
+            r4,
+            total
           )
         ''').eq('is_deleted', false);
 
     final ponds = List<Map<String, dynamic>>.from(response);
 
     for (final pond in ponds) {
-      final feeds = pond['feed_history_logs'] as List?;
-
-      if (feeds != null && feeds.isNotEmpty) {
-        feeds.sort((a, b) {
-          final dateA = DateTime.parse(a['date'] as String);
-          final dateB = DateTime.parse(b['date'] as String);
-          return dateA.compareTo(dateB);
-        });
+      final feedPlans = pond['feed_plans'] as List?;
+      
+      if (feedPlans != null && feedPlans.isNotEmpty) {
+        // Calculate today's DOC
+        final stockingDate = DateTime.parse(pond['stocking_date'] as String);
+        final todayDoc = DateTime.now().difference(stockingDate).inDays + 1;
+        
+        // Find today's feed plan
+        final todayPlan = feedPlans.firstWhere(
+          (plan) => (plan['doc'] as int) == todayDoc,
+          orElse: () => {'total': 0},
+        );
+        
+        pond['today_feed'] = todayPlan['total'] ?? 0;
+      } else {
+        pond['today_feed'] = 0;
       }
-
-      final latestFeed = (feeds != null && feeds.isNotEmpty) ? feeds.last : null;
-      pond['today_feed'] = latestFeed?['expected_feed'] ?? 0;
     }
 
     return ponds;

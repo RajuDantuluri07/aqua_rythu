@@ -15,7 +15,6 @@ class PondDashboardState {
   final String selectedPond;
   final int doc;
   final double currentFeed;
-  final Map<int, bool> feedDone;
   final Map<int, TrayStatus> trayResults;
   final Map<int, String> roundToFeedId;
   final Map<int, double> roundFeedAmounts;
@@ -23,18 +22,16 @@ class PondDashboardState {
     required this.selectedPond,
     required this.doc,
     required this.currentFeed,
-    required this.feedDone,
     required this.trayResults,
-    this.roundToFeedId = const {},
-    this.roundFeedAmounts = const {},
+    required this.roundToFeedId,
+    required this.roundFeedAmounts,
   });
 
   PondDashboardState copyWith({
     String? selectedPond,
     int? doc,
     double? currentFeed,
-    final Map<int, bool>? feedDone,
-    final Map<int, TrayStatus>? trayResults,
+    Map<int, TrayStatus>? trayResults,
     Map<int, String>? roundToFeedId,
     Map<int, double>? roundFeedAmounts,
   }) {
@@ -42,7 +39,6 @@ class PondDashboardState {
       selectedPond: selectedPond ?? this.selectedPond,
       doc: doc ?? this.doc,
       currentFeed: currentFeed ?? this.currentFeed,
-      feedDone: feedDone ?? this.feedDone,
       trayResults: trayResults ?? this.trayResults,
       roundToFeedId: roundToFeedId ?? this.roundToFeedId,
       roundFeedAmounts: roundFeedAmounts ?? this.roundFeedAmounts,
@@ -57,15 +53,11 @@ class PondDashboardState {
 class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   final Ref ref;
 
-  /// Per-pond cache to preserve state across pond switches
-  final Map<String, Map<String, dynamic>> _pondCache = {};
-
   PondDashboardNotifier(this.ref)
       : super(PondDashboardState(
           selectedPond: "",
           doc: 1,
           currentFeed: 15.0,
-          feedDone: {},
           trayResults: <int, TrayStatus>{},
           roundToFeedId: {},
           roundFeedAmounts: {},
@@ -76,17 +68,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // =========================================================
   // 🔁 POND SWITCH
   // =========================================================
-
-  void _saveCurrentPondState() {
-    if (state.selectedPond.isEmpty) return; // Don't save empty pond state
-    
-    _pondCache[state.selectedPond] = {
-      'feedDone': Map<int, bool>.from(state.feedDone),
-      'trayResults': Map<int, TrayStatus>.from(state.trayResults),
-      'roundToFeedId': Map<int, String>.from(state.roundToFeedId),
-      'roundFeedAmounts': Map<int, double>.from(state.roundFeedAmounts),
-    };
-  }
 
   Future<void> loadTodayFeed(String pondId) async {
     final farmState = ref.read(farmProvider);
@@ -101,49 +82,45 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     Map<int, double> feedMap = {};
     Map<int, String> idMap = {};
-    Map<int, bool> doneMap = {};
 
+    // If no feed data exists for today, do NOT calculate - feed_plans is source of truth
+    if (data.isEmpty) {
+      print("❌ No feed plan found for today");
+      return;
+    }
+
+    // Use existing database data
     for (var item in data) {
       final round = item['round'] as int;
-      feedMap[round] = (item['feed_amount'] as num).toDouble();
-      idMap[round] = item['id'].toString();
-      doneMap[round] = item['is_completed'] ?? false;
+      feedMap[round] = (item['expected_feed'] as num?)?.toDouble() ?? 0.0;
     }
+    
+    print("📥 LOADED FEED FROM DB: ${feedMap.values.map((v) => v.toStringAsFixed(2)).join(' kg | ')}");
 
     state = state.copyWith(
       roundFeedAmounts: feedMap,
       roundToFeedId: idMap,
-      feedDone: doneMap,
     );
   }
 
   Future<void> _updateStateForPond(String pondId) async {
     final doc = ref.read(docProvider(pondId));
-    final cached = _pondCache[pondId];
 
-    // Load today's feed data first
+    // Load today's feed data
     await loadTodayFeed(pondId);
     
-    // Then restore cached state, overwriting the database state if cache exists
-    final cachedFeedDone = cached?['feedDone'] as Map<int, bool>?;
-    final cachedTrayResults = cached?['trayResults'] as Map<int, TrayStatus>?;
-
     state = state.copyWith(
       doc: doc,
       currentFeed: 15.0,
-      feedDone: cachedFeedDone ?? Map<int, bool>.from(state.feedDone),
-      trayResults: cachedTrayResults ?? <int, TrayStatus>{},
     );
   }
 
   void selectPond(String pondId) {
-    _saveCurrentPondState();
     state = state.copyWith(selectedPond: pondId);
     _updateStateForPond(pondId);
   }
 
   void resetPondState(String pondId) {
-    _pondCache.remove(pondId);
     if (state.selectedPond == pondId) {
       _updateStateForPond(pondId);
     }
@@ -154,8 +131,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // =========================================================
 
   Future<void> markFeedDone(int round) async {
-    if (state.feedDone[round] == true) return;
-
     final feedId = state.roundToFeedId[round];
     if (feedId == null) return;
 
@@ -163,17 +138,15 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       feedPlanId: feedId,
     );
 
-    final newMap = Map<int, bool>.from(state.feedDone);
-    newMap[round] = true;
-
-    state = state.copyWith(feedDone: newMap);
-
     // Optional: Keep history logging using the actual DB amount
     final qty = state.roundFeedAmounts[round] ?? 0.0;
     if (qty > 0) {
       ref.read(feedHistoryProvider.notifier).logFeeding(
           pondId: state.selectedPond, doc: state.doc, round: round, qty: qty);
     }
+
+    // 🔄 REFRESH FEED DATA from DB to get updated completion status
+    await loadTodayFeed(state.selectedPond);
   }
 
   // =========================================================

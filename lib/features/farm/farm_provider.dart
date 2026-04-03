@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/services/smart_feed_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum PondStatus { active, completed }
@@ -15,6 +16,7 @@ class Pond {
   final int numTrays;
   final PondStatus status;
   final double? currentAbw;  // Latest sampled average body weight
+  final bool isSmartFeedEnabled;  // Smart Feed activation status
 
   Pond({
     required this.id,
@@ -26,6 +28,7 @@ class Pond {
     this.numTrays = 4,
     this.status = PondStatus.active,
     this.currentAbw,
+    this.isSmartFeedEnabled = false,
   });
 
   Pond copyWith({
@@ -38,6 +41,7 @@ class Pond {
     int? numTrays,
     PondStatus? status,
     double? currentAbw,
+    bool? isSmartFeedEnabled,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -49,6 +53,7 @@ class Pond {
       numTrays: numTrays ?? this.numTrays,
       status: status ?? this.status,
       currentAbw: currentAbw ?? this.currentAbw,
+      isSmartFeedEnabled: isSmartFeedEnabled ?? this.isSmartFeedEnabled,
     );
   }
 
@@ -63,7 +68,22 @@ class Pond {
     final date2 = DateTime.utc(stockingDate.year, stockingDate.month, stockingDate.day);
     
     final diff = date1.difference(date2).inDays + 1;
-    return diff > 0 ? diff : 1; // Default to Day 1 if date is in future
+    final currentDoc = diff > 0 ? diff : 1; // Default to Day 1 if date is in future
+    
+    // 🔄 SMART FEED ACTIVATION: Check if Smart Feed should be activated
+    _checkSmartFeedActivation(currentDoc);
+    
+    return currentDoc;
+  }
+
+  /// Check and activate Smart Feed if DOC > 30 and not already enabled
+  void _checkSmartFeedActivation(int currentDoc) {
+    if (!isSmartFeedEnabled && currentDoc > 30) {
+      // Use fire-and-forget to avoid blocking
+      SmartFeedEngine.checkAndActivateSmartFeed(this).catchError((e) {
+        print('❌ Smart Feed activation check failed: $e');
+      });
+    }
   }
 }
 
@@ -146,6 +166,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
           numTrays: p['num_trays'] ?? 4,
           status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
           currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
+          isSmartFeedEnabled: p['is_smart_feed_enabled'] ?? false,
         )).toList(),
       )).toList();
 
@@ -225,6 +246,24 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
+  void updateSmartFeedStatus(String pondId, bool isEnabled) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        return Farm(
+          id: f.id,
+          name: f.name,
+          location: f.location,
+          ponds: f.ponds.map((p) {
+            if (p.id == pondId) {
+              return p.copyWith(isSmartFeedEnabled: isEnabled);
+            }
+            return p;
+          }).toList(),
+        );
+      }).toList(),
+    );
+  }
+
   void resetPond(
     String pondId, {
     required int seedCount,
@@ -282,6 +321,14 @@ class FarmNotifier extends StateNotifier<FarmState> {
       farms: updatedFarms,
       selectedId: newSelectedId,
     );
+  }
+
+  /// 🔄 SMART FEED TRIGGER: Trigger recalculation when DOC increments
+  void triggerSmartFeedRecalculationOnDocChange(String pondId) {
+    // Fire-and-forget Smart Feed recalculation
+    SmartFeedEngine.recalculateFeedPlan(pondId).catchError((e) {
+      print('❌ Smart Feed recalculation trigger failed: $e');
+    });
   }}
 
 final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {

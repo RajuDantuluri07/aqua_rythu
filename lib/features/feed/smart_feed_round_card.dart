@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/engines/models/feed_output.dart';
+import '../../services/feed_calculation_service.dart';
 import 'smart_feed_provider.dart';
 
 /// 🎯 ENHANCED ROUND CARD with Planned vs Smart vs Actual comparison
@@ -22,6 +23,7 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
   final int doc;  // ✅ Days on cluster (for DOC-based tray logic)
   final bool showTrayCTA;  // ✅ Whether to show tray CTA after feeding
   final Function(double overrideFeed) onMarkFed;  // ✅ Now accepts override amount
+  final bool isFeedDone; // ✅ Indicates if the feed for this round is already marked done
   final VoidCallback? onLogTray;  // ✅ Callback to log tray (optional)
   final Function(double suggestedFeed)? onShowOverrideDialog;  // Optional callback
 
@@ -34,6 +36,7 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
     required this.doc,
     required this.showTrayCTA,
     this.smartFeed,
+    required this.isFeedDone,
     this.engineOutput,
     required this.onMarkFed,
     this.onLogTray,
@@ -45,18 +48,20 @@ class SmartFeedRoundCard extends ConsumerStatefulWidget {
       _SmartFeedRoundCardState();
 }
 
-class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
+class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> { // No longer needs _isMarked
   late double _overrideAmount;
-  bool _isMarked = false;
 
   @override
   void initState() {
     super.initState();
     _overrideAmount = widget.smartFeed ?? widget.plannedFeed;
-    // If tray CTA should be shown immediately (e.g., after pre-marking)
-    if (widget.showTrayCTA && _isMarked) {
-      // Auto-enable tray CTA display
-    }
+    // 🧪 DEBUG: Verify smart feed card consistency
+    final calculatedFeed = FeedCalculationService.getFeedAmount(
+      doc: widget.doc,
+      pondArea: 1000.0, // This should come from pond data
+    );
+    final roundFeed = calculatedFeed * 0.25; // 25% per round
+    print("🧪 DEBUG SMART FEED ROUND ${widget.round}: Planned=${widget.plannedFeed.toStringAsFixed(2)} | Smart=${widget.smartFeed?.toStringAsFixed(2) ?? 'null'} | Calculated=${roundFeed.toStringAsFixed(2)}");
   }
 
   void _showOverrideDialog() {
@@ -161,9 +166,6 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
               Navigator.pop(context);
               // Mark feed with manual override amount
               widget.onMarkFed(_overrideAmount);
-              setState(() {
-                _isMarked = true;
-              });
               // Success feedback
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -444,27 +446,19 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
             ),
             child: Row(
               children: [
-                /// 1️⃣ MARK AS FED (always available before marking)
-                if (!_isMarked)
+                if (!widget.isFeedDone) // If feed is NOT done, show Mark as Fed/Edit
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        // Mark as Fed with the smart/planned amount
+                        // Always mark feed first
                         final feedAmount = widget.smartFeed ?? widget.plannedFeed;
                         widget.onMarkFed(feedAmount);
-                        setState(() {
-                          _isMarked = true;
-                        });
-                        // Show success feedback
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              "✅ Logged ${feedAmount.toStringAsFixed(2)} kg",
-                            ),
-                            backgroundColor: Colors.green[700],
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
+                        // Then log tray if available
+                        if (widget.onLogTray != null) {
+                          Future.delayed(const Duration(milliseconds: 500), () {
+                            widget.onLogTray!();
+                          });
+                        }
                       },
                       icon: const Icon(Icons.check_circle),
                       label: const Text("Mark as Fed"),
@@ -476,7 +470,9 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
                   ),
 
                 /// 2️⃣ EDIT BUTTON (only before marking)
-                if (!_isMarked)
+                // Show edit button if feed is NOT done, or if feed is done but tray is still pending (allowing adjustment)
+                // The logic for showing edit button for pending tray is complex, for now, only show if feed is not done.
+                if (!widget.isFeedDone)
                   Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: IconButton(
@@ -492,8 +488,8 @@ class _SmartFeedRoundCardState extends ConsumerState<SmartFeedRoundCard> {
                     ),
                   ),
 
-                /// 3️⃣ LOG TRAY CTA (after marking + DOC > 15)
-                if (_isMarked && widget.showTrayCTA && widget.onLogTray != null)
+                /// 3️⃣ LOG TRAY CTA (if feed is done AND tray is required/pending)
+                if (widget.isFeedDone && widget.showTrayCTA && widget.onLogTray != null)
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: widget.onLogTray,

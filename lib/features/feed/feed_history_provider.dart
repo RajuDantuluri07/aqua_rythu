@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/enums/tray_status.dart';
 import '../../services/feed_service.dart';
+import '../../services/smart_feed_engine.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -36,6 +36,14 @@ class FeedHistoryNotifier
   final Ref ref;
   final _feedService = FeedService();
 
+  /// 🔄 SMART FEED TRIGGER: Trigger recalculation after tray update
+  void _triggerSmartFeedRecalculation(String pondId) {
+    // Fire-and-forget Smart Feed recalculation
+    SmartFeedEngine.recalculateFeedPlan(pondId).catchError((e) {
+      print('❌ Smart Feed recalculation trigger failed: $e');
+    });
+  }
+
   double _expectedFeedForDoc(String pondId, int doc) {
     // Expected feed should now be derived from the database-stored feed plan
     return 0.0; // Placeholder until integrated with Supabase feed plan fetch
@@ -57,7 +65,8 @@ class FeedHistoryNotifier
     final today = DateTime(now.year, now.month, now.day);
     final expected = _expectedFeedForDoc(pondId, doc);
 
-    final pondLogs = List<FeedHistoryLog>.from(state[pondId] ?? []);
+    final List<FeedHistoryLog> pondLogs =
+    List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
 
     // Check if today already exists
     int todayIdx = pondLogs.indexWhere((log) =>
@@ -126,11 +135,9 @@ class FeedHistoryNotifier
           ));
     }
 
-    // ✅ Update local state
-    state = {
-      ...state,
-      pondId: pondLogs,
-    };
+    // ✅ Update local state with strict type safety
+    state = Map<String, List<FeedHistoryLog>>.from(state)
+      ..[pondId] = pondLogs;
     
     // ✅ Persist to database (fire-and-forget with error handling)
     final logToSave = pondLogs[todayIdx != -1 ? todayIdx : 0];
@@ -138,6 +145,9 @@ class FeedHistoryNotifier
       pondId: pondId,
       log: logToSave,
     );
+
+    // 🔄 SMART FEED TRIGGER: Recalculate after feed logged
+    _triggerSmartFeedRecalculation(pondId);
   }
   
   /// ✅ Persist feed log to database
@@ -171,7 +181,8 @@ class FeedHistoryNotifier
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final pondLogs = List<FeedHistoryLog>.from(state[pondId] ?? []);
+    final List<FeedHistoryLog> pondLogs =
+    List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
 
     final todayIdx = pondLogs.indexWhere((log) =>
         log.date.year == today.year &&
@@ -203,11 +214,12 @@ class FeedHistoryNotifier
         cumulative: existing.cumulative,
       );
 
-      state = {
-        ...state,
-        pondId: pondLogs,
-      };
-    }
+      state = Map<String, List<FeedHistoryLog>>.from(state)
+        ..[pondId] = pondLogs;
+
+    // 🔄 SMART FEED TRIGGER: Recalculate after tray logged
+    _triggerSmartFeedRecalculation(pondId);
+  }
   }
 
   /// 🗑 CLEAR HISTORY FOR NEW CYCLE

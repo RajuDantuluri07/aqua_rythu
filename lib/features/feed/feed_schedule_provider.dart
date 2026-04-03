@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/pond_service.dart';
+import '../../services/feed_service.dart';
 import '../../core/utils/logger.dart';
 
 class FeedDayPlan {
@@ -72,9 +72,9 @@ class FeedScheduleState {
 }
 
 class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
-  final PondService _pondService;
+  final FeedService _feedService;
 
-  FeedScheduleNotifier(this._pondService) : super(FeedScheduleState(days: []));
+  FeedScheduleNotifier(this._feedService) : super(FeedScheduleState(days: []));
 
   Future<void> loadFeedSchedule(String pondId) async {
     state = state.copyWith(isLoading: true, error: null);
@@ -90,16 +90,41 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
         );
       });
 
-      // Try to load existing schedule from database
+      // Try to load existing feed plans from database
       try {
-        final existingData = await _pondService.getFeedSchedule(pondId);
+        final existingData = await _feedService.getFeedPlans(pondId);
         if (existingData.isNotEmpty) {
-          final loadedDays = existingData.map((json) => FeedDayPlan.fromJson(json)).toList();
+          // Group by DOC and convert to FeedDayPlan format
+          final Map<int, List<double>> groupedData = {};
+          
+          for (final item in existingData) {
+            final doc = item['doc'] as int;
+            final round = item['round'] as int;
+            final feedAmount = (item['feed_amount'] as num).toDouble();
+            
+            if (!groupedData.containsKey(doc)) {
+              groupedData[doc] = [0.0, 0.0, 0.0, 0.0];
+            }
+            
+            if (round >= 1 && round <= 4) {
+              groupedData[doc]![round - 1] = feedAmount;
+            }
+          }
+          
+          final loadedDays = groupedData.entries
+              .where((entry) => entry.key <= 30) // Only load first 30 days
+              .map((entry) => FeedDayPlan(
+                    doc: entry.key,
+                    rounds: entry.value,
+                  ))
+              .toList()
+            ..sort((a, b) => a.doc.compareTo(b.doc));
+          
           state = state.copyWith(days: loadedDays, isLoading: false);
           return;
         }
       } catch (e) {
-        AppLogger.error('No existing feed schedule found, using defaults', e);
+        AppLogger.error('No existing feed plans found, using defaults', e);
       }
 
       state = state.copyWith(days: days, isLoading: false);
@@ -129,15 +154,14 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
     state = state.copyWith(isSaving: true, error: null);
     
     try {
-      final scheduleData = state.days.map((day) => day.toJson()).toList();
-      await _pondService.saveFeedSchedule(pondId, scheduleData);
+      await _feedService.saveFeedPlans(pondId, state.days);
       
       state = state.copyWith(isSaving: false);
     } catch (e) {
-      AppLogger.error('Failed to save feed schedule', e);
+      AppLogger.error('Failed to save feed plans', e);
       state = state.copyWith(
         isSaving: false,
-        error: 'Failed to save feed schedule: $e',
+        error: 'Failed to save feed plans: $e',
       );
       rethrow;
     }
@@ -161,6 +185,6 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
 
 // Provider
 final feedScheduleProvider = StateNotifierProvider<FeedScheduleNotifier, FeedScheduleState>((ref) {
-  final pondService = PondService();
-  return FeedScheduleNotifier(pondService);
+  final feedService = FeedService();
+  return FeedScheduleNotifier(feedService);
 });

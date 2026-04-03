@@ -25,8 +25,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
   Widget build(BuildContext context) {
     final farmState = ref.watch(farmProvider);
     final feedScheduleState = ref.watch(feedScheduleProvider);
-    
-    String pondName = widget.pondId;
+
+    String pondName = "Unknown Pond"; // Default to "Unknown Pond"
     for (var farm in farmState.farms) {
       try {
         final pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
@@ -34,10 +34,16 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
         break;
       } catch (e, stack) {
         AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
+        // If an error occurs, pondName remains "Unknown Pond"
       }
     }
 
-    final docRange = "DOC 1–30";
+    String docRange = "DOC N/A";
+    if (feedScheduleState.days.isNotEmpty) {
+      final minDoc = feedScheduleState.days.first.doc;
+      final maxDoc = feedScheduleState.days.last.doc; // Assuming days are sorted by DOC
+      docRange = "DOC $minDoc–$maxDoc";
+    }
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -141,7 +147,10 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            _buildTotalSummaryCard(feedScheduleState.totalProjectedFeed),
+                            // Recalculate summary total from all day rounds to ensure UI consistency
+                            _buildTotalSummaryCard(
+                              feedScheduleState.days.fold(0.0, (sum, day) => sum + day.rounds.fold(0.0, (s, r) => s + r)),
+                            ),
                             const SizedBox(height: 100), // Space for save button
                           ],
                         ),
@@ -268,14 +277,14 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                   }
                 }
               },
-              icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
+              icon: const Icon(Icons.save_rounded, color: AppColors.cardBg, size: 22),
               label: const Text(
                 "Save Schedule",
                 style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+                    fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.cardBg),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF22C55E),
+                backgroundColor: AppColors.success,
                 minimumSize: const Size(double.infinity, 56),
                 shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
                 elevation: 3,
@@ -360,7 +369,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   @override
   Widget build(BuildContext context) {
     // Optimized: widget.day is already the updated object from parent
-    final total = widget.day.total;
+    // Force recalculation of row total from rounds to ensure it always matches displayed round values
+    final total = widget.day.rounds.fold(0.0, (sum, r) => sum + r);
     final isEvenRow = widget.index.isEven;
     final backgroundColor = isEvenRow ? Colors.white : Color(0xFFF8FAFB);
 
@@ -390,7 +400,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
           for (int i = 0; i < _controllers.length; i++)
             _buildInputCell(_controllers[i], i),
           Expanded(
-            flex: 2,
+            flex: 3, // Corrected flex to 3 to align with "TOTAL (kg)" header column
             child: Text(
               total.toStringAsFixed(1),
               textAlign: TextAlign.right,

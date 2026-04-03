@@ -1,4 +1,5 @@
 import '../enums/tray_status.dart';
+import '../../features/farm/farm_provider.dart';
 
 enum FeedMode {
   blind,
@@ -51,13 +52,30 @@ class FeedRoundState {
 }
 
 class FeedStateEngine {
-  /// MODE DECIDER (DOC-Based)
+  /// MODE DECIDER (Smart Feed Activation + DOC-Based)
   /// 
-  /// Logic:
-  /// - < 15: Blind
-  /// - 15–30: Transitional
-  /// - > 30: Smart
-  static FeedMode getMode(int doc) {
+  /// Business Rules:
+  /// - Smart Feed activates ONLY when DOC > 30 AND isSmartFeedEnabled = true
+  /// - Once activated → Smart Feed NEVER turns OFF
+  /// - DOC ≤ 30: Blind Feed (Mark as Fed, Tray Optional)
+  /// - DOC > 30 + Smart Feed Enabled: Smart Feed (Save Feed, Tray Mandatory)
+  static FeedMode getMode(int doc, {bool isSmartFeedEnabled = false}) {
+    // 🟡 DOC ≤ 30: Always Blind Feed (regardless of Smart Feed status)
+    if (doc <= 30) {
+      return FeedMode.blind;
+    }
+    
+    // 🟣 DOC > 30: Check Smart Feed activation
+    if (isSmartFeedEnabled) {
+      return FeedMode.smart;
+    }
+    
+    // Fallback: Transitional (shouldn't happen with proper activation)
+    return FeedMode.transitional;
+  }
+
+  /// Legacy method for backward compatibility
+  static FeedMode getModeByDoc(int doc) {
     if (doc < 15) return FeedMode.blind;
     if (doc <= 30) return FeedMode.transitional;
     return FeedMode.smart;
@@ -71,8 +89,9 @@ class FeedStateEngine {
     required Map<int, bool> feedDone,
     required Map<int, bool> trayDone,
     Map<int, List<TrayStatus>>? trayResultsMap,
+    bool isSmartFeedEnabled = false,
   }) {
-    final mode = getMode(doc);
+    final mode = getMode(doc, isSmartFeedEnabled: isSmartFeedEnabled);
 
     final isDone = feedDone[round] ?? false;
     final currentRound = _getCurrentRound(feedDone, totalRounds);

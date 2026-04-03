@@ -75,7 +75,8 @@ class PondService {
           pl_size,
           num_trays,
           status,
-          current_abw
+          current_abw,
+          is_smart_feed_enabled
         ''')
         .eq('farm_id', farmId)
         .order('created_at', ascending: false);
@@ -171,6 +172,29 @@ class PondService {
       return scheduleData.cast<Map<String, dynamic>>();
     } catch (e) {
       throw Exception('Failed to load feed schedule: $e');
+    }
+  }
+
+  // ================================
+  // ✅ SMART FEED ACTIVATION
+  // ================================
+  
+  Future<void> updateSmartFeedStatus({
+    required String pondId,
+    required bool isEnabled,
+  }) async {
+    try {
+      await supabase
+          .from('ponds')
+          .update({
+            'is_smart_feed_enabled': isEnabled,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', pondId);
+      
+      print('✅ Smart Feed status updated for pond: $pondId (enabled: $isEnabled)');
+    } catch (e) {
+      throw Exception('Failed to update Smart Feed status: $e');
     }
   }
 }
