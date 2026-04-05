@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/farm_settings_provider.dart';
 
 class WaterLog {
@@ -188,9 +189,41 @@ class WaterLog {
 
 class WaterNotifier extends StateNotifier<List<WaterLog>> {
   final String pondId;
-  WaterNotifier(this.pondId) : super([]);
+  final _supabase = Supabase.instance.client;
 
-  void addLog({
+  WaterNotifier(this.pondId) : super([]) {
+    _loadLogs();
+  }
+
+  Future<void> _loadLogs() async {
+    try {
+      final data = await _supabase
+          .from('water_logs')
+          .select()
+          .eq('pond_id', pondId)
+          .order('created_at', ascending: false)
+          .limit(30);
+
+      final logs = (data as List).map((row) => WaterLog(
+        id: row['id'].toString(),
+        pondId: pondId,
+        date: DateTime.parse(row['created_at']),
+        doc: row['doc'] ?? 1,
+        ph: (row['ph'] as num?)?.toDouble() ?? 0,
+        dissolvedOxygen: (row['dissolved_oxygen'] as num?)?.toDouble() ?? 0,
+        salinity: (row['salinity'] as num?)?.toDouble() ?? 0,
+        ammonia: (row['ammonia'] as num?)?.toDouble() ?? 0,
+        nitrite: (row['nitrite'] as num?)?.toDouble() ?? 0,
+        alkalinity: (row['alkalinity'] as num?)?.toDouble() ?? 0,
+      )).toList();
+
+      state = logs;
+    } catch (e) {
+      print('❌ Failed to load water logs: $e');
+    }
+  }
+
+  Future<void> addLog({
     required int doc,
     required double ph,
     required double dissolvedOxygen,
@@ -198,11 +231,12 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
     required double ammonia,
     required double nitrite,
     required double alkalinity,
-  }) {
+  }) async {
+    final now = DateTime.now();
     final newLog = WaterLog(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: now.millisecondsSinceEpoch.toString(),
       pondId: pondId,
-      date: DateTime.now(),
+      date: now,
       doc: doc,
       ph: ph,
       dissolvedOxygen: dissolvedOxygen,
@@ -212,7 +246,26 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
       alkalinity: alkalinity,
     );
 
+    // Update UI immediately
     state = [newLog, ...state];
+
+    // Persist to Supabase
+    try {
+      await _supabase.from('water_logs').insert({
+        'pond_id': pondId,
+        'ph': ph,
+        'dissolved_oxygen': dissolvedOxygen,
+        'salinity': salinity,
+        'temperature': 0,
+        'ammonia': ammonia,
+        'nitrite': nitrite,
+        'alkalinity': alkalinity,
+        'doc': doc,
+        'created_at': now.toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Failed to save water log: $e');
+    }
   }
 
   void clearLogs() {

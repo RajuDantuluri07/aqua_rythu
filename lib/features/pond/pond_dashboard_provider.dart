@@ -1,11 +1,14 @@
+import '../../services/pond_service.dart';
+import '../../services/farm_service.dart';
+import '../../features/supplements/screens/supplement_item.dart';
 import '../../core/enums/tray_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/engines/feed_state_engine.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
 import '../../services/pond_service.dart';
 import '../../services/feed_service.dart';
+import '../../services/feed_plan_generator.dart';
 
 /// =======================
 /// STATE
@@ -75,7 +78,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     
     if (pond == null) return;
 
-    final data = await PondService().getTodayFeed(
+    var data = await PondService().getTodayFeed(
       pondId: pondId,
       stockingDate: pond.stockingDate.toIso8601String(),
     );
@@ -83,16 +86,42 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     Map<int, double> feedMap = {};
     Map<int, String> idMap = {};
 
-    // If no feed data exists for today, do NOT calculate - feed_plans is source of truth
+    // If no feed data exists for today, auto-recover by regenerating feed
     if (data.isEmpty) {
-      print("❌ No feed plan found for today");
-      return;
+      print("⚠️ Feed missing → regenerating");
+
+      try {
+        await generateFeedPlan(
+          pondId: pondId,
+          startDoc: 1,
+          endDoc: 30,
+          stockingCount: pond.seedCount,
+          pondArea: pond.area,
+          stockingDate: pond.stockingDate,
+        );
+
+        final retryData = await PondService().getTodayFeed(
+          pondId: pondId,
+          stockingDate: pond.stockingDate.toIso8601String(),
+        );
+
+        if (retryData.isEmpty) {
+          print("❌ Feed still missing after regeneration");
+          return;
+        }
+
+        print("✅ Feed auto-recovered: ${retryData.length} rounds");
+        data = retryData;
+      } catch (e) {
+        print("❌ Feed regeneration failed: $e");
+        return;
+      }
     }
 
     // Use existing database data
     for (var item in data) {
       final round = item['round'] as int;
-      feedMap[round] = (item['feed_amount'] as num?)?.toDouble() ?? 0.0;
+      feedMap[round] = (item['planned_amount'] as num?)?.toDouble() ?? 0.0;
       idMap[round] = item['id'] as String? ?? '';
     }
     
@@ -164,7 +193,29 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final List<TrayStatus> trayStatuses = latest.trays;
     if (trayStatuses.isEmpty) return;
 
-    final finalStatus = FeedStateEngine.aggregateTrayStatus(trayStatuses);
+    // Simple tray status aggregation (replaces FeedStateEngine)
+    TrayStatus finalStatus;
+    if (trayStatuses.isEmpty) {
+      finalStatus = TrayStatus.partial;
+    } else {
+      int totalScore = 0;
+      for (final status in trayStatuses) {
+        if (status == TrayStatus.full) {
+          totalScore += 3;
+        } else if (status == TrayStatus.partial) {
+          totalScore += 2;
+        }
+        // Empty contributes 0
+      }
+      final double avg = totalScore / trayStatuses.length;
+      if (avg >= 2.5) {
+        finalStatus = TrayStatus.full;
+      } else if (avg >= 1.5) {
+        finalStatus = TrayStatus.partial;
+      } else {
+        finalStatus = TrayStatus.empty;
+      }
+    }
 
     ref.read(feedHistoryProvider.notifier).logTray(
           pondId: state.selectedPond,

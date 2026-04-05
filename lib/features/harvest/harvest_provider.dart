@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// ================= MODEL =================
 class HarvestEntry {
+  final String id;
   final String pondId;
   final DateTime date;
   final int doc;
@@ -13,6 +15,7 @@ class HarvestEntry {
   final String type; // partial / intermediate / final
 
   HarvestEntry({
+    String? id,
     required this.pondId,
     required this.date,
     required this.doc,
@@ -22,7 +25,7 @@ class HarvestEntry {
     this.expenses = 0,
     this.notes = "",
     required this.type,
-  });
+  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   double get revenue => quantity * pricePerKg;
   double get profit => revenue - expenses;
@@ -30,37 +33,77 @@ class HarvestEntry {
 
 /// ================= NOTIFIER =================
 class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
-  HarvestNotifier() : super([]);
+  final String pondId;
+  final _supabase = Supabase.instance.client;
 
-  /// ➕ ADD HARVEST
-  void addHarvest(HarvestEntry entry) {
-    state = [...state, entry];
+  HarvestNotifier(this.pondId) : super([]) {
+    _loadHarvests();
   }
 
-  /// 🧹 RESET HARVESTS (New Cycle)
+  Future<void> _loadHarvests() async {
+    try {
+      final data = await _supabase
+          .from('harvest_logs')
+          .select()
+          .eq('pond_id', pondId)
+          .order('created_at', ascending: false);
+
+      final entries = (data as List).map((row) => HarvestEntry(
+        id: row['id'].toString(),
+        pondId: pondId,
+        date: row['date'] != null
+            ? DateTime.parse(row['date'])
+            : DateTime.parse(row['created_at']),
+        doc: row['doc'] ?? 1,
+        quantity: (row['quantity'] as num?)?.toDouble() ?? 0,
+        countPerKg: row['count_per_kg'] ?? 0,
+        pricePerKg: (row['price'] as num?)?.toDouble() ?? 0,
+        expenses: (row['expenses'] as num?)?.toDouble() ?? 0,
+        notes: row['notes'] ?? '',
+        type: row['harvest_type'] ?? 'partial',
+      )).toList();
+
+      state = entries;
+    } catch (e) {
+      print('❌ Failed to load harvests: $e');
+    }
+  }
+
+  Future<void> addHarvest(HarvestEntry entry) async {
+    // Update UI immediately
+    state = [...state, entry];
+
+    // Persist to Supabase
+    try {
+      await _supabase.from('harvest_logs').insert({
+        'pond_id': pondId,
+        'harvest_type': entry.type,
+        'quantity': entry.quantity,
+        'price': entry.pricePerKg,
+        'expenses': entry.expenses,
+        'notes': entry.notes,
+        'doc': entry.doc,
+        'date': entry.date.toIso8601String().split('T')[0],
+        'count_per_kg': entry.countPerKg,
+      });
+    } catch (e) {
+      print('❌ Failed to save harvest: $e');
+    }
+  }
+
   void clearHarvests() {
     state = [];
   }
 
-  /// 📊 TOTAL HARVEST
   double get totalHarvest => state.fold(0, (sum, h) => sum + h.quantity);
-
-  /// 💰 TOTAL REVENUE
   double get totalRevenue => state.fold(0, (sum, h) => sum + h.revenue);
-
-  /// 💸 TOTAL EXPENSES
   double get totalExpenses => state.fold(0, (sum, h) => sum + h.expenses);
-
-  /// 💰 TOTAL PROFIT
   double get totalProfit => totalRevenue - totalExpenses;
-
-  /// 🏁 FINAL HARVEST DONE?
   bool get isFinalHarvestDone => state.any((h) => h.type == "final");
 }
 
 /// ================= PROVIDER =================
 final harvestProvider =
     StateNotifierProvider.family<HarvestNotifier, List<HarvestEntry>, String>(
-  (ref, pondId) =>
-      HarvestNotifier(), // Notifier doesn't strictly need ID if entry has it
+  (ref, pondId) => HarvestNotifier(pondId),
 );

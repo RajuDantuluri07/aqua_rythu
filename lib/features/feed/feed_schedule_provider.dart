@@ -74,65 +74,49 @@ class FeedScheduleState {
 class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
   final FeedService _feedService;
 
-  FeedScheduleNotifier(this._feedService) : super(FeedScheduleState(days: []));
+  FeedScheduleNotifier(this._feedService) : super(FeedScheduleState(days: [], isLoading: true));
 
   Future<void> loadFeedSchedule(String pondId) async {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
-      // Generate default 30-day feed plan
-      final days = List.generate(30, (index) {
-        final doc = index + 1;
-        final baseAmount = _calculateBaseFeed(doc);
-        return FeedDayPlan(
-          doc: doc,
-          rounds: [baseAmount, baseAmount, baseAmount, baseAmount],
-        );
-      });
+      final existingData = await _feedService.getFeedPlans(pondId);
 
-      // Try to load existing feed plans from database
-      try {
-        final existingData = await _feedService.getFeedPlans(pondId);
-        if (existingData.isNotEmpty) {
-          // Group by DOC and convert to FeedDayPlan format
-          final Map<int, List<double>> groupedData = {};
-          
-          for (final item in existingData) {
-            final doc = item['doc'] as int;
-            final round = item['round'] as int;
-            final feedAmount = (item['feed_amount'] as num).toDouble();
-            
-            if (!groupedData.containsKey(doc)) {
-              groupedData[doc] = [0.0, 0.0, 0.0, 0.0];
-            }
-            
-            if (round >= 1 && round <= 4) {
-              groupedData[doc]![round - 1] = feedAmount;
-            }
-          }
-          
-          final loadedDays = groupedData.entries
-              .where((entry) => entry.key <= 30) // Only load first 30 days
-              .map((entry) => FeedDayPlan(
-                    doc: entry.key,
-                    rounds: entry.value,
-                  ))
-              .toList()
-            ..sort((a, b) => a.doc.compareTo(b.doc));
-          
-          state = state.copyWith(days: loadedDays, isLoading: false);
-          return;
-        }
-      } catch (e) {
-        AppLogger.error('No existing feed plans found, using defaults', e);
+      if (existingData.isEmpty) {
+        // No scary error - just return empty state
+        state = state.copyWith(isLoading: false);
+        return;
       }
 
-      state = state.copyWith(days: days, isLoading: false);
+      final Map<int, List<double>> groupedData = {};
+
+      for (final item in existingData) {
+        final doc = item['doc'] as int;
+        final round = item['round'] as int;
+        final feedAmount = (item['planned_amount'] as num).toDouble();
+
+        groupedData.putIfAbsent(doc, () => [0.0, 0.0, 0.0, 0.0]);
+
+        if (round >= 1 && round <= 4) {
+          groupedData[doc]![round - 1] = feedAmount;
+        }
+      }
+
+      final loadedDays = groupedData.entries
+          .map((entry) => FeedDayPlan(
+                doc: entry.key,
+                rounds: entry.value,
+              ))
+          .toList()
+        ..sort((a, b) => a.doc.compareTo(b.doc));
+
+      state = state.copyWith(days: loadedDays, isLoading: false);
+      print("✅ Loaded feed schedule from DB: ${loadedDays.length} days");
     } catch (e) {
       AppLogger.error('Failed to load feed schedule', e);
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to load feed schedule: $e',
+        error: null,
       );
     }
   }
@@ -164,17 +148,6 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
         error: 'Failed to save feed plans: $e',
       );
       rethrow;
-    }
-  }
-
-  double _calculateBaseFeed(int doc) {
-    // Simple base feed calculation - can be made more sophisticated
-    if (doc <= 10) {
-      return 2.0 + (doc * 0.1); // 2.1 to 3.0
-    } else if (doc <= 20) {
-      return 3.0 + ((doc - 10) * 0.2); // 3.2 to 5.0
-    } else {
-      return 5.0 + ((doc - 20) * 0.3); // 5.3 to 8.0
     }
   }
 

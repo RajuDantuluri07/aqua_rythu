@@ -145,6 +145,15 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     await _supabase.auth.signOut();
     state = const AppAuthState();
   }
+
+  // OTP flow stubs — not used in current email/password MVP
+  Future<void> signInWithOtp(String phone) async {
+    state = state.copyWith(errorMessage: 'OTP login not supported yet');
+  }
+
+  Future<void> verifyOtp(String phone, String otp) async {
+    state = state.copyWith(errorMessage: 'OTP verification not supported yet');
+  }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AppAuthState>(

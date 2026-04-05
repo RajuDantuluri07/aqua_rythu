@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'feed_plan_generator.dart';
 
 class PondService {
   final supabase = Supabase.instance.client;
@@ -42,13 +43,44 @@ class PondService {
       }
 
       final pondId = response;
+      print("CREATED POND ID: $pondId");
 
-      // Note: Feed plan generation is now non-blocking and decoupled.
-      // Verification is skipped to ensure pond creation always succeeds for MVP.
-      print('✅ Pond + Feed Plan created: $pondId');
+      // MANDATORY: Generate feed schedule immediately after pond creation
+      await generateFeedSchedule(pondId);
+
+      print('✅ Pond + Feed Plan ensured: $pondId');
     } catch (e) {
       throw Exception('Failed to create pond: $e');
     }
+  }
+
+  // ================================
+  // 🚀 FEED SCHEDULE GENERATION (uses feed_plan_generator)
+  // ================================
+
+  Future<void> generateFeedSchedule(String pondId) async {
+    // Look up pond details needed for scaled generation
+    final pond = await supabase
+        .from('ponds')
+        .select('stocking_date, seed_count, area')
+        .eq('id', pondId)
+        .maybeSingle();
+
+    if (pond == null) {
+      print("❌ Cannot generate feed: pond $pondId not found");
+      return;
+    }
+
+    await generateFeedPlan(
+      pondId: pondId,
+      startDoc: 1,
+      endDoc: 30,
+      stockingCount: pond['seed_count'] ?? 100000,
+      pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
+      stockingDate: DateTime.parse(pond['stocking_date']),
+    );
+
+    print("✅ Feed schedule generated for pond: $pondId");
   }
 
   // ================================
@@ -74,7 +106,7 @@ class PondService {
   }
 
   // ================================
-  // 🔥 GET TODAY FEED (CORRECT WAY)
+  // 🔥 GET TODAY FEED
   // ================================
   Future<List<Map<String, dynamic>>> getTodayFeed({
     required String pondId,
@@ -87,10 +119,7 @@ class PondService {
 
     print("📊 Calculated DOC: $doc");
 
-    // Safety: avoid negative or >30 for now
-    if (doc < 1 || doc > 30) {
-      return [];
-    }
+    if (doc < 1) return [];
 
     final rounds = await supabase
         .from('feed_rounds')
@@ -103,59 +132,19 @@ class PondService {
   }
 
   // ================================
-  // ✅ FEED SCHEDULE METHODS
+  // ⚠️ DEPRECATED - DO NOT USE
   // ================================
+  // These methods are deprecated for MVP stabilization
+  // Use feed_rounds table only
   
+  @Deprecated('Use feed_rounds table only - feed_schedules is deprecated')
   Future<void> saveFeedSchedule(String pondId, List<Map<String, dynamic>> scheduleData) async {
-    final user = supabase.auth.currentUser;
-    if (user == null) {
-      throw Exception('User not logged in');
-    }
-
-    try {
-      // Delete existing schedule for this pond
-      await supabase
-          .from('feed_schedules')
-          .delete()
-          .eq('pond_id', pondId);
-
-      // Insert new schedule
-      final scheduleWithMeta = {
-        'pond_id': pondId,
-        'schedule_data': scheduleData,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-        'user_id': user.id,
-      };
-
-      await supabase
-          .from('feed_schedules')
-          .insert(scheduleWithMeta);
-
-      print('✅ Feed schedule saved for pond: $pondId');
-    } catch (e) {
-      throw Exception('Failed to save feed schedule: $e');
-    }
+    throw UnimplementedError('saveFeedSchedule is deprecated - use feed_rounds table only');
   }
 
+  @Deprecated('Use feed_rounds table only - feed_schedules is deprecated')
   Future<List<Map<String, dynamic>>> getFeedSchedule(String pondId) async {
-    try {
-      final response = await supabase
-          .from('feed_schedules')
-          .select('schedule_data')
-          .eq('pond_id', pondId)
-          .order('updated_at', ascending: false)
-          .limit(1);
-
-      if (response.isEmpty) {
-        return [];
-      }
-
-      final scheduleData = response.first['schedule_data'] as List<dynamic>;
-      return scheduleData.cast<Map<String, dynamic>>();
-    } catch (e) {
-      throw Exception('Failed to load feed schedule: $e');
-    }
+    throw UnimplementedError('getFeedSchedule is deprecated - use feed_rounds table only');
   }
 
   // ================================

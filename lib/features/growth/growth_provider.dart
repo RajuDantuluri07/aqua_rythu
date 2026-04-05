@@ -1,13 +1,53 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../farm/farm_provider.dart';
-import 'sampling_log.dart'; // Import the new SamplingLog model
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'sampling_log.dart';
 
 class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
-  GrowthNotifier() : super([]);
+  final String pondId;
+  final _supabase = Supabase.instance.client;
 
-  /// 📏 ADD SAMPLING LOG
-  void addLog(SamplingLog log) {
-    state = [log, ...state]; // Add to the beginning to keep newest first
+  GrowthNotifier(this.pondId) : super([]) {
+    _loadLogs();
+  }
+
+  Future<void> _loadLogs() async {
+    try {
+      final data = await _supabase
+          .from('sampling_logs')
+          .select()
+          .eq('pond_id', pondId)
+          .order('created_at', ascending: false)
+          .limit(50);
+
+      final logs = (data as List).map((row) => SamplingLog(
+        doc: row['doc'] ?? 1,
+        abw: (row['avg_weight'] as num?)?.toDouble() ?? 0,
+        date: DateTime.parse(row['created_at']),
+        totalPieces: row['count'] ?? 0,
+      )).toList();
+
+      state = logs;
+    } catch (e) {
+      print('❌ Failed to load sampling logs: $e');
+    }
+  }
+
+  Future<void> addLog(SamplingLog log) async {
+    // Update UI immediately
+    state = [log, ...state];
+
+    // Persist to Supabase
+    try {
+      await _supabase.from('sampling_logs').insert({
+        'pond_id': pondId,
+        'avg_weight': log.abw,
+        'count': log.totalPieces,
+        'doc': log.doc,
+        'created_at': log.date.toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Failed to save sampling log: $e');
+    }
   }
 
   void clearLogs() {
@@ -15,9 +55,8 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
   }
 }
 
-
 final growthProvider =
     StateNotifierProvider.family<GrowthNotifier, List<SamplingLog>, String>(
         (ref, pondId) {
-  return GrowthNotifier();
+  return GrowthNotifier(pondId);
 });

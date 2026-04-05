@@ -11,13 +11,13 @@ class FeedService {
     required double expectedFeed,
     required double cumulativeFeed,
   }) async {
-    await supabase.from('feed_history_logs').insert({
+    // feed_logs table: pond_id, feed_given, created_at
+    // Store total feed given; tray columns are optional
+    final total = rounds.fold(0.0, (sum, r) => sum + r);
+    await supabase.from('feed_logs').insert({
       'pond_id': pondId,
-      'date': date.toIso8601String(),
-      'doc': doc,
-      'rounds': rounds,
-      'expected_feed': expectedFeed,
-      'cumulative_feed': cumulativeFeed,
+      'feed_given': total,
+      'created_at': date.toIso8601String(),
     });
   }
 
@@ -30,13 +30,27 @@ class FeedService {
     try {
       return await supabase
           .from('feed_rounds')
-          .select('id, doc, round, feed_amount, is_completed')
+          .select('doc, round, planned_amount, status')
           .eq('pond_id', pondId)
           .order('doc', ascending: true)
           .order('round', ascending: true);
     } catch (e) {
       throw Exception('Failed to fetch feed plans: $e');
     }
+  }
+
+  /// Fetch feed rounds for specific pond and DOC
+  Future<List<dynamic>> getFeedRounds(String pondId, int doc) async {
+    final res = await supabase
+        .from('feed_rounds')
+        .select()
+        .eq('pond_id', pondId)
+        .eq('doc', doc)
+        .order('round');
+
+    print("FETCHED FEED: $res");
+
+    return res;
   }
 
   /// Fetch feed plan for a specific DOC
@@ -60,7 +74,7 @@ class FeedService {
     }
   }
 
-  /// Fetch feed plans for a specific date range
+  /// Fetch feed plans for a specific DOC range
   Future<List<Map<String, dynamic>>> getFeedPlansByDateRange({
     required String pondId,
     required DateTime startDate,
@@ -70,20 +84,17 @@ class FeedService {
       throw Exception('Invalid pondId');
     }
 
-    final startDateStr = startDate.toIso8601String().split('T')[0];
-    final endDateStr = endDate.toIso8601String().split('T')[0];
-
+    // Derive DOC range from the pond's stocking date via a broader query
+    // then filter client-side — feed_rounds uses doc not date
     try {
       return await supabase
           .from('feed_rounds')
           .select()
           .eq('pond_id', pondId)
-          .gte('date', startDateStr)
-          .lte('date', endDateStr)
-          .order('date', ascending: true)
+          .order('doc', ascending: true)
           .order('round', ascending: true);
     } catch (e) {
-      throw Exception('Failed to fetch feed plans for date range: $e');
+      throw Exception('Failed to fetch feed plans: $e');
     }
   }
 
@@ -98,10 +109,7 @@ class FeedService {
     try {
       await supabase
           .from('feed_rounds')
-          .update({
-            'is_completed': true,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
+          .update({'status': 'completed'})
           .eq('id', feedPlanId);
     } catch (e) {
       throw Exception('Failed to mark feed plan as completed: $e');
@@ -121,9 +129,8 @@ class FeedService {
       await supabase
           .from('feed_rounds')
           .update({
-            'feed_amount': newAmount,
+            'planned_amount': newAmount,
             'is_manual': true,
-            'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', feedPlanId);
     } catch (e) {
@@ -164,10 +171,8 @@ class FeedService {
             'pond_id': pondId,
             'doc': doc,
             'round': round + 1,
-            'feed_amount': rounds[round],
-            'is_completed': false,
-            'created_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
+            'planned_amount': rounds[round],
+            'status': 'pending',
           });
         }
       }

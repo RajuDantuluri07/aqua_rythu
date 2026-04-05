@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
+import '../../services/pond_service.dart';
 import 'feed_schedule_provider.dart';
 class FeedScheduleScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -16,8 +17,20 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+
+      // Auto-generate if feed_rounds is empty for this pond
+      if (!mounted) return;
+      if (ref.read(feedScheduleProvider).days.isEmpty) {
+        try {
+          await PondService().generateFeedSchedule(widget.pondId);
+          if (!mounted) return;
+          await ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+        } catch (e) {
+          AppLogger.error('Feed schedule auto-generate failed', e);
+        }
+      }
     });
   }
 
@@ -250,46 +263,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
           right: AppSpacing.base,
           bottom: AppSpacing.xl,
           top: AppSpacing.l),
-      child: feedScheduleState.isSaving
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : ElevatedButton.icon(
-              onPressed: () async {
-                try {
-                  await ref.read(feedScheduleProvider.notifier).saveFeedSchedule(widget.pondId);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Feed schedule saved successfully!"),
-                        backgroundColor: Color(0xFF22C55E),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Failed to save: $e"),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.save_rounded, color: AppColors.cardBg, size: 22),
-              label: const Text(
-                "Save Schedule",
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.cardBg),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
-                elevation: 3,
-              ),
-            ),
+      child: Container(), // Removed Save Schedule button - system auto-generates
     );
   }
 }
