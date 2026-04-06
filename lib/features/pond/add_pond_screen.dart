@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../farm/farm_provider.dart';
 import '../../services/pond_service.dart';
+import '../../routes/app_routes.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -167,7 +169,16 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           ),
         );
 
-        Navigator.pop(context);
+        // Flag feed schedule tip — shown once on first pond creation
+        final prefs = await SharedPreferences.getInstance();
+        final alreadyShown = prefs.getBool('feed_schedule_tip_shown') ?? false;
+        if (!alreadyShown) {
+          await prefs.setBool('feed_schedule_tip_pending', true);
+          await prefs.setBool('feed_schedule_tip_shown', true);
+        }
+
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:aqua_rythu/services/farm_service.dart';
 import 'package:aqua_rythu/services/smart_feed_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:aqua_rythu/core/utils/logger.dart';
 
 enum PondStatus { active, completed }
 
@@ -81,7 +82,7 @@ class Pond {
     if (!isSmartFeedEnabled && currentDoc > 30) {
       // Use fire-and-forget to avoid blocking
       SmartFeedEngine.checkAndActivateSmartFeed(this).catchError((e) {
-        print('❌ Smart Feed activation check failed: $e');
+        AppLogger.error('Smart Feed activation check failed', e);
       });
     }
   }
@@ -143,7 +144,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
 
   Future<void> loadFarms({String? setAsSelectedId}) async {
     final user = Supabase.instance.client.auth.currentUser;
-    print("USER ID: ${user?.id}");
+    AppLogger.debug("Loading farms for user: ${user?.id}");
 
     if (user == null) {
       return;
@@ -175,7 +176,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
         selectedId: setAsSelectedId ?? (loadedFarms.isNotEmpty ? loadedFarms.first.id : ''),
       );
     } catch (e) {
-      print("Error loading farms: $e");
+      AppLogger.error("Error loading farms", e);
     }
   }
 
@@ -327,7 +328,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
   void triggerSmartFeedRecalculationOnDocChange(String pondId) {
     // Fire-and-forget Smart Feed recalculation
     SmartFeedEngine.recalculateFeedPlan(pondId).catchError((e) {
-      print('❌ Smart Feed recalculation trigger failed: $e');
+      AppLogger.error('Smart Feed recalculation trigger failed', e);
     });
   }}
 

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../../core/utils/logger.dart';
 
 class FarmSettings {
   final String farmType; // "Semi-Intensive" or "Intensive"
@@ -101,7 +102,7 @@ class FarmSettingsNotifier extends StateNotifier<FarmSettings> {
         state = FarmSettings.fromJson(json);
       }
     } catch (e) {
-      print('Error loading farm settings: $e');
+      AppLogger.error('Error loading farm settings', e);
     }
   }
 
@@ -110,7 +111,7 @@ class FarmSettingsNotifier extends StateNotifier<FarmSettings> {
     try {
       await _sharedPreferences!.setString(_storageKey, jsonEncode(state.toJson()));
     } catch (e) {
-      print('Error saving farm settings: $e');
+      AppLogger.error('Error saving farm settings', e);
     }
   }
 

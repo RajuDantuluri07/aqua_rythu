@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../../core/utils/logger.dart';
 
 class UserProfile {
   final String userId; // Unique user ID (from Supabase auth)
@@ -86,7 +87,7 @@ class UserNotifier extends StateNotifier<UserProfile> {
         state = UserProfile.fromJson(json);
       }
     } catch (e) {
-      print('Error loading user profile: $e');
+      AppLogger.error('Error loading user profile', e);
     }
   }
 
@@ -95,7 +96,7 @@ class UserNotifier extends StateNotifier<UserProfile> {
     try {
       await _sharedPreferences!.setString(_storageKey, jsonEncode(state.toJson()));
     } catch (e) {
-      print('Error saving user profile: $e');
+      AppLogger.error('Error saving user profile', e);
     }
   }
 

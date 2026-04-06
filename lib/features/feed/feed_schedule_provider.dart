@@ -111,7 +111,7 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
         ..sort((a, b) => a.doc.compareTo(b.doc));
 
       state = state.copyWith(days: loadedDays, isLoading: false);
-      print("✅ Loaded feed schedule from DB: ${loadedDays.length} days");
+      AppLogger.info("Loaded feed schedule from DB: ${loadedDays.length} days");
     } catch (e) {
       AppLogger.error('Failed to load feed schedule', e);
       state = state.copyWith(

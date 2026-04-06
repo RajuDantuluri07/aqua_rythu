@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/user_provider.dart';
 import '../farm/farm_provider.dart';
+import '../../core/utils/logger.dart';
 
 class AppAuthState {
   final bool isAuthenticated;
@@ -89,7 +90,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           // ✅ Sync farms for returning users
           await ref.read(farmProvider.notifier).loadFarms();
         } catch (e) {
-          print('⚠️ Warning: Session sync failed: $e');
+          AppLogger.error('Session sync failed', e);
         }
       }
     }
@@ -115,14 +116,14 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           'phone': '',
           'created_at': DateTime.now().toIso8601String(),
         });
-        print('✅ USER RECORD SYNCED');
+        AppLogger.info('User record synced');
       }
 
       // Update userProvider
       ref.read(userProvider.notifier).setUserId(user.id);
       ref.read(userProvider.notifier).updateProfile(email: user.email);
     } catch (e) {
-      print('⚠️ Warning: User record sync failed: $e');
+      AppLogger.error('User record sync failed', e);
     }
   }
 

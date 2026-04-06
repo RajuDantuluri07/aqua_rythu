@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'sampling_log.dart';
+import '../../core/utils/logger.dart';
 
 class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
   final String pondId;
@@ -28,7 +29,7 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
 
       state = logs;
     } catch (e) {
-      print('❌ Failed to load sampling logs: $e');
+      AppLogger.error('Failed to load sampling logs', e);
     }
   }
 
@@ -46,7 +47,7 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
         'created_at': log.date.toIso8601String(),
       });
     } catch (e) {
-      print('❌ Failed to save sampling log: $e');
+      AppLogger.error('Failed to save sampling log', e);
     }
   }
 

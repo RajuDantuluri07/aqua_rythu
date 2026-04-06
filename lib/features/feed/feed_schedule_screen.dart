@@ -38,16 +38,25 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
   Widget build(BuildContext context) {
     final farmState = ref.watch(farmProvider);
     final feedScheduleState = ref.watch(feedScheduleProvider);
+    final currentDoc = ref.watch(docProvider(widget.pondId));
 
-    String pondName = "Unknown Pond"; // Default to "Unknown Pond"
+    // Task 3: Add debug prints
+    AppLogger.debug("📦 Available farms: ${farmState.farms.map((f) => f.name).join(', ')}");
+    AppLogger.debug("🎯 Looking for pondId: ${widget.pondId}");
+
+    Pond? pond; // Task 1: Declare pond as nullable outside the loop
     for (var farm in farmState.farms) {
       try {
-        final pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
-        pondName = pond.name;
+        // Task 1: Assign to the nullable pond variable
+        pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
         break;
       } catch (e, stack) {
-        AppLogger.error("Error finding pond in FeedScheduleScreen", e, stack);
-        // If an error occurs, pondName remains "Unknown Pond"
+        // Task 1: Log error and ensure pond is null if not found in this farm
+        AppLogger.error("❌ Pond not found in farm ${farm.name}: ${widget.pondId}", e, stack);
+        // If the pond is not found in the current farm, `pond` remains null (or its value from a previous iteration).
+        // The loop will continue to check other farms. If no farm contains the pond,
+        // `pond` will be null after the loop completes.
+        // No need to explicitly set `pond = null` here as `firstWhere` throws and `pond` won't be assigned.
       }
     }
 
@@ -58,6 +67,18 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
       docRange = "DOC $minDoc–$maxDoc";
     }
 
+    // Task 2 & 4: Handle null safely with better UX
+    if (pond == null) {
+      return Scaffold(
+        backgroundColor: AppColors.cardBg,
+        appBar: AppBar(title: const Text("Feed Schedule")),
+        body: Center(
+          // Show loading if feed schedule is still loading, otherwise indicate pond not found.
+          child: Text(feedScheduleState.isLoading ? "Loading pond data..." : "Pond data not found."),
+        ),
+      );
+    }
+    String pondName = pond.name; // Now safely access pond.name
     return Scaffold(
       backgroundColor: AppColors.cardBg,
       appBar: AppBar(
@@ -155,6 +176,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                                     pondId: widget.pondId,
                                     day: entry.value,
                                     index: entry.key,
+                                    isToday: entry.value.doc == currentDoc,
                                   );
                                 }).toList(),
                               ),
@@ -263,7 +285,45 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
           right: AppSpacing.base,
           bottom: AppSpacing.xl,
           top: AppSpacing.l),
-      child: Container(), // Removed Save Schedule button - system auto-generates
+      child: feedScheduleState.isSaving
+          ? const Center(child: CircularProgressIndicator())
+          : ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  await ref.read(feedScheduleProvider.notifier).saveFeedSchedule(widget.pondId);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Feed overrides saved to database!"),
+                        backgroundColor: Color(0xFF22C55E),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Failed to persist changes: $e"),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
+              label: const Text(
+                "Save Changes",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.rm),
+                elevation: 3,
+              ),
+            ),
     );
   }
 }
@@ -293,7 +353,8 @@ class _FeedRow extends ConsumerStatefulWidget {
   final String pondId;
   final FeedDayPlan day;
   final int index;
-  const _FeedRow({required this.pondId, required this.day, required this.index});
+  final bool isToday;
+  const _FeedRow({required this.pondId, required this.day, required this.index, this.isToday = false});
 
   @override
   ConsumerState<_FeedRow> createState() => _FeedRowState();
@@ -346,12 +407,17 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     // Force recalculation of row total from rounds to ensure it always matches displayed round values
     final total = widget.day.rounds.fold(0.0, (sum, r) => sum + r);
     final isEvenRow = widget.index.isEven;
-    final backgroundColor = isEvenRow ? Colors.white : Color(0xFFF8FAFB);
+    final backgroundColor = widget.isToday 
+        ? const Color(0xFFF0FDF4) // Light green highlight for today
+        : (isEvenRow ? Colors.white : const Color(0xFFF8FAFB));
 
     return Container(
       decoration: BoxDecoration(
         color: backgroundColor,
-        border: const Border(
+        border: Border(
+          left: widget.isToday 
+              ? const BorderSide(color: Color(0xFF22C55E), width: 4) 
+              : BorderSide.none,
           bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
         ),
       ),
@@ -360,14 +426,29 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
         children: [
           Expanded(
             flex: 2,
-            child: Text(
-              "${widget.day.doc}",
-              textAlign: TextAlign.left,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: Color(0xFF1E293B),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "${widget.day.doc}",
+                  textAlign: TextAlign.left,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: widget.isToday ? const Color(0xFF15803D) : const Color(0xFF1E293B),
+                  ),
+                ),
+                if (widget.isToday)
+                  const Text(
+                    "TODAY",
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF22C55E),
+                    ),
+                  ),
+              ],
             ),
           ),
           // Dynamically build cells based on controllers (rounds)
@@ -378,8 +459,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
             child: Text(
               total.toStringAsFixed(1),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Colors.black87,
+              style: TextStyle(
+                color: widget.isToday ? const Color(0xFF15803D) : Colors.black87,
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
               ),

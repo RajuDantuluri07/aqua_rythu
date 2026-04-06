@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/utils/logger.dart';
 
 /// ================= MODEL =================
 class HarvestEntry {
@@ -65,7 +66,7 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
 
       state = entries;
     } catch (e) {
-      print('❌ Failed to load harvests: $e');
+      AppLogger.error('Failed to load harvests', e);
     }
   }
 
@@ -87,7 +88,7 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
         'count_per_kg': entry.countPerKg,
       });
     } catch (e) {
-      print('❌ Failed to save harvest: $e');
+      AppLogger.error('Failed to save harvest', e);
     }
   }
 

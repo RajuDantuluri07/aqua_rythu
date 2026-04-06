@@ -8,7 +8,7 @@ import 'features/profile/farm_settings_provider.dart';
 import 'features/profile/user_provider.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/splash_screen.dart';
-import 'features/dashboard/dashboard_screen.dart';
+import 'features/pond/pond_dashboard_screen.dart';
 import 'features/auth/auth_provider.dart';
 
 void main() async {
@@ -69,7 +69,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         }
 
         if (authState.isAuthenticated) {
-          return const DashboardScreen();
+          return const PondDashboardScreen();
         } else {
           return const LoginScreen();
         }

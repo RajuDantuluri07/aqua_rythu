@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_constants.dart';
+import '../core/utils/logger.dart';
 
 // Assuming supabase client is accessible via instance
 final supabase = Supabase.instance.client;
@@ -15,7 +16,7 @@ Future<void> generateFeedPlan({
   required double pondArea,
   required DateTime stockingDate,
 }) async {
-  print("🚀 GENERATING FEED PLAN for pond: $pondId");
+  AppLogger.info("Generating feed plan for pond $pondId (DOC $startDoc–$endDoc)");
   
   // 🎯 FIX: Limit feed plan generation to blind feeding phase (DOC 1-30)
   // DOC > 30 will be handled by the Smart Feeding Engine based on sampling.
@@ -23,7 +24,7 @@ Future<void> generateFeedPlan({
 
   // Early exit for ponds already past the blind feeding phase
   if (startDoc > 30) {
-    print('FeedPlanGenerator: Pond $pondId is at DOC $startDoc. Skipping blind feed plan.');
+    AppLogger.info("Pond $pondId is at DOC $startDoc (>30) — skipping blind feed plan");
     return;
   }
 
@@ -45,7 +46,7 @@ Future<void> generateFeedPlan({
       .gte('doc', startDoc)
       .lte('doc', 30);
   
-  print("📊 Base rates count: ${baseRatesData.length}");
+  AppLogger.debug("Base rates loaded: ${baseRatesData.length} entries for pond $pondId");
 
   // 2. Convert the list to a temporary map for O(1) lookup inside the loop.
   final Map<int, double> remoteBaseFeedPlan = {
@@ -87,12 +88,12 @@ Future<void> generateFeedPlan({
   }
 
   if (batchData.isNotEmpty) {
-    print("📦 Batch size: ${batchData.length}");
+    AppLogger.debug("Inserting ${batchData.length} feed rounds for pond $pondId");
     try {
       await supabase.from('feed_rounds').insert(batchData);
-      print("✅ INSERT SUCCESS");
+      AppLogger.info("Feed plan inserted for pond $pondId (${batchData.length} rounds)");
     } catch (e) {
-      print("❌ INSERT FAILED: $e");
+      AppLogger.error("Feed plan insert failed for pond $pondId", e);
     }
   }
 }

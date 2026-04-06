@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/utils/logger.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -14,7 +15,7 @@ class FeedCalculationService {
     required double pondArea,
     double? abw,
   }) {
-    print("🧮 FEED CALC: DOC: $doc | Area: $pondArea | ABW: $abw");
+    AppLogger.debug("Feed calc: DOC=$doc area=$pondArea abw=$abw");
     
     // For MVP: Always return blind feed from database
     // NO calculation, NO smart feed for DOC ≤ 30
@@ -29,7 +30,7 @@ class FeedCalculationService {
     final defaultRate = _getDefaultBlindFeedRate(doc);
     final feedAmount = defaultRate * pondArea;
     
-    print("🟡 BLIND FEED: DOC: $doc | Default Rate: $defaultRate | Total: ${feedAmount.toStringAsFixed(2)} kg");
+    AppLogger.debug("Blind feed: DOC=$doc rate=$defaultRate total=${feedAmount.toStringAsFixed(2)}kg");
     return feedAmount;
   }
 
@@ -56,7 +57,7 @@ class FeedCalculationService {
     // Load base rates if not cached
     if (_baseRatesCache == null) {
       // For MVP: Return default rate instead of blocking
-      print("⚠️ Base rates not loaded, using default MVP rate");
+      AppLogger.info("Base rates not loaded — using default MVP rate for DOC $doc");
       return _getDefaultBlindFeedRate(doc);
     }
     
@@ -77,9 +78,9 @@ class FeedCalculationService {
       }
       
       _baseRatesCache = rates;
-      print("✅ Base rates loaded: ${rates.length} entries");
+      AppLogger.info("Base rates loaded: ${rates.length} entries");
     } catch (e) {
-      print('❌ Failed to load base rates: $e');
+      AppLogger.error('Failed to load base rates', e);
       _baseRatesCache = {};
     }
   }

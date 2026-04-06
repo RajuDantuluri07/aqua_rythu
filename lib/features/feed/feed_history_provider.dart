@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/enums/tray_status.dart';
 import '../../services/feed_service.dart';
 import '../../services/smart_feed_engine.dart';
+import '../../core/utils/logger.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -40,7 +41,7 @@ class FeedHistoryNotifier
   void _triggerSmartFeedRecalculation(String pondId) {
     // Fire-and-forget Smart Feed recalculation
     SmartFeedEngine.recalculateFeedPlan(pondId).catchError((e) {
-      print('❌ Smart Feed recalculation trigger failed: $e');
+      AppLogger.error('Smart Feed recalculation trigger failed', e);
     });
   }
 
@@ -164,9 +165,9 @@ class FeedHistoryNotifier
         expectedFeed: log.expected,
         cumulativeFeed: log.cumulative,
       );
-      print('✅ Feed log saved to DB: $pondId DOC ${log.doc}');
+      AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc}');
     } catch (e) {
-      print('❌ Failed to save feed log to DB: $e');
+      AppLogger.error('Failed to save feed log to DB', e);
       // Data is still in local state, can retry later
     }
   }

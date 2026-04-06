@@ -22,7 +22,7 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+      bottomNavigationBar: const AppBottomBar(currentIndex: 1),
       body: SafeArea(
         child: currentFarm == null
             ? _buildNoFarmView(context)

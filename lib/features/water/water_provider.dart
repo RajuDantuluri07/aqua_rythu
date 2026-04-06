@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/farm_settings_provider.dart';
+import '../../core/utils/logger.dart';
 
 class WaterLog {
   final String id;
@@ -219,7 +220,7 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
 
       state = logs;
     } catch (e) {
-      print('❌ Failed to load water logs: $e');
+      AppLogger.error('Failed to load water logs', e);
     }
   }
 
@@ -264,7 +265,7 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
         'created_at': now.toIso8601String(),
       });
     } catch (e) {
-      print('❌ Failed to save water log: $e');
+      AppLogger.error('Failed to save water log', e);
     }
   }
 

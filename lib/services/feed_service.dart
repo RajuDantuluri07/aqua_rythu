@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/utils/logger.dart';
 
 class FeedService {
   final supabase = Supabase.instance.client;
@@ -48,7 +49,7 @@ class FeedService {
         .eq('doc', doc)
         .order('round');
 
-    print("FETCHED FEED: $res");
+    AppLogger.debug("Fetched ${res.length} feed rounds for pond $pondId");
 
     return res;
   }
@@ -98,6 +99,30 @@ class FeedService {
     }
   }
 
+  /// Insert a single feed_rounds row and return its new id.
+  /// Used for DOC > 30 rounds that have no pre-generated plan.
+  Future<String> insertFeedRound({
+    required String pondId,
+    required int doc,
+    required int round,
+    required double plannedAmount,
+    String status = 'completed',
+  }) async {
+    final response = await supabase
+        .from('feed_rounds')
+        .insert({
+          'pond_id': pondId,
+          'doc': doc,
+          'round': round,
+          'planned_amount': plannedAmount,
+          'status': status,
+          'is_manual': true,
+        })
+        .select('id')
+        .single();
+    return response['id'] as String;
+  }
+
   /// Mark a feed plan as completed
   Future<void> markFeedPlanCompleted({
     required String feedPlanId,
@@ -145,11 +170,12 @@ class FeedService {
     }
 
     try {
-      // Delete existing feed plans for this pond
+      // Delete existing feed plans for this pond (only for blind feeding DOC 1-30)
       await supabase
           .from('feed_rounds')
           .delete()
-          .eq('pond_id', pondId);
+          .eq('pond_id', pondId)
+          .lte('doc', 30);
 
       // Insert new feed plans
       final List<Map<String, dynamic>> plansToInsert = [];
@@ -173,6 +199,7 @@ class FeedService {
             'round': round + 1,
             'planned_amount': rounds[round],
             'status': 'pending',
+            'is_manual': true, // Flag as user-defined override
           });
         }
       }
@@ -183,7 +210,7 @@ class FeedService {
             .insert(plansToInsert);
       }
 
-      print('✅ Feed plans saved for pond: $pondId (${plansToInsert.length} records)');
+      AppLogger.info("Feed plans saved for pond $pondId (${plansToInsert.length} records)");
     } catch (e) {
       throw Exception('Failed to save feed plans: $e');
     }

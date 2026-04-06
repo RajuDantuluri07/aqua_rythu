@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_provider.dart';
 import 'forgot_password_dialog.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/logger.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -44,7 +45,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    print("AUTH START");
+    AppLogger.debug("Auth: sign-in started");
     setState(() => _isLoading = true);
     final authNotifier = ref.read(authProvider.notifier);
     
@@ -53,7 +54,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         : await authNotifier.signUp(email, password);
 
     final user = Supabase.instance.client.auth.currentUser;
-    print("USER: ${user?.id}");
+    AppLogger.debug("Auth: current user id=${user?.id}");
 
     if (mounted) {
       setState(() => _isLoading = false);

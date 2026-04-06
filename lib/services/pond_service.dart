@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_generator.dart';
+import '../core/utils/logger.dart';
 
 class PondService {
   final supabase = Supabase.instance.client;
@@ -43,12 +44,12 @@ class PondService {
       }
 
       final pondId = response;
-      print("CREATED POND ID: $pondId");
+      AppLogger.info("Created pond: $pondId");
 
       // MANDATORY: Generate feed schedule immediately after pond creation
       await generateFeedSchedule(pondId);
 
-      print('✅ Pond + Feed Plan ensured: $pondId');
+      AppLogger.info("Pond + feed plan created: $pondId");
     } catch (e) {
       throw Exception('Failed to create pond: $e');
     }
@@ -67,7 +68,7 @@ class PondService {
         .maybeSingle();
 
     if (pond == null) {
-      print("❌ Cannot generate feed: pond $pondId not found");
+      AppLogger.error("Cannot generate feed: pond $pondId not found");
       return;
     }
 
@@ -80,7 +81,7 @@ class PondService {
       stockingDate: DateTime.parse(pond['stocking_date']),
     );
 
-    print("✅ Feed schedule generated for pond: $pondId");
+    AppLogger.info("Feed schedule generated for pond: $pondId");
   }
 
   // ================================
@@ -112,12 +113,15 @@ class PondService {
     required String pondId,
     required String stockingDate,
   }) async {
-    final today = DateTime.now();
+    // Normalize to UTC midnight — same logic as docProvider/calculateDoc
+    final now = DateTime.now();
+    final todayUtc = DateTime.utc(now.year, now.month, now.day);
     final stockDate = DateTime.parse(stockingDate);
+    final stockUtc = DateTime.utc(stockDate.year, stockDate.month, stockDate.day);
 
-    final doc = today.difference(stockDate).inDays + 1;
+    final doc = todayUtc.difference(stockUtc).inDays + 1;
 
-    print("📊 Calculated DOC: $doc");
+    AppLogger.debug("Calculated DOC: $doc for pond $pondId");
 
     if (doc < 1) return [];
 
@@ -164,7 +168,7 @@ class PondService {
           })
           .eq('id', pondId);
       
-      print('✅ Smart Feed status updated for pond: $pondId (enabled: $isEnabled)');
+      AppLogger.info("Smart feed status updated for pond $pondId (enabled: $isEnabled)");
     } catch (e) {
       throw Exception('Failed to update Smart Feed status: $e');
     }

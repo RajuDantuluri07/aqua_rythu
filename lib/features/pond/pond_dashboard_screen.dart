@@ -1,7 +1,6 @@
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
-import '../../services/pond_service.dart';
 import '../../services/farm_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,11 +16,8 @@ import '../growth/growth_provider.dart';
 import '../supplements/supplement_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
-import '../feed/feed_round_card.dart';
-import '../feed/completed_round_card.dart';
-import '../feed/upcoming_round_card.dart';
+import '../feed/feed_timeline_card.dart';
 import '../feed/smart_feed_provider.dart';
-import '../feed/smart_feed_round_card.dart';
 import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
@@ -30,6 +26,7 @@ import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -39,11 +36,53 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
       _PondDashboardScreenState();
 }
 
-class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
-  List<Map<String, dynamic>> _todayFeeds = [];
-  bool _isLoadingFeeds = true;
+class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
+    with SingleTickerProviderStateMixin {
 
-  // Simple replacement for FeedStateEngine.getRoundState
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+  bool _showFeedScheduleTip = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _checkFeedScheduleTip();
+  }
+
+  Future<void> _checkFeedScheduleTip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = prefs.getBool('feed_schedule_tip_pending') ?? false;
+    if (pending && mounted) {
+      await prefs.remove('feed_schedule_tip_pending');
+      setState(() => _showFeedScheduleTip = true);
+      _pulseController.repeat(reverse: true);
+      // Stop after ~4 seconds (5 pulses)
+      Future.delayed(const Duration(milliseconds: 4000), () {
+        if (mounted) {
+          _pulseController.stop();
+          _pulseController.animateTo(0);
+          setState(() => _showFeedScheduleTip = false);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  // Round state machine
+  // DOC ≤ 30: next round unlocks once prev feed is marked done
+  // DOC > 30: next round unlocks only AFTER prev feed done AND prev tray logged
   Map<String, dynamic> _getSimpleRoundState({
     required int doc,
     required int round,
@@ -52,14 +91,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     required Map<int, bool> trayDone,
   }) {
     final isDone = feedDone[round] ?? false;
-    final currentRound = _getCurrentRound(feedDone, totalRounds);
-    final isCurrent = round == currentRound;
-    final isLocked = _isLocked(round, feedDone, trayDone);
     final isTrayLogged = trayDone[round] ?? false;
-    
-    // Simple logic for MVP
+    final isLocked = _isLocked(doc, round, feedDone, trayDone);
+    // Current = first round that is not fully cleared
+    // For DOC > 30: a round is "cleared" only when both feed done AND tray logged
+    final currentRound = _getCurrentRound(doc, feedDone, trayDone, totalRounds);
+    final isCurrent = !isDone && round == currentRound;
+    // Tray CTA: feed done but tray not yet logged, DOC > 30 only
     final showTrayCTA = isDone && doc > 30 && !isTrayLogged;
-    
+
     return {
       'isDone': isDone,
       'isCurrent': isCurrent,
@@ -69,43 +109,36 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     };
   }
 
-  int _getCurrentRound(Map<int, bool> feedDone, int totalRounds) {
+  /// Returns the next round that needs action (feed or tray).
+  /// DOC ≤ 30: first round where feed is not done.
+  /// DOC > 30: first round where feed is not done, but only after previous
+  ///           round's tray is logged.
+  int _getCurrentRound(int doc, Map<int, bool> feedDone,
+      Map<int, bool> trayDone, int totalRounds) {
     for (int i = 1; i <= totalRounds; i++) {
-      if (!(feedDone[i] ?? false)) {
-        return i;
-      }
+      if (!(feedDone[i] ?? false)) return i;
+      // DOC > 30: if this round's feed is done but tray not logged,
+      // it still "owns" the current slot — next round stays locked
+      if (doc > 30 && !(trayDone[i] ?? false)) return i;
     }
     return totalRounds + 1;
   }
 
-  bool _isLocked(int round, Map<int, bool> feedDone, Map<int, bool> trayDone) {
+  /// A round is locked when the previous round is not fully cleared.
+  /// DOC ≤ 30: cleared = feed done.
+  /// DOC > 30: cleared = feed done AND tray logged.
+  bool _isLocked(int doc, int round, Map<int, bool> feedDone,
+      Map<int, bool> trayDone) {
     if (round <= 1) return false;
-    final prevRound = round - 1;
-    final prevFeedDone = feedDone[prevRound] ?? false;
-    return !prevFeedDone;
+    final prev = round - 1;
+    final prevFeedDone = feedDone[prev] ?? false;
+    if (!prevFeedDone) return true;
+    // For DOC > 30, also require previous tray to be logged
+    if (doc > 30 && !(trayDone[prev] ?? false)) return true;
+    return false;
   }
 
-  Future<void> _loadData(String pondId, String stockingDate) async {
-    setState(() => _isLoadingFeeds = true);
-    final pondService = PondService();
-    try {
-      final feeds = await pondService.getTodayFeed(
-        pondId: pondId,
-        stockingDate: stockingDate,
-      );
-      if (mounted) {
-        print("📥 [DB LOAD] Pond: $pondId | Rounds: ${feeds.map((f) => 'R${f['round']}:${f['status']}').join(', ')}");
-        setState(() {
-          _todayFeeds = feeds;
-          _isLoadingFeeds = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoadingFeeds = false);
-    }
-  }
-
-  List<SupplementItem> _getPlannedFeedSupplements(
+List<SupplementItem> _getPlannedFeedSupplements(
       List<Supplement> supplements, String feedingTime, double feedQty) {
     final items = <SupplementItem>[];
     for (final supplement in supplements) {
@@ -437,28 +470,51 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     final today = ref.watch(todayProvider);
     final oneWeekAgo = ref.watch(oneWeekAgoProvider);
 
-    // Safe argument handling
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
+    // Notify user when feed plan was silently regenerated (auto-recovery)
+    ref.listen<PondDashboardState>(pondDashboardProvider, (previous, next) {
+      if (next.feedAutoRecovered && !(previous?.feedAutoRecovered ?? false)) {
+        ref.read(pondDashboardProvider.notifier).clearAutoRecoveredFlag();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.refresh, color: Colors.white, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Feed plan was missing and has been regenerated automatically.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFF2E7D32),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
       }
+    });
+
+    // Safe argument handling — provider is the single source of truth for feed data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final route = ModalRoute.of(context);
       final args = route?.settings.arguments as String?;
       if (args != null && args.isNotEmpty && args != selectedPond) {
         ref.read(pondDashboardProvider.notifier).selectPond(args);
-
-        // Fix: Implement DOC-based feed retrieval for dashboard
-        final pond = ref.read(farmProvider).currentFarm?.ponds.firstWhere((p) => p.id == args);
-        if (pond != null) {
-          _loadData(pond.id, pond.stockingDate.toIso8601String());
+      } else if (selectedPond.isEmpty) {
+        // Auto-select first pond (e.g. after first pond creation redirect)
+        final ponds = ref.read(farmProvider).currentFarm?.ponds ?? [];
+        if (ponds.isNotEmpty) {
+          ref.read(pondDashboardProvider.notifier).selectPond(ponds.first.id);
         }
-      } else if (selectedPond.isNotEmpty && _todayFeeds.isEmpty && _isLoadingFeeds) {
-        // Handle initial load for already selected pond
-        final currentFarm = ref.read(farmProvider).currentFarm;
-        if (currentFarm != null && currentFarm.ponds.isNotEmpty) {
-          final pond = currentFarm.ponds.firstWhere((p) => p.id == selectedPond, orElse: () => currentFarm.ponds.first);
-          _loadData(pond.id, pond.stockingDate.toIso8601String());
-        }
+      } else if (selectedPond.isNotEmpty &&
+          dashboardState.roundFeedAmounts.isEmpty &&
+          !dashboardState.isFeedLoading) {
+        ref.read(pondDashboardProvider.notifier).loadTodayFeed(selectedPond);
       }
     });
 
@@ -483,7 +539,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             title: const Text("Ponds"),
             centerTitle: true,
           ),
-          bottomNavigationBar: const AppBottomBar(currentIndex: 1),
+          bottomNavigationBar: const AppBottomBar(currentIndex: 0),
           body: SafeArea(
             child: Center(
               child: Column(
@@ -521,7 +577,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
           title: const Text("Ponds"),
           centerTitle: true,
         ),
-        bottomNavigationBar: const AppBottomBar(currentIndex: 1),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 0),
         body: SafeArea(
           child: Center(
             child: Column(
@@ -586,7 +642,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
     if (currentFarm != null && currentFarm.ponds.isEmpty) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
-        bottomNavigationBar: const AppBottomBar(currentIndex: 1),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 0),
         body: SafeArea(
           child: Center(
             child: Column(
@@ -702,26 +758,20 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
             l.timestamp.day == now.day)
         .toList();
 
-    double plannedFeed = 0.0;
-    for (var feed in _todayFeeds) {
-      plannedFeed += (feed['planned_amount'] as num?)?.toDouble() ?? 0.0;
-    }
+    // Both planned and consumed come from provider state (single source of truth)
+    final double plannedFeed = dashboardState.roundFeedAmounts.values
+        .fold(0.0, (sum, v) => sum + v);
 
-    // Calculate consumed feed from DB data only
-    double consumedFeed = 0.0;
-    for (var feed in _todayFeeds) {
-      if (feed['status'] == 'completed') {
-        final round = feed['round'] as int;
-        consumedFeed += dashboardState.roundFeedAmounts[round] ?? 0.0;
-      }
-    }
+    final double consumedFeed = dashboardState.roundFeedStatus.entries
+        .where((e) => e.value == 'completed')
+        .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
     // Enable Smart Feed when DOC is 30 or when pond has Smart Feed enabled
     final isSmartFeedEnabled = (currentPond?.isSmartFeedEnabled ?? false) || (currentDoc >= 30);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      bottomNavigationBar: const AppBottomBar(currentIndex: 1),
+      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -930,18 +980,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                         Icons.straighten_rounded, Colors.blue),
                     _divider(),
                     _kpi(
-                        "ABW",
-                        currentAbw > 0
-                            ? "${currentAbw.toStringAsFixed(1)}g"
+                        "STOCKING",
+                        currentPond.seedCount > 0
+                            ? "${(currentPond.seedCount / 1000).toStringAsFixed(0)}K"
                             : "--",
-                        Icons.fitness_center_rounded,
-                        Colors.cyan,
-                        trend: abwTrend,
-                        inverseColor: false),
-                    _divider(),
-                    _kpi("FCR", pondFcr > 0 ? pondFcr.toStringAsFixed(2) : "--",
-                        Icons.trending_up_rounded, Colors.purple,
-                        trend: fcrTrend, inverseColor: true),
+                        Icons.set_meal_rounded,
+                        Colors.teal),
                   ],
                 ),
               ),
@@ -1051,43 +1095,76 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                       // 30-40% Feed Schedule
                       Expanded(
                         flex: 4,
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    FeedScheduleScreen(pondId: selectedPond),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: AppRadius.rm,
-                              border: Border.all(color: AppColors.border),
-                              boxShadow: [
-                                BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2))
-                              ],
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.calendar_month_rounded,
-                                    color: AppColors.primary, size: 16),
-                                SizedBox(width: 6),
-                                Text(
-                                  "FEED SCHEDULE",
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                      color: AppColors.textSecondary),
+                        child: AnimatedBuilder(
+                          animation: _pulseAnim,
+                          builder: (context, child) => Transform.scale(
+                            scale: _showFeedScheduleTip ? _pulseAnim.value : 1.0,
+                            child: child,
+                          ),
+                          child: GestureDetector(
+                            onTap: () {
+                              // Dismiss tip on tap
+                              if (_showFeedScheduleTip) {
+                                _pulseController.stop();
+                                setState(() => _showFeedScheduleTip = false);
+                              }
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      FeedScheduleScreen(pondId: selectedPond),
                                 ),
-                              ],
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: _showFeedScheduleTip
+                                    ? AppColors.primary.withOpacity(0.08)
+                                    : Colors.white,
+                                borderRadius: AppRadius.rm,
+                                border: Border.all(
+                                  color: _showFeedScheduleTip
+                                      ? AppColors.primary
+                                      : AppColors.border,
+                                  width: _showFeedScheduleTip ? 1.8 : 1.0,
+                                ),
+                                boxShadow: _showFeedScheduleTip
+                                    ? [
+                                        BoxShadow(
+                                          color: AppColors.primary.withOpacity(0.30),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        )
+                                      ]
+                                    : [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.02),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ],
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.calendar_month_rounded,
+                                      color: _showFeedScheduleTip
+                                          ? AppColors.primary
+                                          : AppColors.primary,
+                                      size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    "FEED SCHEDULE",
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                        color: _showFeedScheduleTip
+                                            ? AppColors.primary
+                                            : AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -1146,14 +1223,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
                 AppSpacing.hS,
 
                 /// DAILY TASKS TIMELINE
-                if (_isLoadingFeeds)
+                if (dashboardState.isFeedLoading)
                   const Center(
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 40),
                       child: CircularProgressIndicator(),
                     ),
                   )
-                else if (_todayFeeds.isEmpty)
+                // DOC ≤ 30 with no plan → show empty state (plan should auto-generate)
+                // DOC > 30 → always show timeline (amounts come from feed schedule;
+                //   if not set yet, show 0.0 with edit button so farmer can fill in)
+                else if (dashboardState.roundFeedAmounts.isEmpty && currentDoc <= 30)
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 40),
@@ -1285,200 +1365,95 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen> {
 
       Color timelineColor;
       Widget card;
+      FeedRoundState? _feedDotState; // only set for feed items
+      bool _feedPendingTray = false;
 
       if (isFeed) {
+        // ── Feed round card (unified for all DOCs) ─────────────────────
         final Map<int, bool> feedDoneMap = {
-          for (var feed in _todayFeeds)
-            feed['round'] as int: (feed['status'] == 'completed')
+          for (final e in dashboardState.roundFeedStatus.entries)
+            e.key: e.value == 'completed',
         };
-        print("🧱 [TIMELINE BUILD] Round: ${itemData['round']} | feedDoneMap: $feedDoneMap");
         final round = itemData['round'] as int;
         final time = itemData['time'] as String;
         final timeKey = itemData['key'] as String;
-        // Pull feed amount directly from Supabase record cached in state
-        final feedData = _todayFeeds.firstWhere(
-  (f) => f['round'] == round,
-  orElse: () => {'planned_amount': 0},
-);
-
-final double qty = (feedData['planned_amount'] as num?)?.toDouble() ?? 0.0;
-        
+        final double qty = dashboardState.roundFeedAmounts[round] ?? 0.0;
         final thisRoundLog = todayTrayMap[round];
-        final roundState = _getSimpleRoundState(
-            doc: currentDoc,
-            round: round,
-            totalRounds: 4,
-            feedDone: feedDoneMap,
-            trayDone: trayDone,
-          );
-        timelineColor = roundState['isDone'] && !roundState['showTrayCTA']
-            ? const Color(0xFF10B981)
-            : (roundState['isCurrent']
-                ? const Color(0xFFF59E0B)
-                : const Color(0xFFCBD5E1));
 
-        final bool isDoneInHabitOrBeginner =
-            roundState['isDone'] && currentDoc <= 30;
-        final bool isActuallyDoneInPrecision =
-            roundState['isDone'] && !roundState['showTrayCTA'];
-        final appliedSupplements = _getAppliedFeedSupplements(
-          round,
-          todaySupplementLogs,
+        final roundState = _getSimpleRoundState(
+          doc: currentDoc,
+          round: round,
+          totalRounds: 4,
+          feedDone: feedDoneMap,
+          trayDone: trayDone,
         );
 
-        if (isDoneInHabitOrBeginner || isActuallyDoneInPrecision) {
-          // Applied supplements from logs; fall back to planned supplements if none logged yet
-          List<String> supplements;
-          if (appliedSupplements.isNotEmpty) {
-            supplements = appliedSupplements
-                .map((item) =>
-                    "${item.name.toUpperCase()} ${item.quantity.toStringAsFixed(1)}${item.unit}")
+        final bool isDone = roundState['isDone'] as bool;
+        final bool isCurrent = roundState['isCurrent'] as bool;
+        final bool isPendingTray = isDone && currentDoc > 30 && !(roundState['isTrayLogged'] as bool);
+
+        final FeedRoundState cardState = isDone
+            ? FeedRoundState.done
+            : isCurrent
+                ? FeedRoundState.current
+                : FeedRoundState.upcoming;
+
+        _feedDotState = cardState;
+        _feedPendingTray = isPendingTray;
+        timelineColor = (cardState == FeedRoundState.done || cardState == FeedRoundState.current)
+            ? const Color(0xFF22C55E)
+            : const Color(0xFFCBD5E1);
+
+        // Supplements: applied for done rounds, planned for others
+        final appliedSupplements = _getAppliedFeedSupplements(round, todaySupplementLogs);
+        final List<String> supplements = appliedSupplements.isNotEmpty
+            ? appliedSupplements
+                .map((s) => "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
+                .toList()
+            : _getPlannedFeedSupplements(activePlansToday, timeKey, qty)
+                .map((s) => "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
                 .toList();
-          } else {
-            // Show planned supplements even for completed rounds when not yet logged
-            supplements = _getPlannedFeedSupplements(activePlansToday, timeKey, qty)
-                .map((item) =>
-                    "${item.name.toUpperCase()} ${item.quantity.toStringAsFixed(1)}${item.unit}")
-                .toList();
-          }
-          card = CompletedRoundCard(
-            round: round,
-            time: time,
-            feedQty: qty,
-            originalQty: null,
-            trayStatuses: thisRoundLog?.trays,
-            supplements: supplements,
-            showTraySummary: currentDoc > 30,
-            onLogTray: (currentDoc > 30 && !roundState['isTrayLogged'])
-                ? () => openTray(round, false)
-                : null,
-          );
-        } else if (roundState['isLocked']) {
-          bool isRoundNext = false;
-          if (round > 1) {
-            final prevRoundState = _getSimpleRoundState(
-                doc: currentDoc,
-                round: round - 1,
-                totalRounds: 4,
-                feedDone: feedDoneMap,
-                trayDone: trayDone);
-            if (prevRoundState['isDone'] || prevRoundState['isCurrent']) {
-              isRoundNext = true;
-            }
-          }
-          card = UpcomingRoundCard(
-              round: round,
-              time: time,
-              feedQty: qty,
-              isNext: isRoundNext,
-              supplements: _getPlannedFeedSupplements(activePlansToday, timeKey, qty));
-        } else {
-          // 🔧 FIX: Use appropriate card based on feed mode
-          // - Blind mode (DOC 1-30): SimpleFeedRoundCard with only Planned Feed
-          // - Smart/Transitional mode (DOC > 30): SmartFeedRoundCard with comparison
-          if (currentDoc <= 30) {
-            // DOC 1-30: Show simple card with only Planned Feed
-            card = FeedRoundCard(
-              round: round,
-              time: time,
-              feedQty: qty,
-              isDone: roundState['isDone'],
-              isCurrent: roundState['isCurrent'],
-              isLocked: roundState['isLocked'],
-              showTrayCTA: false,
-              supplements: _getPlannedFeedSupplements(activePlansToday, timeKey, qty),
-              onOpenTray: (int round) { },
-              onMarkDone: () {
-                if (!roundState['isLocked']) {
-                  if (qty <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Feed quantity must be greater than zero"),
-                        behavior: SnackBarBehavior.floating,
-                      ),
+
+        card = FeedTimelineCard(
+          round: round,
+          time: time,
+          feedQty: qty,
+          state: cardState,
+          isPendingTray: isPendingTray,
+          trayStatuses: thisRoundLog?.trays,
+          supplements: supplements,
+          // MARK AS FED: always available on the current round, for all DOCs
+          onMarkDone: isCurrent
+              ? () {
+                  if (qty > 0) {
+                    ref.read(feedHistoryProvider.notifier).logFeeding(
+                      pondId: selectedPond,
+                      doc: currentDoc,
+                      round: round,
+                      qty: qty,
                     );
-                    return;
+                    _logFeedSupplementApplication(
+                      pondId: selectedPond,
+                      pondName: pondName,
+                      round: round,
+                      feedQty: qty,
+                      activePlansToday: activePlansToday,
+                    );
                   }
-                  // Log the feed with planned amount (blind feeding)
-                  ref.read(feedHistoryProvider.notifier).logFeeding(
-                    pondId: selectedPond,
-                    doc: currentDoc,
-                    round: round,
-                    qty: qty,
-                  );
-                  _logFeedSupplementApplication(
-                    pondId: selectedPond,
-                    pondName: pondName,
-                    round: round,
-                    feedQty: qty,
-                    activePlansToday: activePlansToday,
-                  );
-                  ref.read(pondDashboardProvider.notifier).markFeedDone(round).then((_) async {
-                    final currentFarm = ref.read(farmProvider).currentFarm;
-                    final pond = currentFarm?.ponds.firstWhere(
-                      (p) => p.id == selectedPond,
-                      orElse: () => currentFarm!.ponds.first,
-                    );
-                    if (pond != null) {
-                      await _loadData(selectedPond, pond.stockingDate.toIso8601String());
-                    }
-                  });
+                  // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
+                  // Card then transitions: current → done (+ LOG TRAY if DOC > 30)
+                  ref.read(pondDashboardProvider.notifier).markFeedDone(round);
                 }
-              },
-            );
-          } else {
-            // DOC > 30: Show simplified smart feed card for MVP
-            card = SmartFeedRoundCard(
-              pondId: selectedPond,
-              round: round,
-              time: time,
-              plannedFeed: qty,
-              doc: currentDoc,
-              showTrayCTA: roundState['showTrayCTA'],
-              isFeedDone: roundState['isDone'],
-              onMarkFed: (double overrideFeed) {
-                if (!roundState['isLocked']) {
-                  if (overrideFeed <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Feed quantity must be greater than zero"),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    return;
-                  }
-                  // Log the feed with the override amount
-                  ref.read(feedHistoryProvider.notifier).logFeeding(
-                    pondId: selectedPond,
-                    doc: currentDoc,
-                    round: round,
-                    qty: overrideFeed,
-                  );
-                  _logFeedSupplementApplication(
-                    pondId: selectedPond,
-                    pondName: pondName,
-                    round: round,
-                    feedQty: overrideFeed,
-                    activePlansToday: activePlansToday,
-                  );
-                  ref.read(pondDashboardProvider.notifier).markFeedDone(round).then((_) async {
-                    final currentFarm = ref.read(farmProvider).currentFarm;
-                    final pond = currentFarm?.ponds.firstWhere(
-                      (p) => p.id == selectedPond,
-                      orElse: () => currentFarm!.ponds.first,
-                    );
-                    if (pond != null) {
-                      await _loadData(selectedPond, pond.stockingDate.toIso8601String());
-                    }
-                  });
+              : null,
+          // EDIT: only for DOC > 30 (DOC ≤ 30 edits go via Feed Schedule)
+          onEdit: currentDoc > 30 && cardState != FeedRoundState.upcoming
+              ? (double newQty) {
+                  ref.read(pondDashboardProvider.notifier).updateRoundAmount(round, newQty);
                 }
-              },
-              onLogTray: (currentDoc > 30 && !roundState['isTrayLogged'])
-                  ? () => openTray(round, false)
-                  : null,
-            );
-          }
-        }
+              : null,
+          // LOG TRAY CHECK: only after feed is marked done (DOC > 30, tray not yet logged)
+          onLogTray: isPendingTray ? () => openTray(round, false) : null,
+        );
       } else {
         final log = itemData['log'] as SupplementLog?;
         final plan = itemData['plan'] as Supplement?;
@@ -1530,41 +1505,49 @@ final double qty = (feedData['planned_amount'] as num?)?.toDouble() ?? 0.0;
         );
       }
 
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 32,
-            child: Stack(
-              alignment: Alignment.topCenter,
-              children: [
-                if (index < timelineItems.length - 1)
-                  Positioned(
-                      top: 12,
-                      bottom: -12,
-                      child:
-                          Container(width: 2, color: const Color(0xFFE2E8F0))),
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: timelineColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                          color: timelineColor.withOpacity(0.3),
-                          blurRadius: 4,
-                          spreadRadius: 1)
-                    ],
-                  ),
-                ),
-              ],
+      // dotState is set inside the isFeed block above; null for water items
+      final FeedRoundState? dotState = isFeed ? _feedDotState : null;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Timeline column (dot + connector line) ──────────────────
+            SizedBox(
+              width: 36,
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  // Vertical connector line
+                  if (index < timelineItems.length - 1)
+                    Positioned(
+                      top: 24,
+                      bottom: -4,
+                      child: Container(width: 2, color: const Color(0xFFE2E8F0)),
+                    ),
+                  // Dot
+                  if (dotState != null)
+                    buildTimelineDot(dotState, isPendingTray: _feedPendingTray)
+                  else
+                    // Water / supplement dot
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: timelineColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          Expanded(child: card),
-        ],
+            // ── Card ───────────────────────────────────────────────────
+            Expanded(child: card),
+          ],
+        ),
       );
     }).toList();
   }
