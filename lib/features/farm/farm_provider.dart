@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/services/pond_service.dart';
 import 'package:aqua_rythu/core/engines/smart_feed_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
@@ -166,7 +167,14 @@ class FarmNotifier extends StateNotifier<FarmState> {
     }
   }
 
-  void deletePond(String farmId, String pondId) {
+  Future<void> deletePond(String farmId, String pondId) async {
+    try {
+      await PondService().deletePond(pondId);
+    } catch (e) {
+      AppLogger.error('Failed to delete pond from DB', e);
+      rethrow;
+    }
+
     state = state.copyWith(
       farms: state.farms.map((f) {
         if (f.id == farmId) {
@@ -215,7 +223,19 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
-  void updatePondStatus(String pondId, PondStatus status) {
+  Future<void> updatePondStatus(String pondId, PondStatus status) async {
+    // Persist to Supabase first
+    try {
+      await PondService().updatePondStatus(
+        pondId: pondId,
+        status: status.name,
+      );
+    } catch (e) {
+      AppLogger.error('Failed to persist pond status to DB', e);
+      rethrow;
+    }
+
+    // Update local state after successful DB write
     state = state.copyWith(
       farms: state.farms.map((f) {
         return Farm(

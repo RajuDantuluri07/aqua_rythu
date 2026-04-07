@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'engine_constants.dart';
 import '../utils/logger.dart';
+import '../enums/tray_status.dart';
 import 'feed_plan_generator.dart';
+import '../../repositories/feed_repository.dart';
 
 /// Smart Feed Engine — FCR + Tray driven daily feed adjustment.
 ///
@@ -9,9 +11,107 @@ import 'feed_plan_generator.dart';
 /// Safe to call anytime — will return early if DOC ≤ 30 or data is missing.
 class SmartFeedEngine {
   static final _supabase = Supabase.instance.client;
+  static final _feedRepo = FeedRepository();
 
+  /// Direct tray-driven adjustment.
+  ///
+  /// Called immediately after a tray log is saved, with the aggregated status.
+  /// DOC ≤ 30 → no-op (blind feeding phase).
+  /// Applies factor to DOC+1, DOC+2, DOC+3 using base_feed (prevents compounding).
+  /// Clamped to ±30% of base_feed for safety.
+  static Future<void> applyTrayAdjustment({
+    required String pondId,
+    required int doc,
+    required TrayStatus trayStatus,
+  }) async {
+    if (doc <= 30) return;
+
+    final double factor;
+    final String reasonTag;
+    switch (trayStatus) {
+      case TrayStatus.empty:   // All eaten → fish hungry → increase
+        factor = 1.08;
+        reasonTag = 'TRAY_EMPTY +8% DOC $doc';
+        break;
+      case TrayStatus.partial: // Some left → acceptable → no change
+        factor = 1.0;
+        reasonTag = 'TRAY_PARTIAL 0% DOC $doc';
+        break;
+      case TrayStatus.full:    // Tray full = leftover → overfed → decrease
+        factor = 0.92;
+        reasonTag = 'TRAY_FULL -8% DOC $doc';
+        break;
+    }
+
+    if ((factor - 1.0).abs() < 0.01) return;
+
+    // Apply to the next 3 DOCs from base_feed (not current planned_amount)
+    for (int i = 1; i <= 3; i++) {
+      final futureDoc = doc + i;
+      if (futureDoc > 120) break;
+      await _applyFactorFromBase(pondId, futureDoc, factor, reasonTag);
+    }
+
+    AppLogger.info(
+      'SmartFeed.applyTrayAdjustment: pond $pondId DOC $doc → +1/+2/+3 '
+      'tray=${trayStatus.name} factor=${factor.toStringAsFixed(2)}',
+    );
+  }
+
+  /// Apply [factor] to [doc]'s pending rows using base_feed as the source of truth.
+  ///
+  /// Each row is updated via [FeedRepository.atomicUpdateRound] which includes
+  /// `is_smart_adjusted = false` in the UPDATE's WHERE clause. This makes the
+  /// write atomic at DB level — if two calls race, only one succeeds per row.
+  static Future<void> _applyFactorFromBase(
+    String pondId,
+    int doc,
+    double factor,
+    String reason,
+  ) async {
+    // Pre-filter: only fetch rows that haven't been adjusted yet.
+    // Reduces DB payload; atomicity is still enforced in the UPDATE itself.
+    final rows = await _supabase
+        .from('feed_rounds')
+        .select('id, base_feed, is_manual')
+        .eq('pond_id', pondId)
+        .eq('doc', doc)
+        .eq('status', 'pending')
+        .eq('is_smart_adjusted', false);
+
+    for (final row in rows) {
+      if (row['is_manual'] == true) continue;
+
+      final base = (row['base_feed'] as num?)?.toDouble();
+      if (base == null || base <= 0) continue; // guard missing base_feed
+
+      final adjusted = _applySafetyClamp(base, base * factor);
+
+      final succeeded = await _feedRepo.atomicUpdateRound(
+        rowId: row['id'] as String,
+        newPlannedAmount: double.parse(adjusted.toStringAsFixed(3)),
+        adjustmentReason: reason,
+      );
+
+      if (!succeeded) {
+        // Another concurrent call already updated this row — safe no-op.
+        AppLogger.debug(
+          'SmartFeed: race condition on row ${row['id']} (doc $doc) — skipped',
+        );
+      }
+    }
+  }
+
+  /// Clamps [adjusted] to within ±30% of [base].
+  static double _applySafetyClamp(double base, double adjusted) {
+    final min = base * 0.70;
+    final max = base * 1.30;
+    return adjusted.clamp(min, max);
+  }
+
+  /// Comprehensive recalculation using both tray + FCR signals.
+  /// Called after feed logs to adjust based on cumulative FCR.
   /// Main entry point.
-  /// Called after: tray log, feed log, DOC change.
   static Future<void> recalculateFeedPlan(String pondId) async {
     try {
       final pond = await _getPond(pondId);
@@ -154,32 +254,17 @@ class SmartFeedEngine {
     }
   }
 
-  // ── APPLY TO NEXT DAY ─────────────────────────────────────────────────────
+  // ── APPLY TO NEXT DAY (FCR path) ─────────────────────────────────────────
 
   static Future<void> _applyFactorToNextDay(
     String pondId,
     int nextDoc,
     double factor,
   ) async {
-    final rows = await _supabase
-        .from('feed_rounds')
-        .select('id, planned_amount, is_manual')
-        .eq('pond_id', pondId)
-        .eq('doc', nextDoc)
-        .eq('status', 'pending');
-
-    for (final row in rows) {
-      if (row['is_manual'] == true) continue; // Never override manual edits
-
-      final current = (row['planned_amount'] as num).toDouble();
-      // Apply factor, clamped to ±20%/+15% of base
-      final updated = (current * factor).clamp(current * 0.80, current * 1.15);
-
-      await _supabase
-          .from('feed_rounds')
-          .update({'planned_amount': double.parse(updated.toStringAsFixed(3))})
-          .eq('id', row['id'] as String);
-    }
+    // Reuse base_feed path with an FCR reason tag
+    final pct = ((factor - 1.0) * 100).round();
+    final reason = pct >= 0 ? 'FCR_ADJUST +$pct%' : 'FCR_ADJUST ${pct}%';
+    await _applyFactorFromBase(pondId, nextDoc, factor, reason);
   }
 
   // ── HELPERS ───────────────────────────────────────────────────────────────

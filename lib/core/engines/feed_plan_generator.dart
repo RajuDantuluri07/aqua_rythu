@@ -112,11 +112,13 @@ Future<void> _addBlindFeedRows({
     final feedType = getFeedType(doc);
 
     for (int round = 1; round <= 4; round++) {
+      final roundFeed = totalFeed * roundDistribution[round]!;
       batch.add({
         'pond_id': pondId,
         'doc': doc,
         'round': round,
-        'planned_amount': totalFeed * roundDistribution[round]!,
+        'planned_amount': roundFeed,
+        'base_feed': roundFeed, // immutable original — always use this for adjustments
         'feed_type': feedType,
         'status': 'pending',
       });
@@ -137,11 +139,13 @@ void _addSmartFeedRows({
     final totalFeed = _biomassFeedKg(doc, stockingCount);
 
     for (int round = 1; round <= 4; round++) {
+      final roundFeed = totalFeed * roundDistribution[round]!;
       batch.add({
         'pond_id': pondId,
         'doc': doc,
         'round': round,
-        'planned_amount': totalFeed * roundDistribution[round]!,
+        'planned_amount': roundFeed,
+        'base_feed': roundFeed, // immutable original — always use this for adjustments
         'feed_type': 'Smart',
         'status': 'pending',
       });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
+import '../profile/farm_settings_provider.dart';
 import 'water_provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
@@ -181,6 +182,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
   @override
   Widget build(BuildContext context) {
     final logs = ref.watch(waterProvider(widget.pondId));
+    final farmSettings = ref.watch(farmSettingsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -199,7 +201,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
             if (logs.isNotEmpty)
               Builder(builder: (context) {
                 final latest = logs.first;
-                final statusColor = latest.healthColor;
+                final statusColor = latest.healthColor(farmSettings);
                 return Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -234,7 +236,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                                 color: Colors.white24,
                                 borderRadius: BorderRadius.circular(10)),
                             child: Text(
-                              "${latest.healthScore}/100",
+                              "${latest.getHealthScore(farmSettings)}/100",
                               style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,
@@ -245,7 +247,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        latest.healthStatus.toUpperCase(),
+                        latest.healthStatus(farmSettings).toUpperCase(),
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -407,7 +409,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _fullHeaderRow(),
-                          ...logs.take(10).map((log) => _fullLogRow(log)),
+                          ...logs.take(10).map((log) => _fullLogRow(log, farmSettings)),
                         ],
                       ),
                     ),
@@ -582,7 +584,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     );
   }
 
-  Widget _fullLogRow(WaterLog log) {
+  Widget _fullLogRow(WaterLog log, FarmSettings farmSettings) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: const BoxDecoration(
@@ -645,16 +647,16 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(
-                color: log.healthColor.withOpacity(0.2),
+                color: log.healthColor(farmSettings).withOpacity(0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                "${log.healthScore}",
+                "${log.getHealthScore(farmSettings)}",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: log.healthColor),
+                    color: log.healthColor(farmSettings)),
               ),
             ),
           ),

@@ -221,10 +221,54 @@ class FeedHistoryNotifier
 
       state = Map<String, List<FeedHistoryLog>>.from(state)
         ..[pondId] = pondLogs;
-
-      // 🔄 SMART FEED TRIGGER: Recalculate after tray logged
-      _triggerSmartFeedRecalculation(pondId);
+      // Smart feed adjustment is triggered via TrayService after DB persistence
     }
+  }
+
+  /// 📦 LOAD HISTORY FROM SUPABASE ON STARTUP
+  Future<void> loadHistoryForPonds(List<String> pondIds) async {
+    if (pondIds.isEmpty) return;
+
+    final newState = Map<String, List<FeedHistoryLog>>.from(state);
+
+    for (final pondId in pondIds) {
+      try {
+        final rows = await _feedService.fetchFeedLogs(pondId);
+        if (rows.isEmpty) continue;
+
+        // Group rows by calendar date, keeping the last (most complete) row per day.
+        // saveFeed inserts once per logFeeding call with the running total for that
+        // day's rounds — so the last row for a given day is the most up-to-date.
+        final Map<String, Map<String, dynamic>> latestByDate = {};
+        for (final row in rows) {
+          final dateKey = (row['created_at'] as String).substring(0, 10);
+          latestByDate[dateKey] = row; // rows are ordered ascending — last wins
+        }
+
+        double cumulative = 0.0;
+        final logs = <FeedHistoryLog>[];
+
+        for (final entry in latestByDate.entries) {
+          final feedGiven = (entry.value['feed_given'] as num?)?.toDouble() ?? 0.0;
+          cumulative += feedGiven;
+          logs.add(FeedHistoryLog(
+            date: DateTime.parse(entry.key),
+            doc: 0, // doc not stored in feed_logs; not needed for dashboard totals
+            rounds: [feedGiven], // single value representing day total
+            trayStatuses: [],
+            expected: 0.0,
+            cumulative: cumulative,
+          ));
+        }
+
+        // Reverse so newest is first (matches logFeeding's insert-at-0 pattern)
+        newState[pondId] = logs.reversed.toList();
+      } catch (e) {
+        AppLogger.error('Failed to load feed history for pond $pondId', e);
+      }
+    }
+
+    state = newState;
   }
 
   /// 🗑 CLEAR HISTORY FOR NEW CYCLE

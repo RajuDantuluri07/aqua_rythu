@@ -1,5 +1,6 @@
 import '../../core/utils/logger.dart';
 import '../../services/pond_service.dart';
+import '../../services/tray_service.dart';
 import '../../core/enums/tray_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
@@ -120,7 +121,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         await generateFeedPlan(
           pondId: pondId,
           startDoc: 1,
-          endDoc: 30,
+          endDoc: 120,
           stockingCount: pond.seedCount,
           pondArea: pond.area,
           stockingDate: pond.stockingDate,
@@ -307,6 +308,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       }
     }
 
+    // Update UI state immediately
     ref.read(feedHistoryProvider.notifier).logTray(
           pondId: state.selectedPond,
           doc: state.doc,
@@ -320,6 +322,24 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     state = state.copyWith(
       trayResults: newMap,
     );
+
+    // Persist tray log to DB + trigger SmartFeedEngine (fire-and-forget)
+    final pondId = state.selectedPond;
+    final doc = state.doc;
+    TrayService().saveTrayLog(
+      pondId: pondId,
+      date: latest.time,
+      doc: doc,
+      roundNumber: round,
+      trayStatuses: trayStatuses.map((s) => s.name).toList(),
+      observations: latest.observations?.map(
+            (k, v) => MapEntry(k.toString(), v),
+          ) ??
+          {},
+      aggregatedStatus: finalStatus,
+    ).catchError((e) {
+      AppLogger.error('Failed to persist tray log for pond $pondId', e);
+    });
   }
 }
 

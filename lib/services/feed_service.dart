@@ -22,6 +22,15 @@ class FeedService {
     });
   }
 
+  /// Fetch all logged feed entries for a pond, oldest first
+  Future<List<Map<String, dynamic>>> fetchFeedLogs(String pondId) async {
+    return await supabase
+        .from('feed_logs')
+        .select('feed_given, created_at')
+        .eq('pond_id', pondId)
+        .order('created_at', ascending: true);
+  }
+
   /// Fetch all feed plans for a pond
   Future<List<Map<String, dynamic>>> getFeedPlans(String pondId) async {
     if (pondId.isEmpty) {

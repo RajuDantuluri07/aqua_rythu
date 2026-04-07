@@ -75,7 +75,7 @@ class PondService {
     await generateFeedPlan(
       pondId: pondId,
       startDoc: 1,
-      endDoc: 30,
+      endDoc: 120,
       stockingCount: pond['seed_count'] ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
       stockingDate: DateTime.parse(pond['stocking_date']),
@@ -149,6 +149,92 @@ class PondService {
   @Deprecated('Use feed_rounds table only - feed_schedules is deprecated')
   Future<List<Map<String, dynamic>>> getFeedSchedule(String pondId) async {
     throw UnimplementedError('getFeedSchedule is deprecated - use feed_rounds table only');
+  }
+
+  // ================================
+  // ✅ NEW CYCLE — CLEAR OLD DATA & REGENERATE FEED PLAN
+  // ================================
+
+  Future<void> clearPondCycleData({
+    required String pondId,
+    required DateTime newStockingDate,
+    required int seedCount,
+    required int plSize,
+    required int numTrays,
+  }) async {
+    try {
+      // 1. Delete all historical rows tied to this pond in parallel
+      await Future.wait([
+        supabase.from('feed_rounds').delete().eq('pond_id', pondId),
+        supabase.from('feed_logs').delete().eq('pond_id', pondId),
+        supabase.from('tray_logs').delete().eq('pond_id', pondId),
+        supabase.from('sampling_logs').delete().eq('pond_id', pondId),
+        supabase.from('water_logs').delete().eq('pond_id', pondId),
+        supabase.from('harvest_logs').delete().eq('pond_id', pondId),
+      ]);
+
+      AppLogger.info('Cleared all cycle data for pond $pondId');
+
+      // 2. Update pond with new cycle details
+      await supabase.from('ponds').update({
+        'stocking_date': newStockingDate.toIso8601String().split('T')[0],
+        'seed_count': seedCount,
+        'pl_size': plSize,
+        'num_trays': numTrays,
+        'status': 'active',
+        'current_abw': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', pondId);
+
+      AppLogger.info('Pond $pondId reset to new cycle');
+
+      // 3. Generate fresh feed plan for new stocking date
+      await generateFeedSchedule(pondId);
+
+      AppLogger.info('New feed plan generated for pond $pondId');
+    } catch (e) {
+      throw Exception('Failed to start new cycle for pond $pondId: $e');
+    }
+  }
+
+  // ================================
+  // ✅ DELETE POND
+  // ================================
+
+  Future<void> deletePond(String pondId) async {
+    try {
+      await supabase
+          .from('ponds')
+          .delete()
+          .eq('id', pondId);
+
+      AppLogger.info("Pond deleted from DB: $pondId");
+    } catch (e) {
+      throw Exception('Failed to delete pond: $e');
+    }
+  }
+
+  // ================================
+  // ✅ POND STATUS UPDATE
+  // ================================
+
+  Future<void> updatePondStatus({
+    required String pondId,
+    required String status,
+  }) async {
+    try {
+      await supabase
+          .from('ponds')
+          .update({
+            'status': status,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', pondId);
+
+      AppLogger.info("Pond status updated: $pondId → $status");
+    } catch (e) {
+      throw Exception('Failed to update pond status: $e');
+    }
   }
 
   // ================================

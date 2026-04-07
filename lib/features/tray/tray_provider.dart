@@ -1,8 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'tray_model.dart';
+import '../../services/tray_service.dart';
+import '../../core/utils/logger.dart';
 
 class TrayNotifier extends StateNotifier<List<TrayLog>> {
-  TrayNotifier() : super([]);
+  final String pondId;
+
+  TrayNotifier(this.pondId) : super([]) {
+    _loadFromDb();
+  }
+
+  Future<void> _loadFromDb() async {
+    try {
+      final rows = await TrayService().fetchTrayLogs(pondId);
+      state = rows.map((row) => TrayLog.fromSupabase(row)).toList();
+    } catch (e) {
+      AppLogger.error('TrayNotifier: failed to load tray logs for pond $pondId', e);
+    }
+  }
 
   void addTrayLog(TrayLog log) {
     state = [...state, log];
@@ -23,5 +38,5 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
 
 final trayProvider =
     StateNotifierProvider.family<TrayNotifier, List<TrayLog>, String>(
-  (ref, pondId) => TrayNotifier(),
+  (ref, pondId) => TrayNotifier(pondId),
 );

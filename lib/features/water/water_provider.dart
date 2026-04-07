@@ -87,24 +87,15 @@ class WaterLog {
     return score.clamp(0, 100);
   }
 
-  int get healthScore {
-    int score = 100;
-
-    if (ph < 7 || ph > 9) score -= 20;
-    if (dissolvedOxygen < 5) score -= 25;
-    if (salinity < 5 || salinity > 35) score -= 15;
-
-    return score.clamp(0, 100);
-  }
-
-  String get healthStatus {
-    if (healthScore >= 80) return "good";
-    if (healthScore >= 60) return "warning";
+  String healthStatus(FarmSettings settings) {
+    final score = getHealthScore(settings);
+    if (score >= 80) return "good";
+    if (score >= 60) return "warning";
     return "danger";
   }
 
-  Color get healthColor {
-    switch (healthStatus) {
+  Color healthColor(FarmSettings settings) {
+    switch (healthStatus(settings)) {
       case "good":
         return Colors.green;
       case "warning":

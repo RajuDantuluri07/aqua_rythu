@@ -16,7 +16,7 @@
 .idea/
 
 # VS Code
-.vscode/
+.vscode/launch.json
 
 # Flutter/Dart/Pub
 build/

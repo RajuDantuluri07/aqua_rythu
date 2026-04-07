@@ -570,10 +570,24 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
             height: 56,
             child: ElevatedButton(
               onPressed: () {
-                if (_qtyCtrl.text.isEmpty || _priceCtrl.text.isEmpty) {
+                final qty = double.tryParse(_qtyCtrl.text.trim());
+                final price = double.tryParse(_priceCtrl.text.trim());
+
+                if (qty == null || qty <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text("Quantity and Price are required"),
+                      content: const Text("Enter a valid quantity (e.g. 250.5)"),
+                      backgroundColor: Colors.red.shade600,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+
+                if (price == null || price <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text("Enter a valid price per kg (e.g. 180)"),
                       backgroundColor: Colors.red.shade600,
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -635,14 +649,14 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
     );
   }
 
-  void _saveHarvest({bool isFinal = false}) {
+  Future<void> _saveHarvest({bool isFinal = false}) async {
     final entry = HarvestEntry(
       pondId: widget.pondId,
       date: DateTime.now(),
       doc: widget.doc,
-      quantity: double.parse(_qtyCtrl.text),
-      countPerKg: int.tryParse(_countCtrl.text) ?? 0,
-      pricePerKg: double.parse(_priceCtrl.text),
+      quantity: double.tryParse(_qtyCtrl.text.trim()) ?? 0.0,
+      countPerKg: int.tryParse(_countCtrl.text.trim()) ?? 0,
+      pricePerKg: double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
       expenses: double.tryParse(_expensesCtrl.text) ?? 0,
       notes: _notesCtrl.text,
       type: widget.type,
@@ -651,9 +665,10 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
     ref.read(harvestProvider(widget.pondId).notifier).addHarvest(entry);
 
     if (isFinal) {
-      ref
+      await ref
           .read(farmProvider.notifier)
           .updatePondStatus(widget.pondId, PondStatus.completed);
+      if (!mounted) return;
       Navigator.pop(context); // Close modal
       Navigator.pushReplacement(
         context,
@@ -664,6 +679,7 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
       Navigator.pop(context);
     }
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

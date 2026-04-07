@@ -884,14 +884,25 @@ List<SupplementItem> _getPlannedFeedSupplements(
                                     style: TextButton.styleFrom(
                                         foregroundColor: Colors.red),
                                     child: const Text("Delete"),
-                                    onPressed: () {
+                                    onPressed: () async {
                                       if (currentFarm != null) {
-                                        ref
-                                            .read(farmProvider.notifier)
-                                            .deletePond(
-                                                currentFarm.id, pond.id);
+                                        try {
+                                          await ref
+                                              .read(farmProvider.notifier)
+                                              .deletePond(
+                                                  currentFarm.id, pond.id);
+                                        } catch (e) {
+                                          if (dialogContext.mounted) {
+                                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                              const SnackBar(content: Text("Failed to delete pond. Please try again.")),
+                                            );
+                                          }
+                                          return;
+                                        }
                                       }
-                                      Navigator.of(dialogContext).pop();
+                                      if (dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
                                     },
                                   ),
                                 ],

@@ -5,7 +5,7 @@ import 'growth_provider.dart';
 import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/engines/smart_feed_engine.dart';
+import '../../services/sampling_service.dart';
 import '../../core/utils/logger.dart';
 
 class SamplingScreen extends ConsumerStatefulWidget {
@@ -98,22 +98,39 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
 
   void _saveSampling(int doc) {
     if (_formKey.currentState?.validate() ?? false) {
-      ref.read(growthProvider(widget.pondId).notifier).addLog(
+      final abw = _avgWeight;
+      final pondId = widget.pondId;
+
+      // Update in-memory growth log immediately
+      ref.read(growthProvider(pondId).notifier).addLog(
             SamplingLog(
               doc: doc,
-              abw: _avgWeight,
+              abw: abw,
               date: DateTime.now(),
             ),
           );
-      
-      // 🔄 SMART FEED TRIGGER: Recalculate after sampling logged
-      SmartFeedEngine.recalculateFeedPlan(widget.pondId).catchError((e) {
-        AppLogger.error('Smart Feed recalculation trigger failed', e);
+
+      // Persist sampling + update pond ABW + recalculate all future feed (fire-and-forget)
+      SamplingService().addSampling(
+        pondId: pondId,
+        date: DateTime.now(),
+        doc: doc,
+        weightKg: _weightKg,
+        totalPieces: _totalPieces,
+        averageBodyWeight: abw,
+      ).then((_) {
+        return SamplingService().applySamplingCorrection(
+          pondId: pondId,
+          doc: doc,
+          sampledAbw: abw,
+        );
+      }).catchError((e) {
+        AppLogger.error('Sampling correction failed for pond $pondId', e);
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Growth data saved successfully!"),
+          content: Text("Growth data saved — feed plan updated!"),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),

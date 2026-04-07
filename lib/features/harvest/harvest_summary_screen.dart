@@ -13,11 +13,21 @@ class HarvestSummaryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final harvests = ref.watch(harvestProvider(pondId));
     final currentDoc = ref.watch(docProvider(pondId));
-    final pond = ref
-        .watch(farmProvider)
-        .farms
-        .expand((f) => f.ponds)
-        .firstWhere((p) => p.id == pondId);
+
+    final allPonds = ref.watch(farmProvider).farms.expand((f) => f.ponds);
+    final pond = allPonds.cast<Pond?>().firstWhere(
+          (p) => p!.id == pondId,
+          orElse: () => null,
+        );
+
+    if (pond == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text("Harvest Summary")),
+        body: const Center(
+          child: Text("Pond data not found. Please go back and try again."),
+        ),
+      );
+    }
 
     final totalYield = harvests.fold(0.0, (sum, h) => sum + h.quantity);
     final totalRevenue = harvests.fold(0.0, (sum, h) => sum + h.revenue);

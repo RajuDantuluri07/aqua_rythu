@@ -191,14 +191,26 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
             child: const Text("CANCEL"),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               if (_farmId != null) {
-                ref.read(farmProvider.notifier).deletePond(_farmId!, pondId);
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Go back to dashboard
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Pond deleted successfully")),
-                );
+                try {
+                  await ref.read(farmProvider.notifier).deletePond(_farmId!, pondId);
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.pop(context); // Close dialog
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Failed to delete pond. Please try again.")),
+                    );
+                  }
+                  return;
+                }
+                if (context.mounted) {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context); // Go back to dashboard
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Pond deleted successfully")),
+                  );
+                }
               }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),

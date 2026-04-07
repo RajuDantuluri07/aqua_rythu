@@ -10,6 +10,8 @@ import '../supplements/supplement_provider.dart';
 import '../pond/pond_dashboard_provider.dart';
 import '../growth/growth_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/pond_service.dart';
+import '../../core/utils/logger.dart';
 
 class NewCycleSetupScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -34,46 +36,64 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
     super.dispose();
   }
 
-  void _startCycle() {
-    if (_formKey.currentState!.validate()) {
-      final seedCount = int.parse(_seedCtrl.text);
-      final plSize = int.parse(_plSizeCtrl.text);
+  bool _isLoading = false;
 
-      // 1. Reset Pond Status & Data
-	      ref.read(farmProvider.notifier).resetPond(
-	            widget.pondId,
-	            seedCount: seedCount,
-	            plSize: plSize,
-	            stockingDate: _stockingDate,
-	            numTrays: _selectedTrays,
-	          );
+  Future<void> _startCycle() async {
+    if (!_formKey.currentState!.validate()) return;
 
-	      // 2. Clear Old Pond-Linked Data
-	      ref.read(harvestProvider(widget.pondId).notifier).clearHarvests();
-	      ref.read(feedHistoryProvider.notifier).clearHistory(widget.pondId);
-	      ref.read(trayProvider(widget.pondId).notifier).clearLogs();
-	      ref.read(waterProvider(widget.pondId).notifier).clearLogs();
-	      ref
-	          .read(growthProvider(widget.pondId).notifier)
-	          .clearLogs();
-	      ref.read(supplementProvider.notifier).clearForPond(widget.pondId);
-	      ref.read(supplementLogProvider.notifier).clearForPond(widget.pondId);
+    final seedCount = int.parse(_seedCtrl.text);
+    final plSize = int.parse(_plSizeCtrl.text);
 
-	
+    setState(() => _isLoading = true);
 
-	      // 4. Clear any in-memory dashboard progress for this pond
-	      ref.read(pondDashboardProvider.notifier).resetPondState(widget.pondId);
-
-	      // Navigate back to Dashboard
-	      Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("New crop cycle started successfully!"),
-          backgroundColor: AppColors.success,
-        ),
+    try {
+      // 1. Clear all old DB data + update pond + regenerate feed plan
+      await PondService().clearPondCycleData(
+        pondId: widget.pondId,
+        newStockingDate: _stockingDate,
+        seedCount: seedCount,
+        plSize: plSize,
+        numTrays: _selectedTrays,
       );
+    } catch (e) {
+      AppLogger.error('New cycle DB reset failed', e);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to start new cycle. Please try again."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
     }
+
+    // 2. Clear all in-memory state
+    ref.read(farmProvider.notifier).resetPond(
+          widget.pondId,
+          seedCount: seedCount,
+          plSize: plSize,
+          stockingDate: _stockingDate,
+          numTrays: _selectedTrays,
+        );
+    ref.read(harvestProvider(widget.pondId).notifier).clearHarvests();
+    ref.read(feedHistoryProvider.notifier).clearHistory(widget.pondId);
+    ref.read(trayProvider(widget.pondId).notifier).clearLogs();
+    ref.read(waterProvider(widget.pondId).notifier).clearLogs();
+    ref.read(growthProvider(widget.pondId).notifier).clearLogs();
+    ref.read(supplementProvider.notifier).clearForPond(widget.pondId);
+    ref.read(supplementLogProvider.notifier).clearForPond(widget.pondId);
+    ref.read(pondDashboardProvider.notifier).resetPondState(widget.pondId);
+
+    if (!mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("New crop cycle started successfully!"),
+        backgroundColor: AppColors.success,
+      ),
+    );
   }
 
   @override
@@ -199,17 +219,19 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _startCycle,
+                  onPressed: _isLoading ? null : _startCycle,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text("LAUNCH CYCLE",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.white)),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("LAUNCH CYCLE",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.white)),
                 ),
               ),
             ],

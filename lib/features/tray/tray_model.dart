@@ -46,4 +46,23 @@ class TrayLog {
       ),
     );
   }
+
+  factory TrayLog.fromSupabase(Map<String, dynamic> row) {
+    return TrayLog(
+      pondId: row['pond_id'],
+      time: DateTime.parse(row['date']),
+      doc: row['doc'] ?? 0,
+      round: row['round_number'] ?? 1,
+      trays: (row['tray_statuses'] as List).map((e) {
+        try {
+          return TrayStatus.values.byName(e as String);
+        } catch (_) {
+          return TrayStatus.partial;
+        }
+      }).toList(),
+      observations: (row['observations'] as Map<String, dynamic>?)?.map(
+        (k, v) => MapEntry(int.parse(k), List<String>.from(v as List)),
+      ),
+    );
+  }
 }

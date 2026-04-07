@@ -1,12 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/enums/tray_status.dart';
+import '../core/engines/smart_feed_engine.dart';
+import '../core/utils/logger.dart';
 
 class TrayService {
   final _supabase = Supabase.instance.client;
 
-  /// Persists a tray observation log to Supabase.
+  /// Persists a tray log to Supabase and triggers smart feed adjustment.
   ///
-  /// [trayStatuses] is expected to be a list of strings representing the status of each tray.
-  /// [observations] is a map containing JSON-serializable observation data.
+  /// [trayStatuses] is the raw list of per-tray status strings.
+  /// [aggregatedStatus] is the pre-computed majority status used for feed adjustment.
+  /// [doc] is used to enforce the DOC > 30 guard in the engine.
   Future<void> saveTrayLog({
     required String pondId,
     required DateTime date,
@@ -14,6 +18,7 @@ class TrayService {
     required int roundNumber,
     required List<String> trayStatuses,
     required Map<String, dynamic> observations,
+    required TrayStatus aggregatedStatus,
   }) async {
     try {
       await _supabase.from('tray_logs').insert({
@@ -24,8 +29,15 @@ class TrayService {
         'tray_statuses': trayStatuses,
         'observations': observations,
       });
+
+      // Trigger smart feed adjustment after tray is persisted
+      await SmartFeedEngine.applyTrayAdjustment(
+        pondId: pondId,
+        doc: doc,
+        trayStatus: aggregatedStatus,
+      );
     } catch (e) {
-      // Rethrow to allow the provider or UI to handle the error state gracefully
+      AppLogger.error('TrayService.saveTrayLog failed for pond $pondId', e);
       rethrow;
     }
   }

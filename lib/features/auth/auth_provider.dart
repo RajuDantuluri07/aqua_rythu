@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/user_provider.dart';
 import '../farm/farm_provider.dart';
+import '../feed/feed_history_provider.dart';
 import '../../core/utils/logger.dart';
 
 class AppAuthState {
@@ -89,6 +90,14 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
 
           // ✅ Sync farms for returning users
           await ref.read(farmProvider.notifier).loadFarms();
+
+          // ✅ Load feed history for all ponds immediately after farms load
+          final farmState = ref.read(farmProvider);
+          final pondIds = farmState.farms
+              .expand((f) => f.ponds)
+              .map((p) => p.id)
+              .toList();
+          await ref.read(feedHistoryProvider.notifier).loadHistoryForPonds(pondIds);
         } catch (e) {
           AppLogger.error('Session sync failed', e);
         }

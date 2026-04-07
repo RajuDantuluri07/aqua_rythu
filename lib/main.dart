@@ -10,13 +10,16 @@ import 'features/auth/login_screen.dart';
 import 'features/auth/splash_screen.dart';
 import 'features/pond/pond_dashboard_screen.dart';
 import 'features/auth/auth_provider.dart';
+import 'core/config/app_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  AppConfig.validate();
+
   await Supabase.initialize(
-    url: 'https://qzubiqetvsgaiwhshcex.supabase.co',
-    anonKey: 'sb_publishable_vR-960VzTfuvGZeac79JVQ_XWtj2OPL',
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabaseAnonKey,
   );
 
   // Initialize SharedPreferences for settings and profile persistence

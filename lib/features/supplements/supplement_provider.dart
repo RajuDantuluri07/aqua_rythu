@@ -2,6 +2,8 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
+import 'package:aqua_rythu/services/supplement_service.dart';
+import 'package:aqua_rythu/core/utils/logger.dart';
 
 enum SupplementStatus { upcoming, active, completed }
 
@@ -480,7 +482,22 @@ final supplementLogProvider =
 /// ---------------------------------------------------
 
 class SupplementNotifier extends StateNotifier<List<Supplement>> {
-  SupplementNotifier() : super([]);
+  final _service = SupplementService();
+
+  SupplementNotifier() : super([]) {
+    _loadFromDb();
+  }
+
+  Future<void> _loadFromDb() async {
+    try {
+      final rows = await _service.fetchSupplements();
+      if (rows.isNotEmpty) {
+        replaceAll(rows.map((r) => Supplement.fromJson(r)).toList());
+      }
+    } catch (e) {
+      AppLogger.error('SupplementNotifier: failed to load supplements', e);
+    }
+  }
 
   DateTime _sortAnchor(Supplement supplement) {
     return supplement.scheduleAnchorDate ??
@@ -523,6 +540,9 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
   // 🔹 CREATE
   void addSupplement(Supplement supplement) {
     state = _sorted([...state, supplement]);
+    _service.upsertSupplement(supplement.toJson()).catchError((e) {
+      AppLogger.error('Failed to persist new supplement ${supplement.id}', e);
+    });
   }
 
   // 🔹 UPDATE
@@ -531,6 +551,9 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
       for (final s in state)
         if (s.id == updated.id) updated else s
     ]);
+    _service.upsertSupplement(updated.toJson()).catchError((e) {
+      AppLogger.error('Failed to persist edited supplement ${updated.id}', e);
+    });
   }
 
   void togglePause(String id) {
@@ -538,15 +561,22 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
       for (final s in state)
         if (s.id == id) s.copyWith(isPaused: !s.isPaused) else s
     ];
+    final updated = state.firstWhere((s) => s.id == id);
+    _service.upsertSupplement(updated.toJson()).catchError((e) {
+      AppLogger.error('Failed to persist togglePause for supplement $id', e);
+    });
   }
 
   // 🔹 DELETE
   void deleteSupplement(String id) {
     state = state.where((s) => s.id != id).toList();
+    _service.deleteSupplement(id).catchError((e) {
+      AppLogger.error('Failed to delete supplement $id from DB', e);
+    });
   }
 
   void removeSupplement(String id) {
-    state = state.where((s) => s.id != id).toList();
+    deleteSupplement(id);
   }
 
   void clearForPond(String pondId) {
