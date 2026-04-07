@@ -1,8 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/enums/tray_status.dart';
 import '../../services/feed_service.dart';
-import '../../services/smart_feed_engine.dart';
+import '../../core/engines/smart_feed_engine.dart';
 import '../../core/utils/logger.dart';
+import '../pond/pond_dashboard_provider.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -46,8 +47,11 @@ class FeedHistoryNotifier
   }
 
   double _expectedFeedForDoc(String pondId, int doc) {
-    // Expected feed should now be derived from the database-stored feed plan
-    return 0.0; // Placeholder until integrated with Supabase feed plan fetch
+    final dashboardState = ref.read(pondDashboardProvider);
+    if (dashboardState.selectedPond == pondId) {
+      return dashboardState.roundFeedAmounts.values.fold(0.0, (sum, val) => sum + val);
+    }
+    return 0.0;
   }
 
   /// 🍽 LOG REAL-TIME FEEDING
@@ -218,9 +222,9 @@ class FeedHistoryNotifier
       state = Map<String, List<FeedHistoryLog>>.from(state)
         ..[pondId] = pondLogs;
 
-    // 🔄 SMART FEED TRIGGER: Recalculate after tray logged
-    _triggerSmartFeedRecalculation(pondId);
-  }
+      // 🔄 SMART FEED TRIGGER: Recalculate after tray logged
+      _triggerSmartFeedRecalculation(pondId);
+    }
   }
 
   /// 🗑 CLEAR HISTORY FOR NEW CYCLE

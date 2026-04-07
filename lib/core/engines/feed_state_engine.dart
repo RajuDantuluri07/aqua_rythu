@@ -1,5 +1,4 @@
 import '../enums/tray_status.dart';
-import '../../features/farm/farm_provider.dart';
 
 enum FeedMode {
   blind,

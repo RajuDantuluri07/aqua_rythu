@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'farm_provider.dart';
-import '../feed/feed_plan_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';

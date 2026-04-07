@@ -52,16 +52,6 @@ class UserProfile {
     );
   }
 
-  // Default profile for development/testing
-  factory UserProfile.demo() {
-    return UserProfile(
-      userId: 'user_12345',
-      name: 'Rajesh Kumar',
-      phoneNumber: '+91 98765 43210',
-      email: 'rajesh@aquafarm.com',
-      profileImageUrl: 'https://i.pravatar.cc/150?img=3',
-    );
-  }
 }
 
 // Global SharedPreferences instance (set by main.dart)

@@ -80,12 +80,12 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     final isLoggedIn = session != null;
     
     if (isLoggedIn) {
-      final userId = session?.user.id ?? '';
-      
+      final userId = session.user.id;
+
       // ✅ Sync existing user on session restore
       if (userId.isNotEmpty) {
         try {
-          await _syncUserRecord(session!.user);
+          await _syncUserRecord(session.user);
 
           // ✅ Sync farms for returning users
           await ref.read(farmProvider.notifier).loadFarms();
@@ -117,6 +117,11 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           'created_at': DateTime.now().toIso8601String(),
         });
         AppLogger.info('User record synced');
+      } else {
+        // Update email if it changed
+        await _supabase.from('profiles').update({
+          'email': user.email,
+        }).eq('id', user.id);
       }
 
       // Update userProvider
@@ -147,13 +152,33 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     state = const AppAuthState();
   }
 
-  // OTP flow stubs — not used in current email/password MVP
   Future<void> signInWithOtp(String phone) async {
-    state = state.copyWith(errorMessage: 'OTP login not supported yet');
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _supabase.auth.signInWithOtp(phone: phone);
+      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+    }
   }
 
   Future<void> verifyOtp(String phone, String otp) async {
-    state = state.copyWith(errorMessage: 'OTP verification not supported yet');
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final res = await _supabase.auth.verifyOTP(
+        phone: phone,
+        token: otp,
+        type: OtpType.sms,
+      );
+      if (res.user != null) {
+        await _syncUserRecord(res.user!);
+        state = state.copyWith(isLoading: false, isAuthenticated: true);
+      } else {
+        state = state.copyWith(isLoading: false, errorMessage: 'Verification failed. Please try again.');
+      }
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+    }
   }
 }
 

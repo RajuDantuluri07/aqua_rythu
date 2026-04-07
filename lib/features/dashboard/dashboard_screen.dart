@@ -4,19 +4,15 @@ import 'package:aqua_rythu/features/farm/farm_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/services/farm_service.dart';
-import 'package:aqua_rythu/services/dashboard_service.dart';
 import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:aqua_rythu/features/growth/growth_provider.dart';
 import 'package:aqua_rythu/features/dashboard/farm_dashboard_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = Supabase.instance.client.auth.currentUser;
-
     final farmState = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
 
@@ -406,12 +402,12 @@ class DashboardScreen extends ConsumerWidget {
           positive: true,
         ),
         _StatCard(
-          title: "FEED CONSUMED",
+          title: "EST. FEED",
           value: metrics.totalFeed.toStringAsFixed(0),
           unit: " kg",
           icon: Icons.grain_rounded,
           color: Colors.orange,
-          subtitle: "Total this cycle",
+          subtitle: "Estimated this cycle",
           positive: true,
         ),
         _StatCard(

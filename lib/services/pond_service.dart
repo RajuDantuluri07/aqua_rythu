@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'feed_plan_generator.dart';
+import '../core/engines/feed_plan_generator.dart';
 import '../core/utils/logger.dart';
 
 class PondService {

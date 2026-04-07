@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:aqua_rythu/services/farm_service.dart';
-import 'package:aqua_rythu/services/smart_feed_engine.dart';
+import 'package:aqua_rythu/core/engines/smart_feed_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 
@@ -69,23 +69,9 @@ class Pond {
     final date2 = DateTime.utc(stockingDate.year, stockingDate.month, stockingDate.day);
     
     final diff = date1.difference(date2).inDays + 1;
-    final currentDoc = diff > 0 ? diff : 1; // Default to Day 1 if date is in future
-    
-    // 🔄 SMART FEED ACTIVATION: Check if Smart Feed should be activated
-    _checkSmartFeedActivation(currentDoc);
-    
-    return currentDoc;
+    return diff > 0 ? diff : 1; // Default to Day 1 if date is in future
   }
 
-  /// Check and activate Smart Feed if DOC > 30 and not already enabled
-  void _checkSmartFeedActivation(int currentDoc) {
-    if (!isSmartFeedEnabled && currentDoc > 30) {
-      // Use fire-and-forget to avoid blocking
-      SmartFeedEngine.checkAndActivateSmartFeed(this).catchError((e) {
-        AppLogger.error('Smart Feed activation check failed', e);
-      });
-    }
-  }
 }
 
 class Farm {

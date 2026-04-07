@@ -5,7 +5,7 @@ import 'growth_provider.dart';
 import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../services/smart_feed_engine.dart';
+import '../../core/engines/smart_feed_engine.dart';
 import '../../core/utils/logger.dart';
 
 class SamplingScreen extends ConsumerStatefulWidget {

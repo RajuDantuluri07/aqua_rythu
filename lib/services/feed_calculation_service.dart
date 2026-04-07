@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/engines/engine_constants.dart';
 import '../core/utils/logger.dart';
 
 final supabase = Supabase.instance.client;
@@ -45,11 +46,44 @@ class FeedCalculationService {
     return 7.0;                     // Week 5-6: 7 kg/acre
   }
 
-  /// Smart feed calculation (DOC > 30) - placeholder for now
+  /// Smart feed calculation (DOC > 30).
+  /// Uses actual ABW to compute biomass-based feed per the FCR engine constants.
+  /// Falls back to progressive blind-feed rates if ABW is unavailable.
   static double getSmartFeed(int doc, double pondArea, double? abw) {
-    // TODO: Implement smart feed calculation using ABW, water quality, etc.
-    // For now, use blind feed as fallback
-    return getBlindFeed(doc, pondArea);
+    if (abw == null || abw <= 0) {
+      // No sampling data yet — use a conservative fixed rate scaled by area
+      final rate = _getDefaultBlindFeedRate(doc);
+      AppLogger.debug('SmartFeed fallback (no ABW): DOC=$doc rate=$rate');
+      return rate * pondArea;
+    }
+
+    // Biomass estimate: assume standard 100K PL/acre stocking density
+    const stockingPerAcre = 100000;
+    final survival = _interpolate(FeedEngineConstants.survivalRates, doc);
+    final feedingRate = _interpolate(FeedEngineConstants.feedingRates, doc);
+    final biomassKgPerAcre = stockingPerAcre * survival * abw / 1000;
+    final feedKgPerAcre = biomassKgPerAcre * feedingRate;
+    final total = feedKgPerAcre * pondArea;
+
+    AppLogger.debug(
+      'SmartFeed: DOC=$doc abw=${abw}g survival=${survival.toStringAsFixed(2)} '
+      'rate=${feedingRate.toStringAsFixed(3)} total=${total.toStringAsFixed(2)}kg',
+    );
+    return total;
+  }
+
+  static double _interpolate(Map<int, double> table, int doc) {
+    final keys = table.keys.toList()..sort();
+    if (doc <= keys.first) return table[keys.first]!;
+    if (doc >= keys.last) return table[keys.last]!;
+    for (int i = 0; i < keys.length - 1; i++) {
+      final k1 = keys[i], k2 = keys[i + 1];
+      if (doc >= k1 && doc <= k2) {
+        final t = (doc - k1) / (k2 - k1);
+        return table[k1]! + t * (table[k2]! - table[k1]!);
+      }
+    }
+    return table[keys.last]!;
   }
 
   /// Get base feed rate from database

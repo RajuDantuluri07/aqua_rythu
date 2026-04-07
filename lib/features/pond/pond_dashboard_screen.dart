@@ -1,7 +1,7 @@
+import '../../services/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
-import '../../services/farm_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../feed/feed_schedule_screen.dart';
@@ -13,7 +13,6 @@ import '../farm/farm_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../growth/growth_provider.dart';
-import '../supplements/supplement_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_timeline_card.dart';
@@ -740,13 +739,11 @@ List<SupplementItem> _getPlannedFeedSupplements(
       prevAbw = prevGrowthLog.abw;
     }
 
-    // Trend: Current - Previous
-    // For FCR, negative trend (decrease) is GOOD.
-    final double fcrTrend =
-        (pondFcr > 0 && prevFcr > 0) ? (pondFcr - prevFcr) : 0;
-    // For ABW, positive trend is GOOD.
-    final double abwTrend =
-        (currentAbw > 0 && prevAbw > 0) ? (currentAbw - prevAbw) : 0;
+    // Trends calculated for future use (FCR decrease = good, ABW increase = good)
+    // ignore: unused_local_variable
+    final double fcrTrend = (pondFcr > 0 && prevFcr > 0) ? (pondFcr - prevFcr) : 0;
+    // ignore: unused_local_variable
+    final double abwTrend = (currentAbw > 0 && prevAbw > 0) ? (currentAbw - prevAbw) : 0;
 
     final supplementLogs = ref.watch(supplementLogProvider);
     final now = DateTime.now();
@@ -767,7 +764,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
         .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
     // Enable Smart Feed when DOC is 30 or when pond has Smart Feed enabled
-    final isSmartFeedEnabled = (currentPond?.isSmartFeedEnabled ?? false) || (currentDoc >= 30);
+    final isSmartFeedEnabled = currentPond.isSmartFeedEnabled || (currentDoc >= 30);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -854,7 +851,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     ...ponds.map((pond) {
                       bool isSelected = pond.id == selectedPond;
 
-                      final hasFeed = true;
+                      final hasFeed =
+                          (ref.watch(feedHistoryProvider)[pond.id] ?? []).isNotEmpty;
                       final hasHarvest =
                           ref.watch(harvestProvider(pond.id)).isNotEmpty;
 

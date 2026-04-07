@@ -7,6 +7,7 @@ import '../features/pond/add_pond_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/pond/pond_dashboard_screen.dart';
 import '../features/pond/edit_pond_screen.dart';
+import '../features/feed/feed_schedule_screen.dart';
 
 class AppRoutes {
   static const login = '/login';
@@ -26,6 +27,10 @@ class AppRoutes {
     editPond: (context) => const EditPondScreen(),
     dashboard: (context) => const DashboardScreen(),
     pondDashboard: (context) => const PondDashboardScreen(),
-    feedSchedule: (context) => throw UnimplementedError('FeedScheduleScreen requires pondId argument'),
+    feedSchedule: (context) {
+      final pondId = ModalRoute.of(context)?.settings.arguments as String?;
+      if (pondId == null || pondId.isEmpty) return const PondDashboardScreen();
+      return FeedScheduleScreen(pondId: pondId);
+    },
   };
 }

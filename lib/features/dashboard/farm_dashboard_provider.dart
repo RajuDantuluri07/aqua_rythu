@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../supplements/supplement_provider.dart';
 import '../supplements/water_task_engine.dart';
 import '../farm/farm_provider.dart';
+import '../feed/feed_history_provider.dart';
 import '../growth/growth_provider.dart';
 import '../profile/farm_settings_provider.dart';
 import '../../core/utils/logger.dart';
@@ -39,6 +40,9 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
   double totalGrowthRate = 0;
   int pondCount = currentFarm.ponds.where((p) => p.status.name == 'active').length;
 
+  // Real feed totals from logged history (single source of truth)
+  final feedHistory = ref.watch(feedHistoryProvider);
+
   // Get survival rates based on farm type and settings
   final isSemiIntensive = farmSettings.farmType == "Semi-Intensive";
   final survivalEarlyStage = isSemiIntensive ? 0.98 : 0.95;
@@ -71,10 +75,9 @@ final farmDashboardProvider = Provider<FarmDashboardState>((ref) {
       }
     }
 
-    // Feed calculation
-    // TODO: Implement totalFeed calculation from history or database service
-    // For now, using a simple estimation as a placeholder after removing feedPlanProvider
-    totalFeed += pond.seedCount * 0.0005 * currentDoc;
+    // Sum actual logged feed for this pond from feedHistoryProvider
+    final pondLogs = feedHistory[pond.id] ?? [];
+    totalFeed += pondLogs.fold(0.0, (sum, log) => sum + log.total);
   }
 
   final double avgGrowth = pondCount > 0 ? totalGrowthRate / pondCount : 0;

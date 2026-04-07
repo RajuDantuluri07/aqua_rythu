@@ -1,15 +1,12 @@
 import '../../core/utils/logger.dart';
 import '../../services/pond_service.dart';
-import '../../services/farm_service.dart';
-import '../../features/supplements/screens/supplement_item.dart';
 import '../../core/enums/tray_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
-import '../../services/pond_service.dart';
 import '../../services/feed_service.dart';
-import '../../services/feed_plan_generator.dart';
+import '../../core/engines/feed_plan_generator.dart';
 
 /// =======================
 /// STATE
@@ -166,6 +163,12 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       isFeedLoading: false,
       feedAutoRecovered: didAutoRecover,
     );
+
+    // Ensure the rolling 7-day feed window exists ahead of today (fire-and-forget)
+    final currentDoc = ref.read(docProvider(pondId));
+    ensureFutureFeedExists(pondId, currentDoc).catchError((e) {
+      AppLogger.error('ensureFutureFeedExists failed on load', e);
+    });
   }
 
   /// Called by the screen after it has shown the auto-recovery notification.
@@ -178,10 +181,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     // Load today's feed data
     await loadTodayFeed(pondId);
-    
+
+    // Calculate currentFeed as sum of all loaded round amounts
+    final totalFeed = state.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
+
     state = state.copyWith(
       doc: doc,
-      currentFeed: 15.0,
+      currentFeed: totalFeed,
     );
   }
 
