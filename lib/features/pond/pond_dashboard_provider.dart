@@ -261,6 +261,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       await FeedService().markFeedPlanCompleted(feedPlanId: feedId);
     }
 
+    // Optimistic local update so UI reflects change immediately
+    final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
+    updatedStatus[round] = 'completed';
+    state = state.copyWith(roundFeedStatus: updatedStatus);
+
     if (qty > 0) {
       ref.read(feedHistoryProvider.notifier).logFeeding(
           pondId: state.selectedPond, doc: state.doc, round: round, qty: qty);

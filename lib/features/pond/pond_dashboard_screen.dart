@@ -26,6 +26,8 @@ import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:aqua_rythu/core/language/language_switcher.dart';
+import 'package:aqua_rythu/core/language/app_localizations.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -330,7 +332,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
     showDialog(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text("Select Farm"),
+        title: Text(AppLocalizations.of(context).t('select_farm')),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         children: [
           ...farmState.farms.map((farm) {
@@ -375,7 +377,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     color: Theme.of(context).primaryColor),
                 const SizedBox(width: 12),
                 Text(
-                  "Add New Farm",
+                  AppLocalizations.of(context).t('add_new_farm'),
                   style: TextStyle(
                       color: Theme.of(context).primaryColor,
                       fontWeight: FontWeight.bold),
@@ -395,7 +397,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Add New Farm"),
+        title: Text(AppLocalizations.of(context).t('add_new_farm')),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -424,7 +426,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+            child: Text(AppLocalizations.of(context).t('cancel')),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -438,7 +440,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                   );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Farm created successfully')),
+                      SnackBar(content: Text(AppLocalizations.of(context).t('farm_created'))),
                     );
                     Navigator.pop(context);
                   }
@@ -455,7 +457,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
               backgroundColor: Theme.of(context).primaryColor,
               foregroundColor: Colors.white,
             ),
-            child: const Text("Create Farm"),
+            child: Text(AppLocalizations.of(context).t('create_farm')),
           ),
         ],
       ),
@@ -535,8 +537,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
         return Scaffold(
           backgroundColor: const Color(0xFFF5F7FA),
           appBar: AppBar(
-            title: const Text("Ponds"),
+            title: Text(AppLocalizations.of(context).t('ponds')),
             centerTitle: true,
+            actions: const [
+              Padding(
+                padding: EdgeInsets.only(right: 12),
+                child: LanguageSwitcher(),
+              ),
+            ],
           ),
           bottomNavigationBar: const AppBottomBar(currentIndex: 0),
           body: SafeArea(
@@ -546,9 +554,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 children: [
                   Icon(Icons.landscape_outlined, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
-                  const Text(
-                    "No farms created",
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context).t('no_farms'),
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF64748B),
@@ -556,7 +564,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Create a farm first to add ponds",
+                    AppLocalizations.of(context).t('create_farm_first'),
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[600],
@@ -573,8 +581,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
       return Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text("Ponds"),
+          title: Text(AppLocalizations.of(context).t('ponds')),
           centerTitle: true,
+          actions: const [
+            Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: LanguageSwitcher(),
+            ),
+          ],
         ),
         bottomNavigationBar: const AppBottomBar(currentIndex: 0),
         body: SafeArea(
@@ -584,9 +598,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
               children: [
                 Icon(Icons.water_drop_outlined, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
-                const Text(
-                  "No ponds found",
-                  style: TextStyle(
+                Text(
+                  AppLocalizations.of(context).t('no_ponds'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF64748B),
@@ -594,7 +608,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Create a new pond to get started",
+                  AppLocalizations.of(context).t('create_pond_to_start'),
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -606,7 +620,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     Navigator.pushNamed(context, AppRoutes.addPond);
                   },
                   icon: const Icon(Icons.add),
-                  label: const Text("Add First Pond"),
+                  label: Text(AppLocalizations.of(context).t('add_first_pond')),
                 ),
               ],
             ),
@@ -650,7 +664,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 const Icon(Icons.water_drop_outlined,
                     size: 64, color: Colors.grey),
                 AppSpacing.hBase,
-                Text("No Ponds in ${currentFarm.name}",
+                Text("${AppLocalizations.of(context).t('no_ponds')} — ${currentFarm.name}",
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
                 AppSpacing.hM,
@@ -658,7 +672,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                   onPressed: () {
                     Navigator.pushNamed(context, AppRoutes.addPond);
                   },
-                  child: const Text("Add First Pond"),
+                  child: Text(AppLocalizations.of(context).t('add_first_pond')),
                 ),
               ],
             ),
@@ -776,64 +790,33 @@ List<SupplementItem> _getPlannedFeedSupplements(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              /// HEADER
+              /// HEADER — Language switcher (left) + ADD POND button (right)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // LEFT: Logo + App Name
-                  Row(
-                    children: [
-                      // Replaced Icon with Real Logo Asset
-                      Image.asset(
-                        'assets/images/logo.png',
-                        height: 40,
-                        errorBuilder: (c, o, s) => Icon(Icons.water_drop,
-                            color: Theme.of(context).primaryColor, size: 32),
-                      ),
-                      AppSpacing.wM,
-                      const Text(
-                        "AquaRythu",
-                        style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5),
-                      ),
-                    ],
-                  ),
-
-                  // RIGHT: Farm Selector
-                  InkWell(
-                    onTap: () => _showFarmSwitchDialog(farmState),
-                    borderRadius: BorderRadius.circular(30),
+                  const LanguageSwitcherDark(),
+                  GestureDetector(
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.addPond),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.base,
-                          vertical: AppSpacing.s + 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2))
-                        ],
-                        borderRadius: BorderRadius.circular(30),
+                        color: const Color(0xFF16A34A),
+                        borderRadius: BorderRadius.circular(24),
                       ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.eco_rounded,
-                              size: 16, color: Theme.of(context).primaryColor),
+                          const Icon(Icons.add, size: 16, color: Colors.white),
                           const SizedBox(width: 6),
                           Text(
-                            currentFarm?.name ?? "No Farm",
-                            style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13,
-                                color: Colors.grey.shade800),
+                            AppLocalizations.of(context).t('add_pond_btn'),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
                           ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.keyboard_arrow_down_rounded,
-                              size: 18, color: Colors.grey.shade400),
                         ],
                       ),
                     ),
@@ -841,7 +824,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 ],
               ),
 
-              AppSpacing.hBase,
+              const SizedBox(height: 12),
 
               /// POND TABS
               SingleChildScrollView(
@@ -871,19 +854,19 @@ List<SupplementItem> _getPlannedFeedSupplements(
                             context: context,
                             builder: (BuildContext dialogContext) {
                               return AlertDialog(
-                                title: const Text("Delete Pond?"),
+                                title: Text(AppLocalizations.of(context).t('delete_pond')),
                                 content: Text(
-                                    "Are you sure you want to delete '${pond.name}'? This action cannot be undone."),
+                                    "${AppLocalizations.of(context).t('delete_pond_confirm')} '${pond.name}'? ${AppLocalizations.of(context).t('delete_pond_warning')}"),
                                 actions: <Widget>[
                                   TextButton(
-                                    child: const Text("Cancel"),
+                                    child: Text(AppLocalizations.of(context).t('cancel')),
                                     onPressed: () =>
                                         Navigator.of(dialogContext).pop(),
                                   ),
                                   TextButton(
                                     style: TextButton.styleFrom(
                                         foregroundColor: Colors.red),
-                                    child: const Text("Delete"),
+                                    child: Text(AppLocalizations.of(context).t('delete')),
                                     onPressed: () async {
                                       if (currentFarm != null) {
                                         try {
@@ -932,44 +915,15 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       );
                     }),
 
-                    // Add Pond Button (Moved from Header)
-                    GestureDetector(
-                      onTap: () =>
-                          Navigator.pushNamed(context, AppRoutes.addPond),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.base,
-                            vertical: AppSpacing.s + 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: AppRadius.rl,
-                          border:
-                              Border.all(color: Theme.of(context).primaryColor),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.add,
-                                size: 16,
-                                color: Theme.of(context).primaryColor),
-                            const SizedBox(width: 4),
-                            Text("Pond",
-                                style: TextStyle(
-                                    color: Theme.of(context).primaryColor,
-                                    fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
 
               AppSpacing.hBase,
 
-              /// QUICK STATS STRIP
+              /// QUICK STATS CARD — SPECIES / DOC / SURVIVAL
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: AppRadius.rm,
@@ -982,211 +936,223 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 ),
                 child: Row(
                   children: [
-                    _kpi("DOC", "$currentDoc Days",
-                        Icons.calendar_today_rounded, Colors.orange),
+                    // SPECIES
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            AppLocalizations.of(context).t('species'),
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF94A3B8),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            "L. vannamei",
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     _divider(),
-                    _kpi("AREA", "${currentPond.area} Ac",
-                        Icons.straighten_rounded, Colors.blue),
+                    // DOC
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            AppLocalizations.of(context).t('doc'),
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF94A3B8),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "$currentDoc ${AppLocalizations.of(context).t('days')}",
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     _divider(),
-                    _kpi(
-                        "STOCKING",
-                        currentPond.seedCount > 0
-                            ? "${(currentPond.seedCount / 1000).toStringAsFixed(0)}K"
-                            : "--",
-                        Icons.set_meal_rounded,
-                        Colors.teal),
+                    // SURVIVAL
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            AppLocalizations.of(context).t('survival'),
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF94A3B8),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "${_estimatedSurvivalRate(currentDoc)}%",
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF16A34A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
 
-              AppSpacing.hBase,
-
-              /// TANK OPERATIONS
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _OperationButton(
-                    label: "Sampling",
-                    icon: Icons.texture, // Fishnet/mesh icon representation
-                    color: Colors.purple,
-                    onTap: () {
-                      if (isCompleted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    "Sampling is locked for completed ponds")));
-                      } else {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    SamplingScreen(pondId: selectedPond)));
-                      }
-                    },
-                  ),
-                  _OperationButton(
-                    label: "Water",
-                    icon: Icons.water_drop_rounded,
-                    color: AppColors.primary,
-                    onTap: () {
-                      if (isCompleted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text(
-                                "Water test is locked for completed ponds")));
-                      } else {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    WaterTestScreen(pondId: selectedPond)));
-                      }
-                    },
-                  ),
-                  _OperationButton(
-                    label: "Supplement",
-                    icon: Icons.science_rounded,
-                    color: Colors.indigo,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                SupplementMixScreen(pondId: selectedPond)),
-                      );
-                    },
-                  ),
-                  _OperationButton(
-                    label: "Harvest",
-                    icon: Icons.agriculture_rounded,
-                    color: AppColors.warning,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => isCompleted
-                                ? HarvestSummaryScreen(pondId: selectedPond)
-                                : HarvestScreen(pondId: selectedPond))),
-                  ),
-                  _OperationButton(
-                    label: "History",
-                    icon: Icons.history_rounded,
-                    color: Colors.teal,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                FeedHistoryScreen(pondId: selectedPond))),
-                  ),
-                ],
-              ),
-
-              AppSpacing.hBase,
+              const SizedBox(height: 12),
 
               if (isCompleted)
                 _buildCompletedDashboard(context, ref, currentPond)
               else ...[
-                /// 📊 COMBINED PLAN & SCHEDULE SECTION
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 70% Today Progress
-                      Expanded(
-                        flex: 7,
-                        child: CompactProgressBar(
-                          progress: plannedFeed == 0
-                              ? 0
-                              : (consumedFeed / plannedFeed).clamp(0, 1),
-                          totalText:
-                              "${consumedFeed.toStringAsFixed(1)} / ${plannedFeed.toStringAsFixed(1)} kg",
+                /// ── ACTION BUTTONS: Feed Schedule + Supplement Mix ─────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: AnimatedBuilder(
+                        animation: _pulseAnim,
+                        builder: (context, child) => Transform.scale(
+                          scale: _showFeedScheduleTip ? _pulseAnim.value : 1.0,
+                          child: child,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      // 30-40% Feed Schedule
-                      Expanded(
-                        flex: 4,
-                        child: AnimatedBuilder(
-                          animation: _pulseAnim,
-                          builder: (context, child) => Transform.scale(
-                            scale: _showFeedScheduleTip ? _pulseAnim.value : 1.0,
-                            child: child,
-                          ),
-                          child: GestureDetector(
-                            onTap: () {
-                              // Dismiss tip on tap
-                              if (_showFeedScheduleTip) {
-                                _pulseController.stop();
-                                setState(() => _showFeedScheduleTip = false);
-                              }
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      FeedScheduleScreen(pondId: selectedPond),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              decoration: BoxDecoration(
+                        child: GestureDetector(
+                          onTap: () {
+                            if (_showFeedScheduleTip) {
+                              _pulseController.stop();
+                              setState(() => _showFeedScheduleTip = false);
+                            }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FeedScheduleScreen(pondId: selectedPond),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
                                 color: _showFeedScheduleTip
-                                    ? AppColors.primary.withOpacity(0.08)
-                                    : Colors.white,
-                                borderRadius: AppRadius.rm,
-                                border: Border.all(
-                                  color: _showFeedScheduleTip
-                                      ? AppColors.primary
-                                      : AppColors.border,
-                                  width: _showFeedScheduleTip ? 1.8 : 1.0,
+                                    ? AppColors.primary
+                                    : AppColors.primary.withOpacity(0.4),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
                                 ),
-                                boxShadow: _showFeedScheduleTip
-                                    ? [
-                                        BoxShadow(
-                                          color: AppColors.primary.withOpacity(0.30),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4),
-                                        )
-                                      ]
-                                    : [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.02),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 2),
-                                        )
-                                      ],
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.calendar_month_rounded,
-                                      color: _showFeedScheduleTip
-                                          ? AppColors.primary
-                                          : AppColors.primary,
-                                      size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "FEED SCHEDULE",
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w900,
-                                        color: _showFeedScheduleTip
-                                            ? AppColors.primary
-                                            : AppColors.textSecondary),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.calendar_month_rounded,
+                                    size: 18, color: AppColors.primary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  AppLocalizations.of(context).t('feed_schedule'),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => SupplementMixScreen(pondId: selectedPond),
+                          ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.4),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.science_rounded,
+                                  size: 18, color: AppColors.primary),
+                              const SizedBox(width: 8),
+                              Text(
+                                AppLocalizations.of(context).t('supplement_mix'),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
 
-                AppSpacing.hM,
+                const SizedBox(height: 16),
+
+                /// ── TODAY'S PROGRESS (Smart Feed only: DOC > 30) ──────────────
+                if (isSmartFeedEnabled) ...[
+                  _buildTodayProgressCard(
+                    consumedFeed: consumedFeed,
+                    plannedFeed: plannedFeed,
+                    completedRounds: dashboardState.roundFeedStatus.values
+                        .where((s) => s == 'completed')
+                        .length,
+                    totalRounds: 4,
+                    fcrTrend: fcrTrend,
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 if (currentDoc > 120) ...[
                   Container(
-                    margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade50,
@@ -1199,39 +1165,17 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "Extended Culture Mode (DOC > 120). Efficiency may reduce - increase sampling frequency.",
+                            AppLocalizations.of(context).t('extended_culture'),
                             style: TextStyle(color: Colors.orange.shade800, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  AppSpacing.hS,
+                  const SizedBox(height: 12),
                 ],
 
-                /// TRAY INFO HINT (Moved)
-                Container(
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.base, vertical: 2),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline,
-                          size: 14, color: AppColors.textTertiary),
-                      AppSpacing.wS,
-                      Text(
-                        _getTrayInfoText(currentDoc <= 30 ? 'blind' : 'smart'),
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textTertiary,
-                            fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-
-                AppSpacing.hS,
-
-                /// DAILY TASKS TIMELINE
+                /// ── DAILY TASKS TIMELINE ─────────────────────────────────────
                 if (dashboardState.isFeedLoading)
                   const Center(
                     child: Padding(
@@ -1239,9 +1183,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       child: CircularProgressIndicator(),
                     ),
                   )
-                // DOC ≤ 30 with no plan → show empty state (plan should auto-generate)
-                // DOC > 30 → always show timeline (amounts come from feed schedule;
-                //   if not set yet, show 0.0 with edit button so farmer can fill in)
                 else if (dashboardState.roundFeedAmounts.isEmpty && currentDoc <= 30)
                   Center(
                     child: Padding(
@@ -1250,9 +1191,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         children: [
                           Icon(Icons.event_busy_rounded, size: 48, color: Colors.grey[400]),
                           const SizedBox(height: 12),
-                          const Text(
-                            "No feed plan for today",
-                            style: TextStyle(
+                          Text(
+                            AppLocalizations.of(context).t('no_feed_plan'),
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textSecondary,
@@ -1276,12 +1217,87 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         activePlansToday: activePlansToday,
                         todaySupplementLogs: todaySupplementLogs,
                         selectedPond: selectedPond,
-                        smartFeedOutput: null, // Smart feed engine disabled - MVP
+                        smartFeedOutput: null,
                         currentPond: currentPond,
                         isSmartFeedEnabled: isSmartFeedEnabled,
                       ),
                     ],
                   ),
+
+                const SizedBox(height: 16),
+
+                /// ── TANK OPERATIONS ───────────────────────────────────────────
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    AppLocalizations.of(context).t('tank_operations'),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF64748B),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _TankOpButton(
+                      label: AppLocalizations.of(context).t('sampling'),
+                      icon: Icons.texture,
+                      iconColor: Colors.purple,
+                      badge: _samplingBadge(currentDoc),
+                      badgeColor: const Color(0xFFDC2626),
+                      onTap: () {
+                        if (isCompleted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(AppLocalizations.of(context).t('sampling_locked'))));
+                        } else {
+                          Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => SamplingScreen(pondId: selectedPond)));
+                        }
+                      },
+                    ),
+                    _TankOpButton(
+                      label: AppLocalizations.of(context).t('water_test'),
+                      icon: Icons.water_drop_rounded,
+                      iconColor: AppColors.primary,
+                      badge: "Today",
+                      badgeColor: const Color(0xFF16A34A),
+                      onTap: () {
+                        if (isCompleted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(AppLocalizations.of(context).t('water_test_locked'))));
+                        } else {
+                          Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => WaterTestScreen(pondId: selectedPond)));
+                        }
+                      },
+                    ),
+                    _TankOpButton(
+                      label: AppLocalizations.of(context).t('harvest'),
+                      icon: Icons.agriculture_rounded,
+                      iconColor: AppColors.warning,
+                      badge: "DOC $currentDoc",
+                      badgeColor: const Color(0xFF64748B),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => isCompleted
+                                  ? HarvestSummaryScreen(pondId: selectedPond)
+                                  : HarvestScreen(pondId: selectedPond))),
+                    ),
+                    _TankOpButton(
+                      label: AppLocalizations.of(context).t('history'),
+                      icon: Icons.history_rounded,
+                      iconColor: Colors.teal,
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => FeedHistoryScreen(pondId: selectedPond))),
+                    ),
+                  ],
+                ),
               ],
             ],
           ),
@@ -1367,15 +1383,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
     timelineItems.sort((a, b) =>
         (a['sortTime'] as DateTime).compareTo(b['sortTime'] as DateTime));
 
-    return timelineItems.asMap().entries.map<Widget>((entry) {
-      final index = entry.key;
-      final itemData = entry.value;
+    return timelineItems.map<Widget>((itemData) {
       final bool isFeed = itemData['type'] == 'feed';
 
-      Color timelineColor;
       Widget card;
-      FeedRoundState? _feedDotState; // only set for feed items
-      bool _feedPendingTray = false;
 
       if (isFeed) {
         // ── Feed round card (unified for all DOCs) ─────────────────────
@@ -1407,11 +1418,12 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 ? FeedRoundState.current
                 : FeedRoundState.upcoming;
 
-        _feedDotState = cardState;
-        _feedPendingTray = isPendingTray;
-        timelineColor = (cardState == FeedRoundState.done || cardState == FeedRoundState.current)
-            ? const Color(0xFF22C55E)
-            : const Color(0xFFCBD5E1);
+        // First upcoming round after current = "NEXT"
+        final int currentRound = feedDoneMap.entries
+            .where((e) => !e.value)
+            .map((e) => e.key)
+            .fold<int>(0, (m, r) => m == 0 ? r : (r < m ? r : m));
+        final bool isNext = cardState == FeedRoundState.upcoming && round == currentRound + 1;
 
         // Supplements: applied for done rounds, planned for others
         final appliedSupplements = _getAppliedFeedSupplements(round, todaySupplementLogs);
@@ -1431,6 +1443,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
           isPendingTray: isPendingTray,
           trayStatuses: thisRoundLog?.trays,
           supplements: supplements,
+          isSmartFeed: isSmartFeedEnabled,
           // MARK AS FED: always available on the current round, for all DOCs
           onMarkDone: isCurrent
               ? () {
@@ -1462,13 +1475,12 @@ List<SupplementItem> _getPlannedFeedSupplements(
               : null,
           // LOG TRAY CHECK: only after feed is marked done (DOC > 30, tray not yet logged)
           onLogTray: isPendingTray ? () => openTray(round, false) : null,
+          isNext: isNext,
         );
       } else {
         final log = itemData['log'] as SupplementLog?;
         final plan = itemData['plan'] as Supplement?;
         final isApplied = log != null;
-        timelineColor =
-            isApplied ? const Color(0xFF10B981) : AppColors.primary;
 
         final scheduledAt = plan != null
             ? _waterPlanScheduleForDay(plan, today)
@@ -1514,50 +1526,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
         );
       }
 
-      // dotState is set inside the isFeed block above; null for water items
-      final FeedRoundState? dotState = isFeed ? _feedDotState : null;
-
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Timeline column (dot + connector line) ──────────────────
-            SizedBox(
-              width: 36,
-              child: Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  // Vertical connector line
-                  if (index < timelineItems.length - 1)
-                    Positioned(
-                      top: 24,
-                      bottom: -4,
-                      child: Container(width: 2, color: const Color(0xFFE2E8F0)),
-                    ),
-                  // Dot
-                  if (dotState != null)
-                    buildTimelineDot(dotState, isPendingTray: _feedPendingTray)
-                  else
-                    // Water / supplement dot
-                    Container(
-                      margin: const EdgeInsets.only(top: 4),
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: timelineColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // ── Card ───────────────────────────────────────────────────
-            Expanded(child: card),
-          ],
-        ),
-      );
+      return card;
     }).toList();
   }
 
@@ -1625,17 +1594,132 @@ List<SupplementItem> _getPlannedFeedSupplements(
     return Container(width: 1, height: 24, color: Colors.grey.shade300);
   }
 
-  String _getTrayInfoText(String feedMode) {
-    switch (feedMode) {
-      case 'blind':
-        return "Blind Feed (Tray optional)";
-      case 'transitional':
-        return "Transitional Feed (Tray optional)";
-      case 'smart':
-        return "Smart Feed Active (Tray mandatory)";
-      default:
-        return "Standard Feed";
-    }
+  // ── Estimated survival rate based on DOC ──────────────────────────
+  int _estimatedSurvivalRate(int doc) {
+    if (doc <= 5) return 99;
+    if (doc <= 10) return 98;
+    if (doc <= 20) return 95;
+    if (doc <= 30) return 92;
+    if (doc <= 60) return 88;
+    if (doc <= 90) return 84;
+    return 80;
+  }
+
+  // ── Sampling badge text ───────────────────────────────────────────
+  String? _samplingBadge(int doc) {
+    // Suggest sampling every 7 days; show "Due in Xd" when approaching
+    final daysSinceLast = doc % 7;
+    final daysUntilNext = 7 - daysSinceLast;
+    if (daysUntilNext <= 2) return "Due in ${daysUntilNext}d";
+    return null;
+  }
+
+  // ── TODAY'S PROGRESS card (Smart Feed only) ───────────────────────
+  Widget _buildTodayProgressCard({
+    required double consumedFeed,
+    required double plannedFeed,
+    required int completedRounds,
+    required int totalRounds,
+    required double fcrTrend,
+  }) {
+    final progress = plannedFeed == 0 ? 0.0 : (consumedFeed / plannedFeed).clamp(0.0, 1.0);
+    final isOnTrack = progress >= (completedRounds / totalRounds) - 0.1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Top row: Feed Mode badge  |  rounds  |  status icon ────────
+          Row(
+            children: [
+              // Feed Mode badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: const Text(
+                  "FEED MODE",
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF2563EB),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              // Rounds counter
+              Text(
+                "$completedRounds / $totalRounds rounds",
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF16A34A),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // On-track icon
+              Icon(
+                isOnTrack ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                size: 15,
+                color: isOnTrack ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          // ── Progress bar + kg inline ────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 7,
+                    backgroundColor: const Color(0xFFE2E8F0),
+                    color: isOnTrack ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: "${consumedFeed.toStringAsFixed(1)}",
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    TextSpan(
+                      text: " / ${plannedFeed.toStringAsFixed(0)} kg",
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCompletedDashboard(
@@ -2048,17 +2132,23 @@ class CompactProgressBar extends StatelessWidget {
   }
 }
 
-class _OperationButton extends StatelessWidget {
+/// ── Tank Operation Button (new 4-item design) ──────────────────────────────
+
+class _TankOpButton extends StatelessWidget {
   final String label;
   final IconData icon;
-  final Color color;
+  final Color iconColor;
+  final String? badge;
+  final Color? badgeColor;
   final VoidCallback onTap;
 
-  const _OperationButton({
+  const _TankOpButton({
     required this.label,
     required this.icon,
-    required this.color,
+    required this.iconColor,
     required this.onTap,
+    this.badge,
+    this.badgeColor,
   });
 
   @override
@@ -2066,28 +2156,80 @@ class _OperationButton extends StatelessWidget {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                        color: color.withOpacity(0.15),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4))
-                  ]),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.grey.shade700)),
-          ],
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon with optional badge
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: iconColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: iconColor, size: 22),
+                  ),
+                  if (badge != null && badgeColor == const Color(0xFFDC2626))
+                    Positioned(
+                      top: -4,
+                      right: -8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeColor,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badge!,
+                          style: const TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
+                ),
+              ),
+              if (badge != null && badgeColor != const Color(0xFFDC2626)) ...[
+                const SizedBox(height: 3),
+                Text(
+                  badge!,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: badgeColor ?? const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
