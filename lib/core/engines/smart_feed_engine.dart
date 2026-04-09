@@ -3,6 +3,7 @@ import '../utils/logger.dart';
 import '../enums/tray_status.dart';
 import '../constants/expected_abw_table.dart';
 import 'feed_plan_generator.dart';
+import 'feeding_engine_v1.dart';
 import '../../repositories/feed_repository.dart';
 
 /// Feed phase for a given DOC.
@@ -241,15 +242,16 @@ class SmartFeedEngine {
   // ── LAYER 1: TRAY FACTOR ─────────────────────────────────────────────────
 
   /// Tray factor from last 3 days average leftover %.
-  /// formula: 1.05 - (avgLeftover / 100), clamped [0.85, 1.05].
-  ///   0% leftover  → 1.05 (shrimp hungry → feed more)
-  ///  20% leftover  → 0.85 (slight overfeeding → reduce)
-  ///  40%+ leftover → 0.85 (clamped floor)
+  /// Delegates to [FeedingEngineV1.trayFactor] — single source of truth.
+  ///   0%        → 1.1  (clean tray)
+  ///   1–10%     → 1.0  (on track)
+  ///   11–25%    → 0.9  (moderate reduction)
+  ///   > 25%     → 0.75 (heavy leftover)
   /// No data → 1.0 (no adjustment).
   static double calculateTrayFactor(List<double> last3DaysLeftover) {
     if (last3DaysLeftover.isEmpty) return 1.0;
     final avg = last3DaysLeftover.reduce((a, b) => a + b) / last3DaysLeftover.length;
-    return (1.05 - (avg / 100)).clamp(0.85, 1.05);
+    return FeedingEngineV1.trayFactor(avg);
   }
 
   // ── LAYER 1.5: SAMPLING FACTOR ───────────────────────────────────────────
@@ -360,14 +362,9 @@ class SmartFeedEngine {
     return 1.0;
   }
 
-  /// FCR factor — rewards efficient conversion, penalises waste.
-  static double getFCRFactor(double fcr) {
-    if (fcr < 1.2) return 1.05; // Efficient → allow more
-    if (fcr > 1.6) return 0.95; // Wasteful → restrict
-    return 1.0;
-  }
+  // getFCRFactor REMOVED — FCR caused incorrect feed reduction (totalFeed/biomassKg formula).
 
-  /// Smart factor = average of growth and FCR factors, clamped [0.9, 1.1].
+  /// Smart factor based on growth signal only, clamped [0.9, 1.1].
   /// Returns 1.0 when ABW data is unavailable (safe default).
   static double getSmartFactor({
     required int doc,
@@ -381,16 +378,7 @@ class SmartFeedEngine {
     if (expectedAbw <= 0) return 1.0;
 
     final growthFactor = getGrowthFactor(abw / expectedAbw);
-
-    // FCR: total feed over biomass
-    final totalFeed = feedHistory.fold(0.0, (s, v) => s + v);
-    final biomassKg = seedCount * abw / 1000.0;
-    if (biomassKg < 1.0 || totalFeed < 0.1) return 1.0;
-
-    final fcrFactor = getFCRFactor(totalFeed / biomassKg);
-
-    // FCR weighted higher (0.6) — more reliable signal than growth alone
-    return (growthFactor * 0.4 + fcrFactor * 0.6).clamp(0.9, 1.1);
+    return growthFactor.clamp(0.9, 1.1);
   }
 
   // ── LAYER 3: SAFETY GUARDRAILS (Option-A) ────────────────────────────────

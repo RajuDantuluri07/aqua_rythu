@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/logger.dart';
 import '../../services/pond_service.dart';
 import '../../services/tray_service.dart';
@@ -422,6 +423,34 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     ).catchError((e) {
       AppLogger.error('Failed to persist tray log for pond $pondId', e);
     });
+  }
+
+  // =========================================================
+  // 🦐 MORTALITY — UPDATE STOCK COUNT
+  // =========================================================
+
+  /// Updates the current stocking density after mortality is recorded.
+  ///
+  /// [newCount] is the updated number of live shrimp.
+  /// Persists to `ponds.seed_count` so the next feed calculation
+  /// uses the corrected density immediately.
+  Future<void> updateStockCount(int newCount) async {
+    final pondId = state.selectedPond;
+    if (pondId.isEmpty) return;
+
+    try {
+      await Supabase.instance.client
+          .from('ponds')
+          .update({'seed_count': newCount})
+          .eq('id', pondId);
+
+      AppLogger.info('Stock count updated: pond=$pondId newCount=$newCount');
+
+      // Reload today's feed so amounts reflect the new density
+      await loadTodayFeed(pondId);
+    } catch (e) {
+      AppLogger.error('updateStockCount failed for pond $pondId', e);
+    }
   }
 }
 

@@ -1,17 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_constants.dart';
-import 'engine_constants.dart';
+import 'feeding_engine_v1.dart';
 import '../utils/logger.dart';
 
 final supabase = Supabase.instance.client;
 
 /// Generates a feeding schedule for a range of DOCs (1–120).
 ///
-/// DOC ≤ 30 → blind feeding using DB base rates + normalization.
-/// DOC > 30 → biomass-based smart feeding using FeedEngineConstants.
-///
-/// Safe to call anytime — skips ranges that already have rows.
-
+/// Uses [FeedingEngineV1.calculateFeed] as the single source of truth.
+/// No biomass, no 235 normalization, no FCR.
+/// Tray factor defaults to 1.0 during plan generation (no leftover data yet).
 Future<void> generateFeedPlan({
   required String pondId,
   required int startDoc,
@@ -19,13 +17,15 @@ Future<void> generateFeedPlan({
   required int stockingCount,
   required double pondArea,
   required DateTime stockingDate,
+  String stockingType = 'nursery',
 }) async {
   if (startDoc > endDoc) return;
   final clampedEnd = endDoc.clamp(startDoc, 120);
 
-  AppLogger.info('Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd (will skip already-existing DOCs)');
+  AppLogger.info(
+      'Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd '
+      'type=$stockingType density=$stockingCount');
 
-  // Find which DOCs already have rows — skip only those, not the whole range.
   final existingRows = await supabase
       .from('feed_rounds')
       .select('doc')
@@ -39,84 +39,19 @@ Future<void> generateFeedPlan({
 
   final batch = <Map<String, dynamic>>[];
 
-  // ── BLIND FEEDING (DOC 1–30) ────────────────────────────────────────────
-  if (startDoc <= 30) {
-    final blindEnd = clampedEnd.clamp(startDoc, 30);
-    await _addBlindFeedRows(
-      batch: batch,
-      pondId: pondId,
-      startDoc: startDoc,
-      endDoc: blindEnd,
-      stockingCount: stockingCount,
-      pondArea: pondArea,
-      existingDocs: existingDocs,
+  for (int doc = startDoc; doc <= clampedEnd; doc++) {
+    if (existingDocs.contains(doc)) continue;
+
+    final totalFeed = FeedingEngineV1.calculateFeed(
+      doc: doc,
+      stockingType: stockingType,
+      density: stockingCount,
+      leftoverPercent: null, // no tray data during plan generation
     );
-  }
 
-  // ── SMART FEEDING (DOC 31–120) ──────────────────────────────────────────
-  if (clampedEnd > 30) {
-    final smartStart = startDoc > 30 ? startDoc : 31;
-    _addSmartFeedRows(
-      batch: batch,
-      pondId: pondId,
-      startDoc: smartStart,
-      endDoc: clampedEnd,
-      stockingCount: stockingCount,
-      existingDocs: existingDocs,
-    );
-  }
-
-  if (batch.isNotEmpty) {
-    try {
-      await supabase.from('feed_rounds').insert(batch);
-      AppLogger.info('Inserted ${batch.length} feed rounds for pond $pondId (DOC $startDoc–$clampedEnd)');
-    } catch (e) {
-      AppLogger.error('Feed plan insert failed for pond $pondId', e);
-    }
-  }
-}
-
-// ── BLIND FEED ROWS (DOC ≤ 30) ──────────────────────────────────────────────
-
-Future<void> _addBlindFeedRows({
-  required List<Map<String, dynamic>> batch,
-  required String pondId,
-  required int startDoc,
-  required int endDoc,
-  required int stockingCount,
-  required double pondArea,
-  required Set<int> existingDocs,
-}) async {
-  final baseRatesData = await supabase
-      .from('feed_base_rates')
-      .select('doc, base_feed_amount')
-      .gte('doc', startDoc)
-      .lte('doc', endDoc);
-
-  AppLogger.debug('Base rates loaded: ${baseRatesData.length} entries for pond $pondId');
-
-  final remoteRates = <int, double>{
-    for (final item in baseRatesData)
-      item['doc'] as int: (item['base_feed_amount'] as num).toDouble()
-  };
-
-  // Normalize to 235 kg baseline for 100K PL / 1 Acre over the full blind phase
-  double rawTotal = 0;
-  for (int doc = startDoc; doc <= endDoc; doc++) {
-    rawTotal += remoteRates[doc] ?? (2.0 + doc * 0.1);
-  }
-  final normFactor = rawTotal > 0 ? 235.0 / rawTotal : 1.0;
-  final scaleFactor = (stockingCount / 100000) * (pondArea / 1.0);
-
-  for (int doc = startDoc; doc <= endDoc; doc++) {
-    if (existingDocs.contains(doc)) continue; // Already generated — skip
-    final baseFeed = remoteRates[doc] ?? (2.0 + doc * 0.1);
-    final totalFeed = baseFeed * normFactor * scaleFactor;
     final feedType = getFeedType(doc);
-    // Always use the 4-round config — splits handle which rounds get qty > 0
     final config = getFeedConfig(doc);
 
-    // Always write exactly 4 rows per DOC
     for (int round = 1; round <= 4; round++) {
       final roundFeed = config.quantityForRound(round - 1, totalFeed);
       batch.add({
@@ -130,47 +65,17 @@ Future<void> _addBlindFeedRows({
       });
     }
   }
-}
 
-// ── SMART FEED ROWS (DOC > 30) ───────────────────────────────────────────────
-
-void _addSmartFeedRows({
-  required List<Map<String, dynamic>> batch,
-  required String pondId,
-  required int startDoc,
-  required int endDoc,
-  required int stockingCount,
-  required Set<int> existingDocs,
-}) {
-  // Smart feeding is always DOC 31+ — always postWeekFeedConfig (4 active rounds)
-  for (int doc = startDoc; doc <= endDoc; doc++) {
-    if (existingDocs.contains(doc)) continue; // Already generated — skip
-    final totalFeed = _biomassFeedKg(doc, stockingCount);
-
-    // Always write exactly 4 rows
-    for (int round = 1; round <= 4; round++) {
-      final roundFeed = postWeekFeedConfig.quantityForRound(round - 1, totalFeed);
-      batch.add({
-        'pond_id': pondId,
-        'doc': doc,
-        'round': round,
-        'planned_amount': roundFeed,
-        'base_feed': roundFeed,
-        'feed_type': 'Smart',
-        'status': 'pending',
-      });
+  if (batch.isNotEmpty) {
+    try {
+      await supabase.from('feed_rounds').insert(batch);
+      AppLogger.info(
+          'Inserted ${batch.length} feed rounds for pond $pondId '
+          '(DOC $startDoc–$clampedEnd)');
+    } catch (e) {
+      AppLogger.error('Feed plan insert failed for pond $pondId', e);
     }
   }
-}
-
-
-/// Biomass-based daily feed in kg for a given DOC and stocking count.
-double _biomassFeedKg(int doc, int stockingCount) {
-  final survival = _interpolate(FeedEngineConstants.survivalRates, doc);
-  final abwGrams = _interpolate(FeedEngineConstants.abwTargets, doc);
-  final feedingRate = _interpolate(FeedEngineConstants.feedingRates, doc);
-  final biomassKg = stockingCount * survival * abwGrams / 1000;
-  return biomassKg * feedingRate;
 }
 
 // ── ROLLING RECOVERY ─────────────────────────────────────────────────────────
@@ -189,12 +94,11 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
         .eq('doc', tomorrow)
         .limit(1);
 
-    if (existing.isNotEmpty) return; // Already covered
+    if (existing.isNotEmpty) return;
 
-    // Fetch pond details needed for generation
     final pond = await supabase
         .from('ponds')
-        .select('seed_count, stocking_date, area, initial_feed_rounds, post_week_feed_rounds')
+        .select('seed_count, stocking_date, area, stocking_type')
         .eq('id', pondId)
         .maybeSingle();
 
@@ -212,27 +116,13 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
       stockingCount: (pond['seed_count'] as int?) ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
       stockingDate: DateTime.parse(pond['stocking_date'] as String),
+      stockingType: (pond['stocking_type'] as String?) ?? 'nursery',
     );
 
-    AppLogger.info('ensureFutureFeedExists: generated DOC $tomorrow–$lookAheadEnd for pond $pondId');
+    AppLogger.info(
+        'ensureFutureFeedExists: generated DOC $tomorrow–$lookAheadEnd '
+        'for pond $pondId');
   } catch (e) {
     AppLogger.error('ensureFutureFeedExists failed for pond $pondId', e);
   }
-}
-
-// ── INTERPOLATION HELPER ─────────────────────────────────────────────────────
-
-double _interpolate(Map<int, double> table, int doc) {
-  if (table.isEmpty) return 0.0;
-  final keys = table.keys.toList()..sort();
-  if (doc <= keys.first) return table[keys.first]!;
-  if (doc >= keys.last) return table[keys.last]!;
-  for (int i = 0; i < keys.length - 1; i++) {
-    final k1 = keys[i], k2 = keys[i + 1];
-    if (doc >= k1 && doc <= k2) {
-      final t = (doc - k1) / (k2 - k1);
-      return table[k1]! + t * (table[k2]! - table[k1]!);
-    }
-  }
-  return table[keys.last]!;
 }

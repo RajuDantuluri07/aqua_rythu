@@ -12,14 +12,19 @@ class FeedService {
     required List<double> rounds,
     required double expectedFeed,
     required double cumulativeFeed,
+    double? leftoverPercent,
+    String? stockingType,
+    int? density,
   }) async {
-    // feed_logs table: pond_id, feed_given, created_at
-    // Store total feed given; tray columns are optional
     final total = rounds.fold(0.0, (sum, r) => sum + r);
     await supabase.from('feed_logs').insert({
       'pond_id': pondId,
       'feed_given': total,
       'created_at': date.toIso8601String(),
+      'doc': doc,
+      if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
+      if (stockingType != null) 'stocking_type': stockingType,
+      if (density != null) 'density': density,
     });
   }
 

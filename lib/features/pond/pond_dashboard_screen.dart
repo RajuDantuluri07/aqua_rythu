@@ -31,6 +31,7 @@ import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
 import 'package:flutter/foundation.dart';
 import '../debug/debug_feed_screen.dart';
+import '../debug/debug_dashboard_screen.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -62,7 +63,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     _checkFeedScheduleTip();
   }
 
-  /// Secret 5-tap trigger → opens the Feed Engine Debug screen (debug builds only).
+  /// Secret 5-tap trigger → opens the Feed Engine Debug dashboard.
   void _onDebugTap(String pondId, String pondName) {
     if (!kDebugMode) return;
     _debugTapCount++;
@@ -71,8 +72,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              DebugFeedScreen(pondId: pondId, pondName: pondName),
+          builder: (_) => DebugDashboardScreen(pondId: pondId),
         ),
       );
     }
@@ -866,10 +866,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  GestureDetector(
-                    onTap: () => _onDebugTap(selectedPond, currentPond.name),
-                    child: const LanguageSwitcherDark(),
-                  ),
+                  const LanguageSwitcherDark(),
                   GestureDetector(
                     onTap: () => Navigator.pushNamed(context, AppRoutes.addPond),
                     child: Container(
@@ -997,7 +994,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
               AppSpacing.hBase,
 
               /// QUICK STATS CARD — SPECIES / DOC / SURVIVAL
-              Container(
+              /// 5-tap anywhere on this strip → opens Feed Engine Debug Dashboard
+              GestureDetector(
+                onTap: () => _onDebugTap(selectedPond, currentPond.name),
+                child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -1094,6 +1094,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                   ],
                 ),
               ),
+              ), // GestureDetector — debug 5-tap
 
               const SizedBox(height: 12),
 
