@@ -8,6 +8,7 @@ import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
 import '../../services/feed_service.dart';
 import '../../core/engines/feed_plan_generator.dart';
+import '../../core/engines/feed_plan_constants.dart';
 
 /// =======================
 /// STATE
@@ -155,6 +156,56 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       statusMap[round] = item['status'] as String? ?? 'pending';
     }
 
+    // ── Redistribution guard ─────────────────────────────────────────────────
+    // The feed schedule screen allows editing all 4 round inputs regardless of
+    // DOC. For DOC 1-7 only R1+R2 are active (config splits R3=R4=0). If a
+    // user saved non-zero amounts into R3/R4 for such a DOC, the dashboard
+    // would silently drop those rounds and underfeed. Instead, detect when
+    // inactive rounds carry feed and redistribute the full total across the
+    // active rounds proportionally (using config splits).
+    {
+      final doc = ref.read(docProvider(pond.id));
+      final config = getFeedConfig(doc);
+
+      // Active = rounds whose config split > 0 (1-based round numbers)
+      final activeRounds = <int>[];
+      for (int i = 0; i < config.splits.length; i++) {
+        if (config.splits[i] > 0) activeRounds.add(i + 1);
+      }
+
+      final totalFeed = feedMap.values.fold(0.0, (s, v) => s + v);
+      final inactiveHasAmount = feedMap.entries
+          .any((e) => !activeRounds.contains(e.key) && e.value > 0);
+
+      if (inactiveHasAmount && totalFeed > 0 && activeRounds.isNotEmpty) {
+        AppLogger.info(
+            'Redistribution triggered for pond $pondId DOC $doc: '
+            'total=${totalFeed.toStringAsFixed(2)}kg across ${activeRounds.length} active rounds');
+
+        final activeSplitTotal =
+            activeRounds.fold(0.0, (s, r) => s + config.splits[r - 1]);
+
+        for (final r in feedMap.keys.toList()) {
+          if (activeRounds.contains(r)) {
+            final proportion = config.splits[r - 1] / activeSplitTotal;
+            feedMap[r] = double.parse(
+                (totalFeed * proportion).toStringAsFixed(2));
+          } else {
+            feedMap[r] = 0.0;
+          }
+        }
+
+        // Write corrected amounts back to DB so redistribution doesn't re-trigger
+        // on every load. Uses the idMap already built from this fetch.
+        // Fire-and-forget — UI state is already correct regardless of outcome.
+        FeedService().persistCorrectedRounds(pondId, doc, feedMap, idMap)
+            .catchError((e) {
+          AppLogger.error('Redistribution write-back failed for pond $pondId', e);
+        });
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     AppLogger.debug("Loaded feed from DB: ${feedMap.entries.map((e) => 'R${e.key}:${e.value.toStringAsFixed(2)}kg(${statusMap[e.key]})').join(' | ')}");
 
     state = state.copyWith(
@@ -239,6 +290,27 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // =========================================================
 
   Future<void> markFeedDone(int round) async {
+    // Auto-skip tray for previous rounds that had feed done but no tray logged.
+    // Only applies DOC >= 15 (tray is not relevant before that).
+    final doc = state.doc;
+    bool didSkipAnyTray = false;
+    if (doc >= 15 && round > 1) {
+      for (int prev = 1; prev < round; prev++) {
+        final prevFeedDone = state.roundFeedStatus[prev] == 'completed';
+        if (prevFeedDone) {
+          // markTraySkipped is idempotent — silently no-ops if already logged
+          await TrayService().markTraySkipped(
+            pondId: state.selectedPond,
+            doc: doc,
+            roundNumber: prev,
+          ).catchError((e) {
+            AppLogger.error('Auto-skip tray failed for pond ${state.selectedPond} R$prev', e);
+          });
+          didSkipAnyTray = true;
+        }
+      }
+    }
+
     String? feedId = state.roundToFeedId[round];
     final qty = state.roundFeedAmounts[round] ?? 0.0;
 
@@ -273,6 +345,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     // 🔄 Refresh from DB → provider state → Riverpod rebuild
     await loadTodayFeed(state.selectedPond);
+
+    // If any tray was auto-skipped, refresh tray provider so UI shows skipped state
+    if (didSkipAnyTray) {
+      ref.invalidate(trayProvider(state.selectedPond));
+    }
   }
 
   // =========================================================

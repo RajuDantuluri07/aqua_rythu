@@ -7,6 +7,9 @@ class TrayLog {
   final int round;
   final List<TrayStatus> trays;
   final Map<int, List<String>>? observations;
+  /// True when the tray check was automatically skipped (farmer moved to next
+  /// round without logging). Stored as tray_statuses = ['skipped'] in DB.
+  final bool isSkipped;
 
   TrayLog({
     required this.pondId,
@@ -15,6 +18,7 @@ class TrayLog {
     required this.round,
     required this.trays,
     this.observations,
+    this.isSkipped = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -48,18 +52,23 @@ class TrayLog {
   }
 
   factory TrayLog.fromSupabase(Map<String, dynamic> row) {
+    final rawStatuses = List<String>.from(row['tray_statuses'] as List? ?? []);
+    final skipped = rawStatuses.length == 1 && rawStatuses.first == 'skipped';
     return TrayLog(
       pondId: row['pond_id'],
       time: DateTime.parse(row['date']),
       doc: row['doc'] ?? 0,
       round: row['round_number'] ?? 1,
-      trays: (row['tray_statuses'] as List).map((e) {
-        try {
-          return TrayStatus.values.byName(e as String);
-        } catch (_) {
-          return TrayStatus.partial;
-        }
-      }).toList(),
+      isSkipped: skipped,
+      trays: skipped
+          ? [] // skipped logs carry no tray data
+          : rawStatuses.map((e) {
+              try {
+                return TrayStatus.values.byName(e);
+              } catch (_) {
+                return TrayStatus.partial;
+              }
+            }).toList(),
       observations: (row['observations'] as Map<String, dynamic>?)?.map(
         (k, v) => MapEntry(int.parse(k), List<String>.from(v as List)),
       ),

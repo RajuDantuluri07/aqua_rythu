@@ -8,32 +8,49 @@ import '../../core/utils/logger.dart';
 class AppAuthState {
   final bool isAuthenticated;
   final bool isLoading;
+  /// True while the initial session check is in progress (cold start / app resume).
+  /// AuthGate should show a splash screen until this is false.
+  final bool isCheckingSession;
   final String? errorMessage;
   final String? email;
   const AppAuthState({
     this.isAuthenticated = false,
     this.isLoading = false,
+    this.isCheckingSession = true,
     this.errorMessage,
     this.email,
   });
-  AppAuthState copyWith({bool? isAuthenticated, bool? isLoading,
-      String? errorMessage, String? email, bool clearError = false}) {
+  AppAuthState copyWith({
+    bool? isAuthenticated,
+    bool? isLoading,
+    bool? isCheckingSession,
+    String? errorMessage,
+    String? email,
+    bool clearError = false,
+  }) {
     return AppAuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       isLoading: isLoading ?? this.isLoading,
+      isCheckingSession: isCheckingSession ?? this.isCheckingSession,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       email: email ?? this.email,
     );
   }
 }
 
-String _friendlyAuthError(Object e) {
+enum _AuthFlow { email, otp }
+
+String _friendlyAuthError(Object e, {_AuthFlow flow = _AuthFlow.email}) {
   final msg = e.toString().toLowerCase();
   if (msg.contains('invalid login credentials') || msg.contains('invalid_credentials')) {
-    return 'Wrong phone number or OTP. Please try again.';
+    return flow == _AuthFlow.otp
+        ? 'Wrong phone number or OTP. Please try again.'
+        : 'Incorrect email or password. Please try again.';
   }
   if (msg.contains('user already registered') || msg.contains('already been registered')) {
-    return 'This phone number is already registered. Please log in.';
+    return flow == _AuthFlow.otp
+        ? 'This phone number is already registered. Please log in.'
+        : 'This email is already registered. Please log in.';
   }
   if (msg.contains('otp') || msg.contains('token') || msg.contains('expired')) {
     return 'OTP expired or invalid. Please request a new one.';
@@ -72,7 +89,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       }
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e, flow: _AuthFlow.email));
       return false;
     }
   }
@@ -94,43 +111,44 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       }
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e, flow: _AuthFlow.email));
       return false;
     }
   }
 
   Future<void> checkSession() async {
-    final session = _supabase.auth.currentSession;
-    final isLoggedIn = session != null;
-    
-    if (isLoggedIn) {
-      final userId = session.user.id;
+    // isCheckingSession starts true; always clear it when done.
+    try {
+      final session = _supabase.auth.currentSession;
+      final isLoggedIn = session != null;
 
-      // ✅ Sync existing user on session restore
-      if (userId.isNotEmpty) {
-        try {
-          await _syncUserRecord(session.user);
-
-          // ✅ Sync farms for returning users
-          await ref.read(farmProvider.notifier).loadFarms();
-
-          // ✅ Load feed history for all ponds immediately after farms load
-          final farmState = ref.read(farmProvider);
-          final pondIds = farmState.farms
-              .expand((f) => f.ponds)
-              .map((p) => p.id)
-              .toList();
-          await ref.read(feedHistoryProvider.notifier).loadHistoryForPonds(pondIds);
-        } catch (e) {
-          AppLogger.error('Session sync failed', e);
+      if (isLoggedIn) {
+        final userId = session.user.id;
+        if (userId.isNotEmpty) {
+          try {
+            await _syncUserRecord(session.user);
+            await ref.read(farmProvider.notifier).loadFarms();
+            final farmState = ref.read(farmProvider);
+            final pondIds = farmState.farms
+                .expand((f) => f.ponds)
+                .map((p) => p.id)
+                .toList();
+            await ref.read(feedHistoryProvider.notifier).loadHistoryForPonds(pondIds);
+          } catch (e) {
+            AppLogger.error('Session sync failed', e);
+          }
         }
       }
+
+      state = state.copyWith(
+        isAuthenticated: isLoggedIn,
+        isCheckingSession: false,
+        email: session?.user.email,
+      );
+    } catch (e) {
+      AppLogger.error('checkSession failed', e);
+      state = state.copyWith(isAuthenticated: false, isCheckingSession: false);
     }
-    
-    state = state.copyWith(
-      isAuthenticated: isLoggedIn,
-      email: session?.user.email,
-    );
   }
 
   Future<void> _syncUserRecord(User user) async {
@@ -146,14 +164,19 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           'id': user.id,
           'name': '',
           'phone': '',
+          'email': user.email ?? '',
           'created_at': DateTime.now().toIso8601String(),
         });
         AppLogger.info('User record synced');
       } else {
-        // Update email if it changed
-        await _supabase.from('profiles').update({
-          'email': user.email,
-        }).eq('id', user.id);
+        // Update email if it changed (guard: email column may not exist yet)
+        try {
+          await _supabase.from('profiles').update({
+            'email': user.email ?? '',
+          }).eq('id', user.id);
+        } catch (e) {
+          AppLogger.error('Profile email update skipped (column may be missing)', e);
+        }
       }
 
       // Update userProvider
@@ -174,7 +197,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       state = state.copyWith(isLoading: false);
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e, flow: _AuthFlow.email));
       return false;
     }
   }
@@ -190,7 +213,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       await _supabase.auth.signInWithOtp(phone: phone);
       state = state.copyWith(isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e, flow: _AuthFlow.otp));
     }
   }
 
@@ -209,7 +232,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         state = state.copyWith(isLoading: false, errorMessage: 'Verification failed. Please try again.');
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e, flow: _AuthFlow.otp));
     }
   }
 }

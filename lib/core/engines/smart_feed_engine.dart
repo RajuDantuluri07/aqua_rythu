@@ -582,8 +582,11 @@ class SmartFeedEngine {
   }
 
   /// Converts a list of tray status strings to a single leftover %.
+  /// 'skipped' → 0.0 (neutral: engine uses trayFactor = 1.0, no adjustment).
   static double _statusesToLeftoverPct(List<String> statuses) {
     if (statuses.isEmpty) return 0.0;
+    // Skipped tray check — treat as no information, use neutral factor
+    if (statuses.length == 1 && statuses.first == 'skipped') return 0.0;
     int full = 0, empty = 0;
     for (final s in statuses) {
       if (s == 'full') full++;

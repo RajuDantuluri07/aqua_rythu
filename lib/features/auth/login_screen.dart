@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_provider.dart';
 import 'forgot_password_dialog.dart';
@@ -18,7 +17,6 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
   bool _isLogin = true;
 
   @override
@@ -29,6 +27,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    // Guard: don't submit while a request is already in flight
+    if (ref.read(authProvider).isLoading) return;
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -46,25 +47,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     AppLogger.debug("Auth: sign-in started");
-    setState(() => _isLoading = true);
     final authNotifier = ref.read(authProvider.notifier);
-    
-    _isLogin 
+
+    _isLogin
         ? await authNotifier.signIn(email, password)
         : await authNotifier.signUp(email, password);
 
     final user = Supabase.instance.client.auth.currentUser;
-    AppLogger.debug("Auth: current user id=${user?.id}");
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    AppLogger.debug("Auth: user after sign-in: ${user?.id ?? 'null'}");
+    // Navigation is handled declaratively by AuthGate — do not push here.
   }
 
   @override
   Widget build(BuildContext context) {
+    // Show errors only — navigation is owned by AuthGate (declarative).
     ref.listen<AppAuthState>(authProvider, (previous, next) {
-      if (next.errorMessage != null) {
+      if (next.errorMessage != null &&
+          next.errorMessage != previous?.errorMessage) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.errorMessage!),
@@ -72,11 +71,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         );
       }
-      if (next.isAuthenticated && (previous == null || !previous.isAuthenticated)) {
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (route) => false);
-      }
     });
 
+    final authState = ref.watch(authProvider);
+    final isLoading = authState.isLoading;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -140,8 +138,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading
+                    onPressed: isLoading ? null : _handleLogin,
+                    child: isLoading
                         ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                         : Text(_isLogin ? "LOGIN" : "SIGN UP"),
                   ),

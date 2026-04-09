@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/feed_service.dart';
 import '../../core/utils/logger.dart';
+import '../../core/engines/feed_plan_constants.dart';
 
 class FeedDayPlan {
   final int doc;
@@ -110,12 +111,20 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
         }
       }
 
-      final loadedDays = groupedData.entries
-          .map((entry) => FeedDayPlan(
-                doc: entry.key,
-                rounds: entry.value,
-              ))
-          .toList()
+      // Zero out any amounts stored in rounds that are inactive for their DOC.
+      // This keeps the provider state clean so the schedule screen shows 0.0
+      // for disabled cells, and Save cannot re-persist stale inactive amounts.
+      final loadedDays = groupedData.entries.map((entry) {
+        final doc = entry.key;
+        final config = getFeedConfig(doc);
+        final rounds = List<double>.from(entry.value);
+        for (int i = 0; i < rounds.length; i++) {
+          if (i >= config.splits.length || config.splits[i] == 0.0) {
+            rounds[i] = 0.0;
+          }
+        }
+        return FeedDayPlan(doc: doc, rounds: rounds);
+      }).toList()
         ..sort((a, b) => a.doc.compareTo(b.doc));
 
       state = state.copyWith(days: loadedDays, isLoading: false);

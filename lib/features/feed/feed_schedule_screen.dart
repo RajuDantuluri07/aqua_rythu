@@ -4,6 +4,7 @@ import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
 import '../../services/pond_service.dart';
+import '../../core/engines/feed_plan_constants.dart';
 import 'feed_schedule_provider.dart';
 class FeedScheduleScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -172,10 +173,16 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                               ),
                               child: Column(
                                 children: feedScheduleState.days.asMap().entries.map((entry) {
+                                  final config = getFeedConfig(entry.value.doc);
+                                  final activeIndices = <int>{
+                                    for (int i = 0; i < config.splits.length; i++)
+                                      if (config.splits[i] > 0) i
+                                  };
                                   return _FeedRow(
                                     pondId: widget.pondId,
                                     day: entry.value,
                                     index: entry.key,
+                                    activeRoundIndices: activeIndices,
                                     isToday: entry.value.doc == currentDoc,
                                   );
                                 }).toList(),
@@ -354,7 +361,15 @@ class _FeedRow extends ConsumerStatefulWidget {
   final FeedDayPlan day;
   final int index;
   final bool isToday;
-  const _FeedRow({required this.pondId, required this.day, required this.index, this.isToday = false});
+  /// Which round indices (0-based) are active for this DOC.
+  final Set<int> activeRoundIndices;
+  const _FeedRow({
+    required this.pondId,
+    required this.day,
+    required this.index,
+    required this.activeRoundIndices,
+    this.isToday = false,
+  });
 
   @override
   ConsumerState<_FeedRow> createState() => _FeedRowState();
@@ -389,6 +404,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   }
 
   void _onChanged(int index) {
+    if (!widget.activeRoundIndices.contains(index)) return; // inactive round — ignore
     final val = double.tryParse(_controllers[index].text) ?? 0;
     ref.read(feedScheduleProvider.notifier).updateFeed(widget.index, index, val);
   }
@@ -404,8 +420,10 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   @override
   Widget build(BuildContext context) {
     // Optimized: widget.day is already the updated object from parent
-    // Force recalculation of row total from rounds to ensure it always matches displayed round values
-    final total = widget.day.rounds.fold(0.0, (sum, r) => sum + r);
+    // Total = only active rounds; inactive rounds are always 0 and not shown.
+    final total = widget.day.rounds.asMap().entries
+        .where((e) => widget.activeRoundIndices.contains(e.key))
+        .fold(0.0, (sum, e) => sum + e.value);
     final isEvenRow = widget.index.isEven;
     final backgroundColor = widget.isToday 
         ? const Color(0xFFF0FDF4) // Light green highlight for today
@@ -453,7 +471,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
           ),
           // Dynamically build cells based on controllers (rounds)
           for (int i = 0; i < _controllers.length; i++)
-            _buildInputCell(_controllers[i], i),
+            _buildInputCell(_controllers[i], i, widget.activeRoundIndices.contains(i)),
           Expanded(
             flex: 3, // Corrected flex to 3 to align with "TOTAL (kg)" header column
             child: Text(
@@ -471,7 +489,36 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     );
   }
 
-  Widget _buildInputCell(TextEditingController controller, int index) {
+  Widget _buildInputCell(TextEditingController controller, int index, bool isActive) {
+    if (!isActive) {
+      // Inactive round for this DOC — no scheduled time, not editable.
+      return Expanded(
+        flex: 3,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: SizedBox(
+            height: 44,
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: const Text(
+                '--',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFCBD5E1),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Expanded(
       flex: 3,
       child: Padding(

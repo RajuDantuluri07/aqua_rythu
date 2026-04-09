@@ -18,6 +18,9 @@ class FeedTimelineCard extends StatefulWidget {
   final String? adjustmentReason;
   final bool isNext;
   final bool isSmartFeed;
+  /// True when the tray check was auto-skipped (farmer moved to next round
+  /// without logging). Shows ⚠️ skipped banner + "Update Now" CTA.
+  final bool isTraySkipped;
 
   const FeedTimelineCard({
     super.key,
@@ -26,6 +29,7 @@ class FeedTimelineCard extends StatefulWidget {
     required this.feedQty,
     required this.state,
     this.isPendingTray = false,
+    this.isTraySkipped = false,
     this.trayStatuses,
     this.supplements = const [],
     this.onMarkDone,
@@ -438,7 +442,16 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ),
           ],
 
-          // ── Log tray button ─────────────────────────────────────────
+          // ── Tray skipped banner ──────────────────────────────────────
+          if (widget.isTraySkipped) ...[
+            Divider(height: 1, color: _greenBorder),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+              child: _traySkippedBanner(),
+            ),
+          ],
+
+          // ── Log tray button (pending, not yet skipped) ───────────────
           if (widget.isPendingTray && widget.onLogTray != null) ...[
             Divider(height: 1, color: _greenBorder),
             Padding(
@@ -908,6 +921,65 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 ],
               ),
       ),
+    );
+  }
+
+  // Tray skipped banner — shown when tray was auto-skipped
+  Widget _traySkippedBanner() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: _amberBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _amberBorder),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 15, color: _amber),
+                SizedBox(width: 6),
+                Text(
+                  "Tray check skipped",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _amber,
+                  ),
+                ),
+                SizedBox(width: 4),
+                Text(
+                  "· neutral factor applied",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _amber,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (widget.onLogTray != null) ...[
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: widget.onLogTray,
+            style: TextButton.styleFrom(
+              foregroundColor: _amber,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: _amberBorder),
+              ),
+            ),
+            child: const Text(
+              "Update",
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

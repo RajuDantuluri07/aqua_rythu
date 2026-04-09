@@ -38,7 +38,41 @@ class TrayService {
       );
     } catch (e) {
       AppLogger.error('TrayService.saveTrayLog failed for pond $pondId', e);
-      rethrow;
+    }
+  }
+
+  /// Records a tray check as skipped — used when the farmer moves to the next
+  /// feed round without logging the tray. Stores tray_statuses = ['skipped']
+  /// so the smart engine uses a neutral factor (no adjustment).
+  Future<void> markTraySkipped({
+    required String pondId,
+    required int doc,
+    required int roundNumber,
+  }) async {
+    try {
+      // Only insert if no tray log already exists for this round today
+      final today = DateTime.now().toIso8601String().split('T')[0];
+      final existing = await _supabase
+          .from('tray_logs')
+          .select('id')
+          .eq('pond_id', pondId)
+          .eq('doc', doc)
+          .eq('round_number', roundNumber)
+          .eq('date', today)
+          .limit(1);
+      if (existing.isNotEmpty) return; // already logged (real or skipped)
+
+      await _supabase.from('tray_logs').insert({
+        'pond_id': pondId,
+        'date': today,
+        'doc': doc,
+        'round_number': roundNumber,
+        'tray_statuses': ['skipped'],
+        'observations': {},
+      });
+      AppLogger.info('Tray skipped: pond $pondId DOC $doc R$roundNumber');
+    } catch (e) {
+      AppLogger.error('TrayService.markTraySkipped failed for pond $pondId', e);
     }
   }
 

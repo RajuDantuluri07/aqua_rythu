@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/utils/logger.dart';
+import '../core/engines/feed_plan_constants.dart';
 
 class FeedService {
   final supabase = Supabase.instance.client;
@@ -148,6 +149,31 @@ class FeedService {
     }
   }
 
+  /// Writes redistributed round amounts back to DB (called after redistribution
+  /// guard fires in [PondDashboardNotifier.loadTodayFeed]).
+  /// Only updates rows that exist (idMap); skips rounds with no row id.
+  Future<void> persistCorrectedRounds(
+    String pondId,
+    int doc,
+    Map<int, double> correctedAmounts,
+    Map<int, String> idMap,
+  ) async {
+    for (final entry in correctedAmounts.entries) {
+      final round = entry.key;
+      final amount = entry.value;
+      final id = idMap[round];
+      if (id == null || id.isEmpty) continue;
+      await supabase.from('feed_rounds').update({
+        'planned_amount': amount,
+        'base_feed': amount,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', id);
+    }
+    AppLogger.info(
+        'Redistribution written to DB for pond $pondId DOC $doc: '
+        '${correctedAmounts.entries.map((e) => "R${e.key}:${e.value.toStringAsFixed(2)}kg").join(" | ")}');
+  }
+
   /// Save feed schedule — always upserts exactly 4 rows per DOC.
   /// Never deletes rows; qty=0 means inactive (no card shown on dashboard).
   Future<void> saveFeedPlans(String pondId, List<dynamic> feedPlans) async {
@@ -165,8 +191,15 @@ class FeedService {
                 (plan['r4'] as num?)?.toDouble() ?? 0.0,
               ];
 
-        // Ensure exactly 4 rounds
-        final paddedRounds = List<double>.generate(4, (i) => i < rounds.length ? rounds[i] : 0.0);
+        // Enforce config constraints: inactive rounds for this DOC are always 0.
+        // This is the write gate — DB must never hold feed amounts for rounds
+        // that have no scheduled time for the given DOC.
+        final config = getFeedConfig(doc);
+        final paddedRounds = List<double>.generate(4, (i) {
+          if (i >= rounds.length) return 0.0;
+          if (i >= config.splits.length || config.splits[i] == 0.0) return 0.0;
+          return rounds[i];
+        });
 
         // Fetch existing row IDs for this doc (to update vs insert)
         final existing = await supabase

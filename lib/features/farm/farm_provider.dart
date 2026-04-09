@@ -167,29 +167,46 @@ class FarmNotifier extends StateNotifier<FarmState> {
     try {
       final data = await FarmService().getFarmsWithPonds();
       
-      final loadedFarms = data.map((f) => Farm(
-        id: f['id'].toString(),
-        name: f['name'],
-        location: f['location'],
-        ponds: (f['ponds'] as List).map((p) => Pond(
-          id: p['id'].toString(),
-          name: p['name'],
-          area: (p['area'] as num).toDouble(),
-          stockingDate: DateTime.parse(p['stocking_date']),
-          seedCount: p['seed_count'] ?? 100000,
-          plSize: p['pl_size'] ?? 10,
-          numTrays: p['num_trays'] ?? 4,
-          status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
-          currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
-          latestSampleDate: p['latest_sample_date'] != null
-              ? DateTime.tryParse(p['latest_sample_date'] as String)
-              : null,
-          isSmartFeedEnabled: p['is_smart_feed_enabled'] ?? false,
-          initialFeedRounds: p['initial_feed_rounds'] ?? 2,
-          postWeekFeedRounds: p['post_week_feed_rounds'] ?? 4,
-          isCustomFeedPlan: p['is_custom_feed_plan'] ?? false,
-        )).toList(),
-      )).toList();
+      final loadedFarms = <Farm>[];
+      for (final f in data) {
+        try {
+          final ponds = <Pond>[];
+          for (final p in (f['ponds'] as List? ?? [])) {
+            try {
+              ponds.add(Pond(
+                id: p['id']?.toString() ?? '',
+                name: p['name'] ?? '',
+                area: (p['area'] as num?)?.toDouble() ?? 0.0,
+                stockingDate: p['stocking_date'] != null
+                    ? DateTime.tryParse(p['stocking_date'] as String) ?? DateTime.now()
+                    : DateTime.now(),
+                seedCount: p['seed_count'] ?? 100000,
+                plSize: p['pl_size'] ?? 10,
+                numTrays: p['num_trays'] ?? 4,
+                status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
+                currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
+                latestSampleDate: p['latest_sample_date'] != null
+                    ? DateTime.tryParse(p['latest_sample_date'] as String)
+                    : null,
+                isSmartFeedEnabled: p['is_smart_feed_enabled'] ?? false,
+                initialFeedRounds: p['initial_feed_rounds'] ?? 2,
+                postWeekFeedRounds: p['post_week_feed_rounds'] ?? 4,
+                isCustomFeedPlan: p['is_custom_feed_plan'] ?? false,
+              ));
+            } catch (e) {
+              AppLogger.error('Failed to parse pond: $e', e);
+            }
+          }
+          loadedFarms.add(Farm(
+            id: f['id']?.toString() ?? '',
+            name: f['name'] ?? '',
+            location: f['location'] ?? '',
+            ponds: ponds,
+          ));
+        } catch (e) {
+          AppLogger.error('Failed to parse farm: $e', e);
+        }
+      }
 
       state = state.copyWith(
         farms: loadedFarms,

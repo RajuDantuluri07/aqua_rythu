@@ -1,4 +1,4 @@
-package com.example.aqua_rythu
+package com.aquarythu.app
 
 import io.flutter.embedding.android.FlutterActivity
 

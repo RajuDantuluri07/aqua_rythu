@@ -135,8 +135,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     // For DOC > 30: a round is "cleared" only when both feed done AND tray logged
     final currentRound = _getCurrentRound(doc, feedDone, trayDone, totalRounds);
     final isCurrent = !isDone && round == currentRound;
-    // Tray CTA: feed done but tray not yet logged, DOC > 30 only
-    final showTrayCTA = isDone && doc > 30 && !isTrayLogged;
+    // Tray CTA: feed done but tray not yet logged
+    // DOC 15–30: optional (show button but doesn't block next round)
+    // DOC > 30:  mandatory (blocks next round until logged)
+    final showTrayCTA = isDone && doc >= 15 && !isTrayLogged;
 
     return {
       'isDone': isDone,
@@ -348,15 +350,20 @@ List<SupplementItem> _getPlannedFeedSupplements(
       });
     }
 
-    // Show only rounds with qty > 0 (user or default)
+    // Show only rounds with qty > 0 and a valid scheduled time
     final activeRounds = (roundFeedAmounts.keys.toList()..sort())
         .where((r) => (roundFeedAmounts[r] ?? 0.0) > 0)
         .toList();
 
-    return activeRounds.map((r) {
-      final idx = (r - 1).clamp(0, config.timingsDisplay.length - 1);
-      return {'round': r, 'time': config.timingsDisplay[idx], 'key': 'R$r'};
-    }).toList();
+    final result = <Map<String, dynamic>>[];
+    for (final r in activeRounds) {
+      final idx = r - 1;
+      if (idx < 0 || idx >= config.timingsDisplay.length) continue;
+      final time = config.timingsDisplay[idx];
+      if (time.startsWith('--')) continue; // skip rounds with no scheduled time for this DOC
+      result.add({'round': r, 'time': time, 'key': 'R$r'});
+    }
+    return result;
   }
 
   void openTray(int round, bool isLocked) async {
@@ -1473,7 +1480,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
         sortTime =
             DateTime(today.year, today.month, today.day, dt.hour, dt.minute);
       } catch (_) {
-        sortTime = DateTime(today.year, today.month, today.day, 0, 0);
+        sortTime = DateTime(today.year, today.month, today.day, 23, 59);
       }
       timelineItems.add({...data, 'type': 'feed', 'sortTime': sortTime});
     }
@@ -1551,7 +1558,13 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
         final bool isDone = roundState['isDone'] as bool;
         final bool isCurrent = roundState['isCurrent'] as bool;
-        final bool isPendingTray = isDone && currentDoc > 30 && !(roundState['isTrayLogged'] as bool);
+        final bool isTrayLogged = roundState['isTrayLogged'] as bool;
+        // A tray log exists but it was auto-skipped (farmer moved on without logging)
+        final bool isTraySkipped = isTrayLogged && (todayTrayMap[round]?.isSkipped ?? false);
+        // DOC 15–30: tray is optional — show the button but don't block progression.
+        // DOC > 30:  tray is mandatory — handled by _isLocked/_getCurrentRound.
+        // isPendingTray = tray not yet handled at all (neither logged nor skipped)
+        final bool isPendingTray = isDone && currentDoc >= 15 && !isTrayLogged;
 
         final FeedRoundState cardState = isDone
             ? FeedRoundState.done
@@ -1582,7 +1595,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
           feedQty: qty,
           state: cardState,
           isPendingTray: isPendingTray,
-          trayStatuses: thisRoundLog?.trays,
+          isTraySkipped: isTraySkipped,
+          trayStatuses: thisRoundLog?.isSkipped == true ? null : thisRoundLog?.trays,
           supplements: supplements,
           isSmartFeed: isSmartFeedEnabled,
           // MARK AS FED: always available on the current round, for all DOCs
@@ -1604,18 +1618,18 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     );
                   }
                   // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
-                  // Card then transitions: current → done (+ LOG TRAY if DOC > 30)
+                  // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
                   ref.read(pondDashboardProvider.notifier).markFeedDone(round);
                 }
               : null,
-          // EDIT: only for DOC > 30 (DOC ≤ 30 edits go via Feed Schedule)
-          onEdit: currentDoc > 30 && cardState != FeedRoundState.upcoming
+          // EDIT: only for DOC > 30, current round only (done/upcoming are not editable here)
+          onEdit: currentDoc > 30 && cardState == FeedRoundState.current
               ? (double newQty) {
                   ref.read(pondDashboardProvider.notifier).updateRoundAmount(round, newQty);
                 }
               : null,
-          // LOG TRAY CHECK: only after feed is marked done (DOC > 30, tray not yet logged)
-          onLogTray: isPendingTray ? () => openTray(round, false) : null,
+          // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
+          onLogTray: (isPendingTray || isTraySkipped) ? () => openTray(round, false) : null,
           isNext: isNext,
         );
       } else {

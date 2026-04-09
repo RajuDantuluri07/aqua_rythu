@@ -18,17 +18,28 @@ import 'core/language/app_localizations.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  AppConfig.validate();
+  // Global Flutter error handler for debugging crashes
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
+  };
 
-  await Supabase.initialize(
-    url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabaseAnonKey,
-  );
+  try {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      anonKey: AppConfig.supabaseAnonKey,
+    );
+  } catch (e) {
+    debugPrint('Supabase initialization failed: $e');
+  }
 
   // Initialize SharedPreferences for settings and profile persistence
-  final prefs = await SharedPreferences.getInstance();
-  initializeFarmSettings(prefs);
-  initializeUserProvider(prefs);
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    initializeFarmSettings(prefs);
+    initializeUserProvider(prefs);
+  } catch (e) {
+    debugPrint('SharedPreferences initialization failed: $e');
+  }
 
   runApp(
     const ProviderScope(
@@ -73,26 +84,21 @@ class AuthGate extends ConsumerStatefulWidget {
 }
 
 class _AuthGateState extends ConsumerState<AuthGate> {
-  // Keep the future in state so it doesn't reset on rebuilds
-  final Future<void> _splashDelay = Future.delayed(const Duration(milliseconds: 2000));
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
-    return FutureBuilder(
-      future: _splashDelay,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SplashScreen();
-        }
+    // Show splash until the initial session check completes.
+    // This prevents the login screen from flickering on cold start
+    // when a valid session already exists.
+    if (authState.isCheckingSession) {
+      return const SplashScreen();
+    }
 
-        if (authState.isAuthenticated) {
-          return const PondDashboardScreen();
-        } else {
-          return const LoginScreen();
-        }
-      },
-    );
+    if (authState.isAuthenticated) {
+      return const PondDashboardScreen();
+    }
+
+    return const LoginScreen();
   }
 }
