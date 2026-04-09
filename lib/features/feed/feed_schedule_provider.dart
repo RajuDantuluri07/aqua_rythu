@@ -88,6 +88,7 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
         return;
       }
 
+      // Always build 4-slot lists per DOC. Rounds missing from DB stay 0.0.
       final Map<int, List<double>> groupedData = {};
 
       for (final item in existingData) {
@@ -99,6 +100,13 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
 
         if (round >= 1 && round <= 4) {
           groupedData[doc]![round - 1] = feedAmount;
+        }
+      }
+
+      // Guarantee exactly 4 slots even if DB had fewer rows
+      for (final entry in groupedData.entries) {
+        while (entry.value.length < 4) {
+          entry.value.add(0.0);
         }
       }
 

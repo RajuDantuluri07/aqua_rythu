@@ -8,16 +8,13 @@ class AppLogger {
   }
 
   static void info(String message) {
-    debugPrint('INFO: $message');
+    if (kDebugMode) debugPrint('INFO: $message');
   }
 
   static void error(String message, [Object? error, StackTrace? stackTrace]) {
+    if (!kDebugMode) return;
     debugPrint('ERROR: $message');
-    if (error != null) {
-      debugPrint('Cause: $error');
-    }
-    if (stackTrace != null) {
-      debugPrint('Stacktrace: $stackTrace');
-    }
+    if (error != null) debugPrint('Cause: $error');
+    if (stackTrace != null) debugPrint('Stacktrace: $stackTrace');
   }
 }

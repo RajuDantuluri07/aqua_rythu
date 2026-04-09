@@ -20,6 +20,11 @@ class Pond {
   final double? currentAbw;  // Latest sampled average body weight
   final bool isSmartFeedEnabled;  // Smart Feed activation status
 
+  // Feed round config
+  final int initialFeedRounds;    // Rounds for DOC 1–7 (default 2)
+  final int postWeekFeedRounds;   // Rounds for DOC 8+  (default 4)
+  final bool isCustomFeedPlan;    // If true, use above values; else use default DOC logic
+
   Pond({
     required this.id,
     required this.name,
@@ -31,7 +36,19 @@ class Pond {
     this.status = PondStatus.active,
     this.currentAbw,
     this.isSmartFeedEnabled = false,
+    this.initialFeedRounds = 2,
+    this.postWeekFeedRounds = 4,
+    this.isCustomFeedPlan = false,
   });
+
+  /// Returns how many feed rounds apply for the given DOC, respecting
+  /// any custom plan the farmer has configured.
+  int feedRoundsForDoc(int doc) {
+    if (isCustomFeedPlan) {
+      return doc <= 7 ? initialFeedRounds : postWeekFeedRounds;
+    }
+    return doc <= 7 ? 2 : 4;
+  }
 
   Pond copyWith({
     String? id,
@@ -44,6 +61,9 @@ class Pond {
     PondStatus? status,
     double? currentAbw,
     bool? isSmartFeedEnabled,
+    int? initialFeedRounds,
+    int? postWeekFeedRounds,
+    bool? isCustomFeedPlan,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -56,6 +76,9 @@ class Pond {
       status: status ?? this.status,
       currentAbw: currentAbw ?? this.currentAbw,
       isSmartFeedEnabled: isSmartFeedEnabled ?? this.isSmartFeedEnabled,
+      initialFeedRounds: initialFeedRounds ?? this.initialFeedRounds,
+      postWeekFeedRounds: postWeekFeedRounds ?? this.postWeekFeedRounds,
+      isCustomFeedPlan: isCustomFeedPlan ?? this.isCustomFeedPlan,
     );
   }
 
@@ -155,6 +178,9 @@ class FarmNotifier extends StateNotifier<FarmState> {
           status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
           currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
           isSmartFeedEnabled: p['is_smart_feed_enabled'] ?? false,
+          initialFeedRounds: p['initial_feed_rounds'] ?? 2,
+          postWeekFeedRounds: p['post_week_feed_rounds'] ?? 4,
+          isCustomFeedPlan: p['is_custom_feed_plan'] ?? false,
         )).toList(),
       )).toList();
 
@@ -346,7 +372,7 @@ final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
 /// to ensure DOC increments automatically at midnight.
 final currentDateProvider = Provider<DateTime>((ref) {
   // Rebuild this provider every hour
-  final timer = Timer(const Duration(hours: 1), () => ref.invalidateSelf());
+  final timer = Timer.periodic(const Duration(hours: 1), (_) => ref.invalidateSelf());
   ref.onDispose(() => timer.cancel());
   return DateTime.now();
 });

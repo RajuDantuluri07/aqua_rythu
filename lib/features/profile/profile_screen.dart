@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'farm_settings_screen.dart';
+import 'legal_screen.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -133,8 +134,16 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 10),
 
-                _menuTile(Icons.description, "Terms & Conditions"),
-                _menuTile(Icons.privacy_tip, "Privacy Policy"),
+                _menuTile(Icons.description, "Terms & Conditions", onTap: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => LegalScreen.termsAndConditions(),
+                  ));
+                }),
+                _menuTile(Icons.privacy_tip, "Privacy Policy", onTap: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => LegalScreen.privacyPolicy(),
+                  ));
+                }),
                 _menuTile(Icons.info, "About AquaRythu"),
 
                 const SizedBox(height: 20),
@@ -340,12 +349,12 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _menuTile(IconData icon, String title) {
+  Widget _menuTile(IconData icon, String title, {VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () {},
+      onTap: onTap,
     );
   }
 }

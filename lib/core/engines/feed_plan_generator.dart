@@ -11,6 +11,7 @@ final supabase = Supabase.instance.client;
 /// DOC > 30 → biomass-based smart feeding using FeedEngineConstants.
 ///
 /// Safe to call anytime — skips ranges that already have rows.
+
 Future<void> generateFeedPlan({
   required String pondId,
   required int startDoc,
@@ -22,21 +23,19 @@ Future<void> generateFeedPlan({
   if (startDoc > endDoc) return;
   final clampedEnd = endDoc.clamp(startDoc, 120);
 
-  AppLogger.info('Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd');
+  AppLogger.info('Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd (will skip already-existing DOCs)');
 
-  // Skip if rows already exist anywhere in this range
-  final existing = await supabase
+  // Find which DOCs already have rows — skip only those, not the whole range.
+  final existingRows = await supabase
       .from('feed_rounds')
-      .select('id')
+      .select('doc')
       .eq('pond_id', pondId)
       .gte('doc', startDoc)
-      .lte('doc', clampedEnd)
-      .limit(1);
+      .lte('doc', clampedEnd);
 
-  if (existing.isNotEmpty) {
-    AppLogger.debug('Feed rows already exist for $pondId DOC $startDoc–$clampedEnd — skip');
-    return;
-  }
+  final existingDocs = <int>{
+    for (final row in existingRows) row['doc'] as int,
+  };
 
   final batch = <Map<String, dynamic>>[];
 
@@ -50,6 +49,7 @@ Future<void> generateFeedPlan({
       endDoc: blindEnd,
       stockingCount: stockingCount,
       pondArea: pondArea,
+      existingDocs: existingDocs,
     );
   }
 
@@ -62,6 +62,7 @@ Future<void> generateFeedPlan({
       startDoc: smartStart,
       endDoc: clampedEnd,
       stockingCount: stockingCount,
+      existingDocs: existingDocs,
     );
   }
 
@@ -84,12 +85,13 @@ Future<void> _addBlindFeedRows({
   required int endDoc,
   required int stockingCount,
   required double pondArea,
+  required Set<int> existingDocs,
 }) async {
   final baseRatesData = await supabase
       .from('feed_base_rates')
       .select('doc, base_feed_amount')
       .gte('doc', startDoc)
-      .lte('doc', 30);
+      .lte('doc', endDoc);
 
   AppLogger.debug('Base rates loaded: ${baseRatesData.length} entries for pond $pondId');
 
@@ -107,18 +109,22 @@ Future<void> _addBlindFeedRows({
   final scaleFactor = (stockingCount / 100000) * (pondArea / 1.0);
 
   for (int doc = startDoc; doc <= endDoc; doc++) {
+    if (existingDocs.contains(doc)) continue; // Already generated — skip
     final baseFeed = remoteRates[doc] ?? (2.0 + doc * 0.1);
     final totalFeed = baseFeed * normFactor * scaleFactor;
     final feedType = getFeedType(doc);
+    // Always use the 4-round config — splits handle which rounds get qty > 0
+    final config = getFeedConfig(doc);
 
+    // Always write exactly 4 rows per DOC
     for (int round = 1; round <= 4; round++) {
-      final roundFeed = totalFeed * roundDistribution[round]!;
+      final roundFeed = config.quantityForRound(round - 1, totalFeed);
       batch.add({
         'pond_id': pondId,
         'doc': doc,
         'round': round,
         'planned_amount': roundFeed,
-        'base_feed': roundFeed, // immutable original — always use this for adjustments
+        'base_feed': roundFeed,
         'feed_type': feedType,
         'status': 'pending',
       });
@@ -134,24 +140,29 @@ void _addSmartFeedRows({
   required int startDoc,
   required int endDoc,
   required int stockingCount,
+  required Set<int> existingDocs,
 }) {
+  // Smart feeding is always DOC 31+ — always postWeekFeedConfig (4 active rounds)
   for (int doc = startDoc; doc <= endDoc; doc++) {
+    if (existingDocs.contains(doc)) continue; // Already generated — skip
     final totalFeed = _biomassFeedKg(doc, stockingCount);
 
+    // Always write exactly 4 rows
     for (int round = 1; round <= 4; round++) {
-      final roundFeed = totalFeed * roundDistribution[round]!;
+      final roundFeed = postWeekFeedConfig.quantityForRound(round - 1, totalFeed);
       batch.add({
         'pond_id': pondId,
         'doc': doc,
         'round': round,
         'planned_amount': roundFeed,
-        'base_feed': roundFeed, // immutable original — always use this for adjustments
+        'base_feed': roundFeed,
         'feed_type': 'Smart',
         'status': 'pending',
       });
     }
   }
 }
+
 
 /// Biomass-based daily feed in kg for a given DOC and stocking count.
 double _biomassFeedKg(int doc, int stockingCount) {
@@ -183,7 +194,7 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
     // Fetch pond details needed for generation
     final pond = await supabase
         .from('ponds')
-        .select('seed_count, stocking_date, area')
+        .select('seed_count, stocking_date, area, initial_feed_rounds, post_week_feed_rounds')
         .eq('id', pondId)
         .maybeSingle();
 
@@ -212,6 +223,7 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
 // ── INTERPOLATION HELPER ─────────────────────────────────────────────────────
 
 double _interpolate(Map<int, double> table, int doc) {
+  if (table.isEmpty) return 0.0;
   final keys = table.keys.toList()..sort();
   if (doc <= keys.first) return table[keys.first]!;
   if (doc >= keys.last) return table[keys.last]!;

@@ -25,9 +25,12 @@ import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
+import 'package:aqua_rythu/core/engines/feed_plan_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
+import 'package:flutter/foundation.dart';
+import '../debug/debug_feed_screen.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -43,6 +46,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
   bool _showFeedScheduleTip = false;
+  bool _showDoc8FeedBanner = false;
+  int _debugTapCount = 0;
 
   @override
   void initState() {
@@ -55,6 +60,38 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     _checkFeedScheduleTip();
+  }
+
+  /// Secret 5-tap trigger → opens the Feed Engine Debug screen (debug builds only).
+  void _onDebugTap(String pondId, String pondName) {
+    if (!kDebugMode) return;
+    _debugTapCount++;
+    if (_debugTapCount >= 5) {
+      _debugTapCount = 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              DebugFeedScreen(pondId: pondId, pondName: pondName),
+        ),
+      );
+    }
+  }
+
+  /// Shows the "Feeding increased to 4 rounds" banner once when DOC reaches 8.
+  Future<void> _checkDoc8FeedNotification(String pondId, int doc) async {
+    if (doc < 8) return;
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'doc8_feed_notified_$pondId';
+    final alreadyShown = prefs.getBool(key) ?? false;
+    if (!alreadyShown && mounted) {
+      await prefs.setBool(key, true);
+      setState(() => _showDoc8FeedBanner = true);
+      // Auto-hide after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _showDoc8FeedBanner = false);
+      });
+    }
   }
 
   Future<void> _checkFeedScheduleTip() async {
@@ -244,7 +281,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
           int.parse(parts[1]),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Time parse failed for "$timeValue": $e');
+    }
     return DateTime(dateOnly.year, dateOnly.month, dateOnly.day, baseDate.hour, baseDate.minute);
   }
 
@@ -292,13 +331,32 @@ List<SupplementItem> _getPlannedFeedSupplements(
     return true;
   }
 
-  List<Map<String, dynamic>> _getFeedRounds() {
-    return [
-      {"round": 1, "time": "06:00 AM", "key": "R1"},
-      {"round": 2, "time": "10:00 AM", "key": "R2"},
-      {"round": 3, "time": "02:00 PM", "key": "R3"},
-      {"round": 4, "time": "06:00 PM", "key": "R4"},
-    ];
+  /// Returns feed round display data for active rounds only (qty > 0).
+  /// DB always has 4 rows — we show only rounds where planned_amount > 0.
+  /// Time labels come from getFeedConfig using the round index.
+  List<Map<String, dynamic>> _getFeedRounds(
+      int doc, Map<int, double> roundFeedAmounts, [Pond? pond]) {
+    final config = getFeedConfig(doc);
+
+    if (roundFeedAmounts.isEmpty) {
+      // No DB data yet — show defaults based on DOC
+      final defaultActive = doc <= 7 ? 2 : 4;
+      return List.generate(defaultActive, (i) => {
+        'round': i + 1,
+        'time': config.timingsDisplay[i],
+        'key': 'R${i + 1}',
+      });
+    }
+
+    // Show only rounds with qty > 0 (user or default)
+    final activeRounds = (roundFeedAmounts.keys.toList()..sort())
+        .where((r) => (roundFeedAmounts[r] ?? 0.0) > 0)
+        .toList();
+
+    return activeRounds.map((r) {
+      final idx = (r - 1).clamp(0, config.timingsDisplay.length - 1);
+      return {'round': r, 'time': config.timingsDisplay[idx], 'key': 'R$r'};
+    }).toList();
   }
 
   void openTray(int round, bool isLocked) async {
@@ -683,6 +741,13 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
     final currentDoc = ref.watch(docProvider(selectedPond));
 
+    // Trigger DOC 8 notification check whenever DOC or selectedPond changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && selectedPond.isNotEmpty) {
+        _checkDoc8FeedNotification(selectedPond, currentDoc);
+      }
+    });
+
     /// ✅ CURRENT STATS
     final history = ref.watch(feedHistoryProvider)[selectedPond] ?? [];
     final totalFeedToDate = history.isNotEmpty ? history.first.cumulative : 0.0;
@@ -794,7 +859,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const LanguageSwitcherDark(),
+                  GestureDetector(
+                    onTap: () => _onDebugTap(selectedPond, currentPond.name),
+                    child: const LanguageSwitcherDark(),
+                  ),
                   GestureDetector(
                     onTap: () => Navigator.pushNamed(context, AppRoutes.addPond),
                     child: Container(
@@ -1022,6 +1090,75 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
               const SizedBox(height: 12),
 
+              // ── TODAY FEED PLAN BANNER ────────────────────────────────────
+              Builder(builder: (context) {
+                final feedRoundsToday = dashboardState.roundFeedAmounts.isNotEmpty
+                    ? dashboardState.roundFeedAmounts.values.where((v) => v > 0).length
+                    : (currentDoc <= 7 ? 2 : 4);
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.restaurant_menu_rounded,
+                          size: 16, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Today Feed Plan: $feedRoundsToday feeds',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF166534),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              // ── DOC 8 TRANSITION NOTIFICATION (shown once) ───────────────
+              if (_showDoc8FeedBanner) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          size: 16, color: Color(0xFFEA580C)),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Feeding increased to 4 rounds from today',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF9A3412),
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => setState(() => _showDoc8FeedBanner = false),
+                        child: const Icon(Icons.close_rounded,
+                            size: 16, color: Color(0xFFEA580C)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 12),
+
               if (isCompleted)
                 _buildCompletedDashboard(context, ref, currentPond)
               else ...[
@@ -1145,7 +1282,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     completedRounds: dashboardState.roundFeedStatus.values
                         .where((s) => s == 'completed')
                         .length,
-                    totalRounds: 4,
+                    totalRounds: dashboardState.roundFeedAmounts.isNotEmpty
+                        ? dashboardState.roundFeedAmounts.values.where((v) => v > 0).length
+                        : (currentDoc <= 7 ? 2 : 4),
                     fcrTrend: fcrTrend,
                   ),
                   const SizedBox(height: 16),
@@ -1321,7 +1460,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
     required Pond? currentPond,
     required bool isSmartFeedEnabled,
   }) {
-    final feedRoundsData = _getFeedRounds();
+    final feedRoundsData = _getFeedRounds(currentDoc, dashboardState.roundFeedAmounts, currentPond);
     final List<Map<String, dynamic>> timelineItems = [];
 
 
@@ -1403,7 +1542,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
         final roundState = _getSimpleRoundState(
           doc: currentDoc,
           round: round,
-          totalRounds: 4,
+          totalRounds: dashboardState.roundFeedAmounts.isNotEmpty
+              ? dashboardState.roundFeedAmounts.values.where((v) => v > 0).length
+              : (currentDoc <= 7 ? 2 : 4),
           feedDone: feedDoneMap,
           trayDone: trayDone,
         );
@@ -1908,165 +2049,420 @@ class _WaterRoundCard extends StatelessWidget {
     this.onMarkDone,
   });
 
+  // ── Water palette (mirrors FeedTimelineCard's green palette but teal) ──
+  static const _teal       = Color(0xFF0D9488);
+  static const _tealLight  = Color(0xFF14B8A6);
+  static const _tealBg     = Color(0xFFF0FDFA);
+  static const _tealBorder = Color(0xFF99F6E4);
+  static const _slate100   = Color(0xFFF1F5F9);
+  static const _slate200   = Color(0xFFE2E8F0);
+  static const _slate400   = Color(0xFF94A3B8);
+  static const _slate500   = Color(0xFF64748B);
+  static const _ink        = Color(0xFF0F172A);
+  static const _red        = Color(0xFFDC2626);
+
   @override
   Widget build(BuildContext context) {
+    return isApplied ? _doneCard() : _pendingCard();
+  }
+
+  // ── DONE card ──────────────────────────────────────────────────────────
+  Widget _doneCard() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppRadius.rm,
-        border: Border.all(
-            color: isApplied
-                ? const Color(0xFF10B981).withOpacity(0.2)
-                : AppColors.border),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 8,
-              offset: const Offset(0, 4))
-        ],
+        color: _tealBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _tealBorder, width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  if (isApplied) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981),
-                        borderRadius: BorderRadius.circular(4),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            "WATER SUPPLEMENT",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: _teal,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Color(0x260D9488),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              "COMPLETED",
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: _teal,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: const Text("DONE",
-                          style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: 0.5)),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    "WATER SUPPLEMENTS • $time",
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: isApplied
-                          ? Colors.grey.shade500
-                          : AppColors.textSecondary,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-              if (!isApplied)
-                Icon(Icons.opacity, size: 16, color: Colors.blue.shade400),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: isApplied ? Colors.grey : Colors.black87,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: items
-                .map((item) => Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isApplied
-                            ? Colors.grey.shade100
-                            : Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        item is CalculatedItem
-                            ? "${item.name.toUpperCase()} ${item.quantity.toStringAsFixed(1)}${item.unit}"
-                            : "${item.itemName.toUpperCase()} ${item.totalDose.toStringAsFixed(1)}${item.unit}",
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: isApplied ? Colors.grey : Colors.blue.shade800,
-                          decoration:
-                              isApplied ? TextDecoration.lineThrough : null,
+                      const SizedBox(height: 2),
+                      Text(
+                        time,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _slate500,
                         ),
                       ),
-                    ))
-                .toList(),
-          ),
-          if (isApplied) ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xFF10B981).withOpacity(0.18),
+                    ],
+                  ),
                 ),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: _teal,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _teal,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        "DONE",
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Items used
+          if (items.isNotEmpty) ...[
+            Divider(height: 1, color: _tealBorder),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_circle, size: 18, color: Color(0xFF10B981)),
-                  SizedBox(width: 8),
-                  Text(
-                    "COMPLETED",
+                  const Text(
+                    "MIX APPLIED",
                     style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
-                      color: Color(0xFF10B981),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: _slate400,
                       letterSpacing: 0.4,
                     ),
                   ),
-                ],
-              ),
-            ),
-          ] else if (onMarkDone != null) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: onMarkDone,
-                icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text(
-                  "MARK DONE",
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: items.map((item) {
+                      final name = item is CalculatedItem
+                          ? item.name.toUpperCase()
+                          : (item.itemName as String).toUpperCase();
+                      final qty = item is CalculatedItem
+                          ? "${item.quantity.toStringAsFixed(1)}${item.unit}"
+                          : "${(item.totalDose as double).toStringAsFixed(1)}${item.unit}";
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _teal.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: _teal.withOpacity(0.2)),
+                        ),
+                        child: RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: name,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: _teal,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              TextSpan(
+                                text: "  $qty",
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: _ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                ),
+                ],
               ),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  // ── PENDING card ───────────────────────────────────────────────────────
+  Widget _pendingCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _tealLight, width: 2),
+        boxShadow: [
+          BoxShadow(color: _tealLight.withOpacity(0.18), blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top badges + title
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _badge("WATER SUPPLEMENT", _slate400, _slate100),
+                          _badge("NOW", Colors.white, _red),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "$title  •  $time",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: _ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.opacity_rounded, size: 22, color: _teal),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Mix required box
+          if (items.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _teal.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _teal.withOpacity(0.3)),
+                ),
+                child: const Text(
+                  "RECOMMENDED ACTION",
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: _teal,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _slate200, width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.water_drop_rounded, size: 14, color: _teal),
+                        const SizedBox(width: 6),
+                        const Text(
+                          "MIX REQUIRED",
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: _teal,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            "MANDATORY",
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: _red,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _itemGrid(),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+
+          // MARK DONE button
+          if (onMarkDone != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 2, 14, 14),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: onMarkDone,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _teal,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 20, color: Colors.white),
+                      SizedBox(width: 10),
+                      Text(
+                        "MARK AS APPLIED",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(String text, Color textColor, Color bgColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: textColor,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _itemGrid() {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final rows = <Widget>[];
+    for (int i = 0; i < items.length; i += 2) {
+      final row = <Widget>[];
+      row.add(Expanded(child: _itemCell(items[i])));
+      if (i + 1 < items.length) {
+        row.add(Container(width: 1, height: 40, color: _slate200, margin: const EdgeInsets.symmetric(horizontal: 8)));
+        row.add(Expanded(child: _itemCell(items[i + 1])));
+      }
+      rows.add(Row(crossAxisAlignment: CrossAxisAlignment.start, children: row));
+      if (i + 2 < items.length) rows.add(const SizedBox(height: 8));
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+  }
+
+  Widget _itemCell(dynamic item) {
+    final name = item is CalculatedItem
+        ? item.name.toUpperCase()
+        : (item.itemName as String).toUpperCase();
+    final qty = item is CalculatedItem
+        ? "${item.quantity.toStringAsFixed(1)}${item.unit}"
+        : "${(item.totalDose as double).toStringAsFixed(1)}${item.unit}";
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: _teal,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          qty,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: _ink,
+          ),
+        ),
+      ],
     );
   }
 }

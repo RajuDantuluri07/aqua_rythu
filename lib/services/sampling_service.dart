@@ -82,7 +82,10 @@ class SamplingService {
           if (row['is_manual'] == true) continue; // Respect manual overrides
 
           final roundNum = (row['round'] as int?) ?? 1;
-          final dist = roundDistribution[roundNum] ?? 0.25;
+          final config = getFeedConfig(futureDoc);
+          final dist = (roundNum >= 1 && roundNum <= config.rounds)
+              ? config.splits[roundNum - 1]
+              : (1.0 / config.rounds);
           final roundFeed = double.parse((newTotalFeed * dist).toStringAsFixed(3));
 
           // Sampling is ground truth: reset planned_amount AND base_feed.

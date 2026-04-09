@@ -84,30 +84,6 @@ class FeedService {
     }
   }
 
-  /// Fetch feed plans for a specific DOC range
-  Future<List<Map<String, dynamic>>> getFeedPlansByDateRange({
-    required String pondId,
-    required DateTime startDate,
-    required DateTime endDate,
-  }) async {
-    if (pondId.isEmpty) {
-      throw Exception('Invalid pondId');
-    }
-
-    // Derive DOC range from the pond's stocking date via a broader query
-    // then filter client-side — feed_rounds uses doc not date
-    try {
-      return await supabase
-          .from('feed_rounds')
-          .select()
-          .eq('pond_id', pondId)
-          .order('doc', ascending: true)
-          .order('round', ascending: true);
-    } catch (e) {
-      throw Exception('Failed to fetch feed plans: $e');
-    }
-  }
-
   /// Insert a single feed_rounds row and return its new id.
   /// Used for DOC > 30 rounds that have no pre-generated plan.
   Future<String> insertFeedRound({
@@ -172,54 +148,65 @@ class FeedService {
     }
   }
 
-  /// Save bulk feed plans for a pond (replaces existing plans)
+  /// Save feed schedule — always upserts exactly 4 rows per DOC.
+  /// Never deletes rows; qty=0 means inactive (no card shown on dashboard).
   Future<void> saveFeedPlans(String pondId, List<dynamic> feedPlans) async {
-    if (pondId.isEmpty) {
-      throw Exception('Invalid pondId');
-    }
+    if (pondId.isEmpty) throw Exception('Invalid pondId');
 
     try {
-      // Delete existing feed plans for this pond (only for blind feeding DOC 1-30)
-      await supabase
-          .from('feed_rounds')
-          .delete()
-          .eq('pond_id', pondId)
-          .lte('doc', 30);
-
-      // Insert new feed plans
-      final List<Map<String, dynamic>> plansToInsert = [];
-      
       for (final plan in feedPlans) {
-        // Handle both FeedDayPlan objects and JSON maps
         final doc = plan.doc is int ? plan.doc as int : plan['doc'] as int;
-        final rounds = plan.rounds is List ? 
-            plan.rounds as List<double> : 
-            [
-              (plan['r1'] as num?)?.toDouble() ?? 0.0,
-              (plan['r2'] as num?)?.toDouble() ?? 0.0,
-              (plan['r3'] as num?)?.toDouble() ?? 0.0,
-              (plan['r4'] as num?)?.toDouble() ?? 0.0,
-            ];
-        
-        for (int round = 0; round < rounds.length; round++) {
-          plansToInsert.add({
-            'pond_id': pondId,
-            'doc': doc,
-            'round': round + 1,
-            'planned_amount': rounds[round],
-            'status': 'pending',
-            'is_manual': true, // Flag as user-defined override
-          });
+        final List<double> rounds = plan.rounds is List
+            ? List<double>.from((plan.rounds as List).map((v) => (v as num).toDouble()))
+            : [
+                (plan['r1'] as num?)?.toDouble() ?? 0.0,
+                (plan['r2'] as num?)?.toDouble() ?? 0.0,
+                (plan['r3'] as num?)?.toDouble() ?? 0.0,
+                (plan['r4'] as num?)?.toDouble() ?? 0.0,
+              ];
+
+        // Ensure exactly 4 rounds
+        final paddedRounds = List<double>.generate(4, (i) => i < rounds.length ? rounds[i] : 0.0);
+
+        // Fetch existing row IDs for this doc (to update vs insert)
+        final existing = await supabase
+            .from('feed_rounds')
+            .select('id, round')
+            .eq('pond_id', pondId)
+            .eq('doc', doc)
+            .order('round');
+
+        final Map<int, String> existingIds = {
+          for (final row in existing) (row['round'] as int): row['id'] as String
+        };
+
+        for (int i = 0; i < 4; i++) {
+          final round = i + 1;
+          final qty = paddedRounds[i];
+          final existingId = existingIds[round];
+
+          if (existingId != null) {
+            await supabase.from('feed_rounds').update({
+              'planned_amount': qty,
+              'base_feed': qty,
+              'is_manual': true,
+              'updated_at': DateTime.now().toIso8601String(),
+            }).eq('id', existingId);
+          } else {
+            await supabase.from('feed_rounds').insert({
+              'pond_id': pondId,
+              'doc': doc,
+              'round': round,
+              'planned_amount': qty,
+              'base_feed': qty,
+              'status': 'pending',
+              'is_manual': true,
+            });
+          }
         }
       }
 
-      if (plansToInsert.isNotEmpty) {
-        await supabase
-            .from('feed_rounds')
-            .insert(plansToInsert);
-      }
-
-      AppLogger.info("Feed plans saved for pond $pondId (${plansToInsert.length} records)");
+      AppLogger.info("Feed plans saved for pond $pondId (${feedPlans.length} DOCs × 4 rounds)");
     } catch (e) {
       throw Exception('Failed to save feed plans: $e');
     }

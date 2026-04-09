@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -425,7 +426,9 @@ class _PlanCard extends StatelessWidget {
         final dt = DateTime(2000, 1, 1, int.parse(parts[0]), int.parse(parts[1]));
         return DateFormat('hh:mm a').format(dt);
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Time format failed for "$value": $e');
+    }
     return value;
   }
 

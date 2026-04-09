@@ -27,6 +27,29 @@ class AppAuthState {
   }
 }
 
+String _friendlyAuthError(Object e) {
+  final msg = e.toString().toLowerCase();
+  if (msg.contains('invalid login credentials') || msg.contains('invalid_credentials')) {
+    return 'Wrong phone number or OTP. Please try again.';
+  }
+  if (msg.contains('user already registered') || msg.contains('already been registered')) {
+    return 'This phone number is already registered. Please log in.';
+  }
+  if (msg.contains('otp') || msg.contains('token') || msg.contains('expired')) {
+    return 'OTP expired or invalid. Please request a new one.';
+  }
+  if (msg.contains('network') || msg.contains('socketexception') || msg.contains('connection')) {
+    return 'No internet connection. Please check your network and try again.';
+  }
+  if (msg.contains('too many requests') || msg.contains('rate limit')) {
+    return 'Too many attempts. Please wait a few minutes and try again.';
+  }
+  if (msg.contains('phone') || msg.contains('mobile')) {
+    return 'Invalid phone number. Please enter a valid 10-digit number.';
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 class AuthNotifier extends StateNotifier<AppAuthState> {
   final _supabase = Supabase.instance.client;
   final Ref ref;
@@ -49,7 +72,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       }
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
       return false;
     }
   }
@@ -71,7 +94,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       }
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
       return false;
     }
   }
@@ -151,7 +174,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       state = state.copyWith(isLoading: false);
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
       return false;
     }
   }
@@ -167,7 +190,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       await _supabase.auth.signInWithOtp(phone: phone);
       state = state.copyWith(isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
     }
   }
 
@@ -186,7 +209,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         state = state.copyWith(isLoading: false, errorMessage: 'Verification failed. Please try again.');
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e));
     }
   }
 }
