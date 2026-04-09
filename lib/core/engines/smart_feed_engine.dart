@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'engine_constants.dart';
 import '../utils/logger.dart';
 import '../enums/tray_status.dart';
+import '../constants/expected_abw_table.dart';
 import 'feed_plan_generator.dart';
 import '../../repositories/feed_repository.dart';
 
@@ -9,16 +9,17 @@ import '../../repositories/feed_repository.dart';
 ///
 ///   NORMAL     (DOC 1–14)  : fixed feed, no tray/smart adjustment
 ///   TRAY_HABIT (DOC 15–30) : collect tray data for habit-building, no adjustment
-///   SMART      (DOC > 30)  : full hybrid — tray × smart × safety guardrails
+///   SMART      (DOC > 30)  : full hybrid — tray × smart × sampling × safety guardrails
 enum FeedMode { normal, trayHabit, smart }
 
 /// Hybrid Smart Feed Engine v2
 ///
 /// Formula (SMART phase only):
-///   finalFeed = baseFeed × trayFactor × smartFactor
+///   finalFeed = baseFeed × computeFinalFeedFactor(tray, smart, abw, doc)
 ///
-/// Safety clamp (Option-A addition): final factor capped at ±10%, with
-/// consecutive-increase and overfeeding guards preserved from v1.
+/// Factor priority (highest → lowest):  TRAY > SMART > SAMPLING
+/// Safety clamp: final factor capped at ±10%, with consecutive-increase and
+/// overfeeding guards.
 class SmartFeedEngine {
   static final _supabase = Supabase.instance.client;
   static final _feedRepo = FeedRepository();
@@ -50,24 +51,36 @@ class SmartFeedEngine {
     final last3DaysLeftover = await _last3DaysLeftoverPct(pondId);
     final trayFactor = calculateTrayFactor(last3DaysLeftover);
 
-    // TRAY_HABIT: only tray signal, smart = 1.0
+    // TRAY_HABIT: only tray signal, smart = 1.0, sampling = 1.0
     // SMART: full hybrid
     double smartFactor = 1.0;
+    double? latestAbw;
+    int sampleAgeDays = 0;
     if (mode == FeedMode.smart) {
       final pond = await _getPond(pondId);
       if (pond == null) return;
       final seedCount = (pond['seed_count'] as int?) ?? 100000;
-      final abw = await _latestAbw(pondId);
+      // Read ABW freshness from pond cache — no extra DB hit
+      final sample = _latestAbwFromPondData(pond);
+      latestAbw = sample.abw;
+      sampleAgeDays = sample.ageDays;
       final feedHistory = await _feedHistory(pondId, days: 14);
       smartFactor = getSmartFactor(
         doc: doc,
-        abw: abw,
+        abw: latestAbw,
         feedHistory: feedHistory,
         seedCount: seedCount,
       );
     }
 
-    final rawFactor = trayFactor * smartFactor;
+    // Single source of truth for raw factor with confidence decay
+    final samplingFactor = getSamplingFactor(latestAbw, doc, sampleAgeDays: sampleAgeDays);
+    final rawFactor = computeFinalFactor(
+      trayFactor: trayFactor,
+      smartFactor: smartFactor,
+      samplingFactor: samplingFactor,
+    );
+
     final currentFeed = await _todayTotalFeed(pondId, doc);
     final baseFeed = await _todayBaseFeed(pondId, doc);
 
@@ -81,6 +94,7 @@ class SmartFeedEngine {
 
     final reasonTag = _reasonTag(finalFactor, trayStatus.name, mode);
 
+    // Fix #3: only log expectedAbw when a sample actually exists — avoids misleading nulls
     await _logDebug(
       pondId: pondId,
       doc: doc,
@@ -88,6 +102,9 @@ class SmartFeedEngine {
       baseFeed: baseFeed,
       trayFactor: trayFactor,
       smartFactor: smartFactor,
+      samplingFactor: samplingFactor,
+      abw: latestAbw,
+      expectedAbw: latestAbw != null ? getExpectedABW(doc) : null,
       finalFactor: finalFactor,
       finalFeed: baseFeed * finalFactor,
       reason: reasonTag,
@@ -100,6 +117,7 @@ class SmartFeedEngine {
         '[HybridFeed] applyTrayAdjustment pond=$pondId DOC=$doc mode=${mode.name} '
         'tray=${trayFactor.toStringAsFixed(3)} '
         'smart=${smartFactor.toStringAsFixed(3)} '
+        'sampling=${samplingFactor.toStringAsFixed(3)} '
         'final=${finalFactor.toStringAsFixed(3)}',
       );
     }
@@ -134,19 +152,31 @@ class SmartFeedEngine {
       final trayFactor = calculateTrayFactor(last3DaysLeftover);
 
       double smartFactor = 1.0;
+      double? latestAbw;
+      int sampleAgeDays = 0;
       if (mode == FeedMode.smart) {
         final seedCount = (pond['seed_count'] as int?) ?? 100000;
-        final abw = await _latestAbw(pondId);
+        // Read ABW freshness from pond cache — no extra DB hit
+        final sample = _latestAbwFromPondData(pond);
+        latestAbw = sample.abw;
+        sampleAgeDays = sample.ageDays;
         final feedHistory = await _feedHistory(pondId, days: 14);
         smartFactor = getSmartFactor(
           doc: currentDoc,
-          abw: abw,
+          abw: latestAbw,
           feedHistory: feedHistory,
           seedCount: seedCount,
         );
       }
 
-      final rawFactor = trayFactor * smartFactor;
+      // Single source of truth for raw factor with confidence decay
+      final samplingFactor = getSamplingFactor(latestAbw, currentDoc, sampleAgeDays: sampleAgeDays);
+      final rawFactor = computeFinalFactor(
+        trayFactor: trayFactor,
+        smartFactor: smartFactor,
+        samplingFactor: samplingFactor,
+      );
+
       final currentFeed = await _todayTotalFeed(pondId, currentDoc);
       final baseFeed = await _todayBaseFeed(pondId, currentDoc);
 
@@ -162,8 +192,9 @@ class SmartFeedEngine {
       final pct = ((finalFactor - 1.0) * 100).round();
       final reason = pct >= 0
           ? '${mode.name.toUpperCase()}_ADJUST +$pct%'
-          : '${mode.name.toUpperCase()}_ADJUST ${pct}%';
+          : '${mode.name.toUpperCase()}_ADJUST $pct%';
 
+      // Fix #3: only log expectedAbw when a sample actually exists — avoids misleading nulls
       await _logDebug(
         pondId: pondId,
         doc: currentDoc,
@@ -171,6 +202,9 @@ class SmartFeedEngine {
         baseFeed: baseFeed,
         trayFactor: trayFactor,
         smartFactor: smartFactor,
+        samplingFactor: samplingFactor,
+        abw: latestAbw,
+        expectedAbw: latestAbw != null ? getExpectedABW(currentDoc) : null,
         finalFactor: finalFactor,
         finalFeed: baseFeed * finalFactor,
         reason: reason,
@@ -185,6 +219,7 @@ class SmartFeedEngine {
           '[HybridFeed] recalculate pond=$pondId DOC=$currentDoc '
           'tray=${trayFactor.toStringAsFixed(3)} '
           'smart=${smartFactor.toStringAsFixed(3)} '
+          'sampling=${samplingFactor.toStringAsFixed(3)} '
           'final=${finalFactor.toStringAsFixed(3)}',
         );
       }
@@ -217,6 +252,105 @@ class SmartFeedEngine {
     return (1.05 - (avg / 100)).clamp(0.85, 1.05);
   }
 
+  // ── LAYER 1.5: SAMPLING FACTOR ───────────────────────────────────────────
+
+  /// Smooth confidence decay based on how old the sample is.
+  ///
+  ///   ≤ 2 days → full influence  (1.0)
+  ///   ≤ 5 days → 70% influence   (0.7)
+  ///   ≤ 7 days → 40% influence   (0.4)
+  ///   > 7 days → ignored         (0.0)
+  ///
+  /// Replaces the hard cutoff with a gradual fade so feed doesn't jump
+  /// abruptly when a sample crosses the 7-day boundary.
+  static double getSamplingWeight(int ageDays) {
+    if (ageDays <= 2) return 1.0;
+    if (ageDays <= 5) return 0.7;
+    if (ageDays <= 7) return 0.4;
+    return 0.0;
+  }
+
+  /// Optional light correction based on actual vs expected ABW.
+  /// Uses [expectedAbwTable] as the single source of truth for expected weights.
+  ///
+  ///   ratio > 1.1  → base +5% (ahead of schedule)
+  ///   ratio < 0.9  → base −5% (behind schedule)
+  ///   otherwise    → 0%       (on track)
+  ///
+  /// The raw signal is first attenuated by 0.7 (avoids double-counting with
+  /// smartFactor's growth signal), then further scaled by [getSamplingWeight]
+  /// for smooth confidence decay as the sample ages.
+  ///
+  /// Guards:
+  ///   - Returns 1.0 when no fresh sample exists (null / non-positive ABW)
+  ///   - Returns 1.0 for early DOC (expected < 0.5g) — ratio unreliable
+  ///   - Hard-clamped to [0.9, 1.1]
+  static double getSamplingFactor(double? actualAbw, int doc,
+      {int sampleAgeDays = 0}) {
+    if (actualAbw == null || actualAbw <= 0) return 1.0;
+
+    final expected = getExpectedABW(doc);
+
+    // Ignore sampling when expected weight is tiny — ratio explodes (fix #2)
+    if (expected < 0.5) return 1.0;
+
+    final ratio = actualAbw / expected;
+    double rawFactor;
+    if (ratio > 1.1) {
+      rawFactor = 1.05;
+    } else if (ratio < 0.9) {
+      rawFactor = 0.95;
+    } else {
+      rawFactor = 1.0;
+    }
+
+    // Attenuate by 0.7 to reduce overlap with smart factor's growth signal (fix #4)
+    final attenuated = 1.0 + (rawFactor - 1.0) * 0.7;
+
+    // Smooth decay: older samples have less influence
+    final weight = getSamplingWeight(sampleAgeDays);
+    final decayed = 1.0 + (attenuated - 1.0) * weight;
+
+    // Hard safety clamp — sampling can never move feed more than ±10%
+    return decayed.clamp(0.9, 1.1);
+  }
+
+  // ── COMBINED FACTOR (single source of truth) ──────────────────────────────
+
+  /// Combines tray, smart, and sampling factors with TRAY > SMART > SAMPLING
+  /// priority enforcement.
+  ///
+  /// When the tray signal is extreme (outside [0.8, 1.2]), sampling is silenced
+  /// so that the dominant tray signal is not compounded by sampling noise.
+  static double computeFinalFactor({
+    required double trayFactor,
+    required double smartFactor,
+    required double samplingFactor,
+  }) {
+    // Enforce TRAY priority: strong tray signal overrides sampling correction
+    final effectiveSampling =
+        (trayFactor < 0.8 || trayFactor > 1.2) ? 1.0 : samplingFactor;
+
+    return trayFactor * smartFactor * effectiveSampling;
+  }
+
+  /// Convenience wrapper — single entry point for the combined raw factor.
+  /// Computes samplingFactor internally so callers have no duplicate logic.
+  static double computeFinalFeedFactor({
+    required double trayFactor,
+    required double smartFactor,
+    required double? abw,
+    required int doc,
+    int sampleAgeDays = 0,
+  }) {
+    final samplingFactor = getSamplingFactor(abw, doc, sampleAgeDays: sampleAgeDays);
+    return computeFinalFactor(
+      trayFactor: trayFactor,
+      smartFactor: smartFactor,
+      samplingFactor: samplingFactor,
+    );
+  }
+
   // ── LAYER 2: SMART FACTOR ────────────────────────────────────────────────
 
   /// Growth factor based on actual vs expected ABW ratio.
@@ -243,7 +377,7 @@ class SmartFeedEngine {
   }) {
     if (abw == null || abw <= 0) return 1.0;
 
-    final expectedAbw = _interpolate(FeedEngineConstants.abwTargets, doc);
+    final expectedAbw = getExpectedABW(doc);
     if (expectedAbw <= 0) return 1.0;
 
     final growthFactor = getGrowthFactor(abw / expectedAbw);
@@ -261,7 +395,7 @@ class SmartFeedEngine {
 
   // ── LAYER 3: SAFETY GUARDRAILS (Option-A) ────────────────────────────────
 
-  /// Hard safety bounds preserved from v1 to protect crop.
+  /// Hard safety bounds to protect crop.
   static double applySafetyGuards({
     required double factor,
     required int consecutiveIncreaseDays,
@@ -340,6 +474,9 @@ class SmartFeedEngine {
     required double baseFeed,
     required double trayFactor,
     required double smartFactor,
+    required double samplingFactor,
+    required double? abw,
+    required double? expectedAbw,
     required double finalFactor,
     required double finalFeed,
     required String reason,
@@ -352,6 +489,9 @@ class SmartFeedEngine {
         'base_feed': baseFeed,
         'tray_factor': trayFactor,
         'smart_factor': smartFactor,
+        'sampling_factor': samplingFactor,
+        'abw': abw,
+        'expected_abw': expectedAbw,
         'final_factor': finalFactor,
         'final_feed': finalFeed,
         'reason': reason,
@@ -365,29 +505,35 @@ class SmartFeedEngine {
 
   // ── DATA FETCHERS ─────────────────────────────────────────────────────────
 
+  /// Fetches pond data including ABW cache fields to avoid a separate
+  /// sampling_logs query on every feed calculation (fix #5).
   static Future<Map<String, dynamic>?> _getPond(String pondId) async {
     return await _supabase
         .from('ponds')
-        .select('seed_count, stocking_date')
+        .select('seed_count, stocking_date, current_abw, latest_sample_date')
         .eq('id', pondId)
         .maybeSingle();
   }
 
-  /// Latest ABW from sampling_logs.
-  static Future<double?> _latestAbw(String pondId) async {
-    try {
-      final rows = await _supabase
-          .from('sampling_logs')
-          .select('avg_weight')
-          .eq('pond_id', pondId)
-          .order('created_at', ascending: false)
-          .limit(1);
+  /// Returns `(abw, ageDays)` from the already-fetched pond map.
+  /// `abw` is null when no sample exists or sample is stale (> 7 days).
+  /// `ageDays` is the age of the sample in days (0 when no sample).
+  /// Reads from pond cache — no extra DB hit (fix #5).
+  static ({double? abw, int ageDays}) _latestAbwFromPondData(
+      Map<String, dynamic> pond) {
+    final abw = (pond['current_abw'] as num?)?.toDouble();
+    if (abw == null || abw <= 0) return (abw: null, ageDays: 0);
 
-      if (rows.isEmpty) return null;
-      return (rows.first['avg_weight'] as num?)?.toDouble();
-    } catch (_) {
-      return null;
-    }
+    final sampleDateStr = pond['latest_sample_date'] as String?;
+    if (sampleDateStr == null) return (abw: null, ageDays: 0);
+
+    final sampledAt = DateTime.tryParse(sampleDateStr);
+    if (sampledAt == null) return (abw: null, ageDays: 0);
+
+    final ageDays = DateTime.now().difference(sampledAt).inDays;
+    if (ageDays > 7) return (abw: null, ageDays: ageDays);
+
+    return (abw: abw, ageDays: ageDays);
   }
 
   /// Feed given over the last [days] days from feed_logs.
@@ -558,20 +704,6 @@ class SmartFeedEngine {
     if (pct == 0) return '${prefix}_${trayStatus.toUpperCase()} HOLD';
     return pct > 0
         ? '${prefix}_${trayStatus.toUpperCase()} +$pct%'
-        : '${prefix}_${trayStatus.toUpperCase()} ${pct}%';
-  }
-
-  static double _interpolate(Map<int, double> table, int doc) {
-    final keys = table.keys.toList()..sort();
-    if (doc <= keys.first) return table[keys.first]!;
-    if (doc >= keys.last) return table[keys.last]!;
-    for (int i = 0; i < keys.length - 1; i++) {
-      final k1 = keys[i], k2 = keys[i + 1];
-      if (doc >= k1 && doc <= k2) {
-        final t = (doc - k1) / (k2 - k1);
-        return table[k1]! + t * (table[k2]! - table[k1]!);
-      }
-    }
-    return table[keys.last]!;
+        : '${prefix}_${trayStatus.toUpperCase()} $pct%';
   }
 }

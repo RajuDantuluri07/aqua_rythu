@@ -17,8 +17,9 @@ class Pond {
   final int plSize;
   final int numTrays;
   final PondStatus status;
-  final double? currentAbw;  // Latest sampled average body weight
-  final bool isSmartFeedEnabled;  // Smart Feed activation status
+  final double? currentAbw;        // Latest sampled average body weight
+  final DateTime? latestSampleDate; // When the last sample was taken (for freshness check)
+  final bool isSmartFeedEnabled;   // Smart Feed activation status
 
   // Feed round config
   final int initialFeedRounds;    // Rounds for DOC 1–7 (default 2)
@@ -35,6 +36,7 @@ class Pond {
     this.numTrays = 4,
     this.status = PondStatus.active,
     this.currentAbw,
+    this.latestSampleDate,
     this.isSmartFeedEnabled = false,
     this.initialFeedRounds = 2,
     this.postWeekFeedRounds = 4,
@@ -60,6 +62,7 @@ class Pond {
     int? numTrays,
     PondStatus? status,
     double? currentAbw,
+    DateTime? latestSampleDate,
     bool? isSmartFeedEnabled,
     int? initialFeedRounds,
     int? postWeekFeedRounds,
@@ -75,6 +78,7 @@ class Pond {
       numTrays: numTrays ?? this.numTrays,
       status: status ?? this.status,
       currentAbw: currentAbw ?? this.currentAbw,
+      latestSampleDate: latestSampleDate ?? this.latestSampleDate,
       isSmartFeedEnabled: isSmartFeedEnabled ?? this.isSmartFeedEnabled,
       initialFeedRounds: initialFeedRounds ?? this.initialFeedRounds,
       postWeekFeedRounds: postWeekFeedRounds ?? this.postWeekFeedRounds,
@@ -177,6 +181,9 @@ class FarmNotifier extends StateNotifier<FarmState> {
           numTrays: p['num_trays'] ?? 4,
           status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
           currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
+          latestSampleDate: p['latest_sample_date'] != null
+              ? DateTime.tryParse(p['latest_sample_date'] as String)
+              : null,
           isSmartFeedEnabled: p['is_smart_feed_enabled'] ?? false,
           initialFeedRounds: p['initial_feed_rounds'] ?? 2,
           postWeekFeedRounds: p['post_week_feed_rounds'] ?? 4,

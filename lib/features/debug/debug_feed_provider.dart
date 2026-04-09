@@ -9,6 +9,9 @@ class DebugLog {
   final double baseFeed;
   final double trayFactor;
   final double smartFactor;
+  final double samplingFactor;
+  final double? abw;
+  final double? expectedAbw;
   final double finalFactor;
   final double finalFeed;
   final String? reason;
@@ -21,6 +24,9 @@ class DebugLog {
     required this.baseFeed,
     required this.trayFactor,
     required this.smartFactor,
+    required this.samplingFactor,
+    this.abw,
+    this.expectedAbw,
     required this.finalFactor,
     required this.finalFeed,
     this.reason,
@@ -35,6 +41,9 @@ class DebugLog {
       baseFeed: (m['base_feed'] as num).toDouble(),
       trayFactor: (m['tray_factor'] as num).toDouble(),
       smartFactor: (m['smart_factor'] as num).toDouble(),
+      samplingFactor: (m['sampling_factor'] as num?)?.toDouble() ?? 1.0,
+      abw: (m['abw'] as num?)?.toDouble(),
+      expectedAbw: (m['expected_abw'] as num?)?.toDouble(),
       finalFactor: (m['final_factor'] as num).toDouble(),
       finalFeed: (m['final_feed'] as num).toDouble(),
       reason: m['reason'] as String?,
@@ -42,8 +51,8 @@ class DebugLog {
     );
   }
 
-  /// Raw combined factor before safety guards.
-  double get rawFactor => trayFactor * smartFactor;
+  /// Raw combined factor before safety guards (tray × smart × sampling).
+  double get rawFactor => trayFactor * smartFactor * samplingFactor;
 
   /// Feed change as a signed percentage string e.g. "+5%" / "-8%".
   String get changeLabel {

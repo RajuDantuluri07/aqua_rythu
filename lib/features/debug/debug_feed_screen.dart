@@ -162,6 +162,8 @@ class _FactorBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasSampling = (log.samplingFactor - 1.0).abs() > 0.005;
+
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,9 +173,24 @@ class _FactorBreakdown extends StatelessWidget {
           _FactorTile(label: 'Tray Factor', value: log.trayFactor),
           const SizedBox(height: 8),
           _FactorTile(label: 'Smart Factor', value: log.smartFactor),
+          const SizedBox(height: 8),
+          _FactorTile(
+            label: 'Sampling Factor${hasSampling ? '' : ' (no sample)'}',
+            value: log.samplingFactor,
+          ),
+          if (log.abw != null && log.expectedAbw != null) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                'ABW: ${log.abw!.toStringAsFixed(1)}g  /  Expected: ${log.expectedAbw!.toStringAsFixed(1)}g',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ),
+          ],
           const Divider(color: Colors.white12, height: 24),
           _FactorTile(
-            label: 'Raw  (Tray × Smart)',
+            label: 'Raw  (Tray × Smart × Sampling)',
             value: log.rawFactor,
           ),
           const SizedBox(height: 8),
@@ -540,12 +557,17 @@ class _RawLogRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _mono('mode        : ${log.mode}'),
-              _mono('base_feed   : ${log.baseFeed.toStringAsFixed(3)} kg'),
-              _mono('tray_factor : ${log.trayFactor.toStringAsFixed(4)}'),
-              _mono('smart_factor: ${log.smartFactor.toStringAsFixed(4)}'),
-              _mono('final_factor: ${log.finalFactor.toStringAsFixed(4)}'),
-              _mono('final_feed  : ${log.finalFeed.toStringAsFixed(3)} kg'),
+              _mono('mode            : ${log.mode}'),
+              _mono('base_feed       : ${log.baseFeed.toStringAsFixed(3)} kg'),
+              _mono('tray_factor     : ${log.trayFactor.toStringAsFixed(4)}'),
+              _mono('smart_factor    : ${log.smartFactor.toStringAsFixed(4)}'),
+              _mono('sampling_factor : ${log.samplingFactor.toStringAsFixed(4)}'),
+              if (log.abw != null)
+                _mono('abw             : ${log.abw!.toStringAsFixed(2)} g'),
+              if (log.expectedAbw != null)
+                _mono('expected_abw    : ${log.expectedAbw!.toStringAsFixed(2)} g'),
+              _mono('final_factor    : ${log.finalFactor.toStringAsFixed(4)}'),
+              _mono('final_feed      : ${log.finalFeed.toStringAsFixed(3)} kg'),
               if (log.reason != null)
                 _mono('reason      : ${log.reason}'),
               const SizedBox(height: 6),

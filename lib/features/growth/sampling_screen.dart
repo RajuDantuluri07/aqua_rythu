@@ -78,6 +78,13 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     super.dispose();
   }
 
+  String _daysSince(DateTime date) {
+    final days = DateTime.now().difference(date).inDays;
+    if (days == 0) return "today";
+    if (days == 1) return "1 day ago";
+    return "$days days ago";
+  }
+
   String? _validateWeight(String? value) {
     if (value == null || value.isEmpty) return 'Required';
     final val = double.tryParse(value);
@@ -110,7 +117,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
             ),
           );
 
-      // Persist sampling + update pond ABW + recalculate all future feed (fire-and-forget)
+      // Persist sampling + update pond ABW (fire-and-forget)
       SamplingService().addSampling(
         pondId: pondId,
         date: DateTime.now(),
@@ -118,19 +125,13 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
         weightKg: _weightKg,
         totalPieces: _totalPieces,
         averageBodyWeight: abw,
-      ).then((_) {
-        return SamplingService().applySamplingCorrection(
-          pondId: pondId,
-          doc: doc,
-          sampledAbw: abw,
-        );
-      }).catchError((e) {
-        AppLogger.error('Sampling correction failed for pond $pondId', e);
+      ).catchError((e) {
+        AppLogger.error('Sampling save failed for pond $pondId', e);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Growth data saved — feed plan updated!"),
+          content: Text("Sample saved — will gently adjust feed accuracy"),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -189,7 +190,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("Growth Monitoring",
+        title: const Text("Growth Sampling",
             style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -226,11 +227,23 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("CURRENT ABW",
-                              style: TextStyle(
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12)),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("CURRENT ABW",
+                                  style: TextStyle(
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                              Text(
+                                logs.isNotEmpty
+                                    ? "Last updated: ${_daysSince(logs.first.date)}"
+                                    : "",
+                                style: const TextStyle(
+                                    color: Colors.white54, fontSize: 10),
+                              ),
+                            ],
+                          ),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
@@ -312,6 +325,26 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
 
               const SizedBox(height: 24),
 
+              // Optional hint
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: AppColors.textTertiary),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        "Optional: Update shrimp weight for better accuracy",
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textTertiary,
+                            fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               // Save Button
               SizedBox(
                 width: double.infinity,
@@ -323,7 +356,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: AppRadius.rs),
                   ),
-                  child: const Text("SAVE & UPDATE GROWTH",
+                  child: const Text("UPDATE SAMPLE (OPTIONAL)",
                       style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
