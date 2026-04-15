@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/enums/tray_status.dart';
 
@@ -6,7 +7,9 @@ enum FeedRoundState { done, current, upcoming }
 class FeedTimelineCard extends StatefulWidget {
   final int round;
   final String time;
-  final double feedQty;
+  final double recommendedFeedKg;
+  final double finalFeedKg;
+  final bool isManuallyEdited;
   final FeedRoundState state;
   final bool isPendingTray;
   final List<TrayStatus>? trayStatuses;
@@ -14,7 +17,9 @@ class FeedTimelineCard extends StatefulWidget {
   final VoidCallback? onMarkDone;
   final VoidCallback? onLogTray;
   final void Function(double newQty)? onEdit;
-  final double? originalFeedQty;
+  final double? lastFeedKg;
+  final double? leftoverPercent;
+  final double? correctionPercent;
   final String? adjustmentReason;
   final bool isNext;
   final bool isSmartFeed;
@@ -22,11 +27,21 @@ class FeedTimelineCard extends StatefulWidget {
   /// without logging). Shows ⚠️ skipped banner + "Update Now" CTA.
   final bool isTraySkipped;
 
+  /// SSOT for feed timing. When non-null, the card runs a live countdown
+  /// and shows one of three states:
+  ///   • Too Early   — nextFeedAt.isAfter(now)  → countdown + ghost CTA
+  ///   • Window Open — nextFeedAt.isBefore(now) within 30 min → primary green
+  ///   • Overdue     — nextFeedAt before now by >30 min → red urgent
+  /// Null = no timer (done/upcoming cards, or no further rounds today).
+  final DateTime? nextFeedAt;
+
   const FeedTimelineCard({
     super.key,
     required this.round,
     required this.time,
-    required this.feedQty,
+    required this.recommendedFeedKg,
+    required this.finalFeedKg,
+    required this.isManuallyEdited,
     required this.state,
     this.isPendingTray = false,
     this.isTraySkipped = false,
@@ -35,10 +50,13 @@ class FeedTimelineCard extends StatefulWidget {
     this.onMarkDone,
     this.onLogTray,
     this.onEdit,
-    this.originalFeedQty,
+    this.lastFeedKg,
+    this.leftoverPercent,
+    this.correctionPercent,
     this.adjustmentReason,
     this.isNext = false,
     this.isSmartFeed = false,
+    this.nextFeedAt,
   });
 
   @override
@@ -47,6 +65,73 @@ class FeedTimelineCard extends StatefulWidget {
 
 class _FeedTimelineCardState extends State<FeedTimelineCard> {
   bool _isSubmitting = false;
+
+  // ── Live countdown timer ──────────────────────────────────────────────────
+  Timer? _timer;
+  Duration _timeRemaining = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshRemaining();
+    _scheduleNextTick();
+  }
+
+  @override
+  void didUpdateWidget(FeedTimelineCard old) {
+    super.didUpdateWidget(old);
+    if (old.nextFeedAt != widget.nextFeedAt) {
+      _refreshRemaining();
+      _scheduleNextTick();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _refreshRemaining() {
+    if (widget.nextFeedAt == null) {
+      _timeRemaining = Duration.zero;
+    } else {
+      _timeRemaining = widget.nextFeedAt!.difference(DateTime.now());
+    }
+  }
+
+  /// Ticks every second when < 60 s remain; every minute otherwise.
+  /// Stops ticking once nextFeedAt is null (all done) or card is disposed.
+  void _scheduleNextTick() {
+    _timer?.cancel();
+    if (widget.nextFeedAt == null) return;
+    final tickIn = _timeRemaining.inSeconds.abs() < 60
+        ? const Duration(seconds: 1)
+        : const Duration(minutes: 1);
+    _timer = Timer(tickIn, () {
+      if (!mounted) return;
+      setState(_refreshRemaining);
+      _scheduleNextTick();
+    });
+  }
+
+  // ── Countdown formatting ─────────────────────────────────────────────────
+  /// Formats a Duration for display. Always positive input (caller passes abs()).
+  String _fmtDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}m';
+    return '${s}s';
+  }
+
+  // ── Feed-state helpers ────────────────────────────────────────────────────
+  bool get _isTooEarly =>
+      widget.nextFeedAt != null && _timeRemaining.inSeconds > 0;
+
+  bool get _isOverdue =>
+      widget.nextFeedAt != null && _timeRemaining.inMinutes < -30;
 
   static const _green      = Color(0xFF16A34A);
   static const _greenLight = Color(0xFF22C55E);
@@ -69,157 +154,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   Widget build(BuildContext context) {
     final isDone     = widget.state == FeedRoundState.done;
     final isCurrent  = widget.state == FeedRoundState.current;
-    final isAdjusted = widget.originalFeedQty != null &&
-        (widget.originalFeedQty! - widget.feedQty).abs() > 0.01;
+    final isAdjusted = widget.recommendedFeedKg != widget.finalFeedKg;
 
     if (isDone)    return _smartDoneCard();
     if (isCurrent) return _smartCurrentCard(isAdjusted);
     return _upcomingCard();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // BLIND FEED — DONE CARD (simple, green accent)
-  // ═══════════════════════════════════════════════════════════════════
-
-  Widget _blindDoneCard() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _greenBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _greenBorder, width: 1.5),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(color: _green, shape: BoxShape.circle),
-              child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                "ROUND ${widget.round}  •  ${widget.time}",
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: _ink,
-                ),
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  "${widget.feedQty.toStringAsFixed(1)} kg",
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    color: _green,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _green,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    "DONE",
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // BLIND FEED — CURRENT CARD (green border, action-focused)
-  // ═══════════════════════════════════════════════════════════════════
-
-  Widget _blindCurrentCard() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _greenLight, width: 2),
-        boxShadow: [
-          BoxShadow(color: _greenLight.withOpacity(0.18), blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            "ROUND ${widget.round}  •  ${widget.time}",
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: _slate500,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "${widget.feedQty.toStringAsFixed(1)} kg",
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          color: _ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _green,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    "CURRENT",
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _markAsFedButton(),
-          ],
-        ),
-      ),
-    );
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -307,7 +246,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                             ),
                           ),
                         Text(
-                          "${widget.feedQty.toStringAsFixed(1)} kg",
+                          "${widget.finalFeedKg.toStringAsFixed(1)} kg",
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
@@ -465,235 +404,417 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // SMART FEED — CURRENT CARD (rich: badges, supplement grid, warning)
+  // SMART FEED — CURRENT CARD (3 states: too early / window / overdue)
   // ═══════════════════════════════════════════════════════════════════
 
   Widget _smartCurrentCard(bool isAdjusted) {
-    final borderColor = isAdjusted ? _amber : _greenLight;
-    final hasSupplements = widget.supplements.isNotEmpty;
+    final Color borderColor = _greenLight;
+    final hasTray = widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: 2),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor, width: 2.5),
         boxShadow: [
-          BoxShadow(color: borderColor.withOpacity(0.18), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(color: borderColor.withOpacity(0.22), blurRadius: 16, offset: const Offset(0, 6)),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Text(
+                  "ROUND ${widget.round}",
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: _green,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    "ACTIVE",
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: _green,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Recommended Feed
+            Row(
+              children: [
+                const Text(
+                  "Recommended Feed:",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "${widget.recommendedFeedKg.toStringAsFixed(1)} kg",
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (widget.onEdit != null)
+                  GestureDetector(
+                    onTap: () => _showEditDialog(context),
+                    child: const Text(
+                      "✏️",
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+              ],
+            ),
+
+            // You will feed (only if manually edited)
+            if (widget.isManuallyEdited) ...[
+              const SizedBox(height: 8),
+              Text(
+                "You will feed: ${widget.finalFeedKg.toStringAsFixed(1)} kg",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: _ink,
+                ),
+              ),
+            ],
+
+            // Based on tray feedback
+            if (widget.leftoverPercent != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: _amber),
+                  const SizedBox(width: 4),
+                  Text(
+                    "Based on tray feedback (${widget.leftoverPercent!.toStringAsFixed(0)}% leftover)",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: _slate500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // Last Feed
+            if (widget.lastFeedKg != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                "Last Feed: ${widget.lastFeedKg!.toStringAsFixed(1)} kg",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: _slate500,
+                ),
+              ),
+            ],
+
+            // Tray Feedback
+            if (hasTray) ...[
+              const SizedBox(height: 12),
+              const Text(
+                "Tray Feedback:",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _ink,
+                ),
+              ),
+              const SizedBox(height: 4),
+              ..._buildTrayFeedback(),
+            ],
+
+            // AI Adjustment
+            if (widget.correctionPercent != null && widget.correctionPercent != 0) ...[
+              const SizedBox(height: 12),
+              Text(
+                "AI Adjustment: ${widget.correctionPercent! > 0 ? '+' : ''}${widget.correctionPercent!.toStringAsFixed(0)}% (${(widget.recommendedFeedKg * widget.correctionPercent! / 100).toStringAsFixed(1)} kg)",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _blue,
+                ),
+              ),
+            ],
+
+            // Override warning
+            if (isAdjusted) ...[
+              const SizedBox(height: 12),
+              _overrideWarning(),
+            ],
+
+            // Confirm Feed Button
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: widget.onMarkDone,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _green,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  "Confirm Feed",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Tray feedback list ───────────────────────────────────────────────────
+  List<Widget> _buildTrayFeedback() {
+    if (widget.trayStatuses == null) return [];
+    final counts = <TrayStatus, int>{};
+    for (final status in widget.trayStatuses!) {
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    final total = widget.trayStatuses!.length;
+    final avgLeftover = widget.leftoverPercent ?? 0;
+
+    return [
+      Text(
+        "• ${counts[TrayStatus.full] ?? 0} Full",
+        style: const TextStyle(fontSize: 14, color: _slate500),
+      ),
+      Text(
+        "• ${counts[TrayStatus.partial] ?? 0} Partial",
+        style: const TextStyle(fontSize: 14, color: _slate500),
+      ),
+      Text(
+        "• Avg leftover: ${avgLeftover.toStringAsFixed(0)}%",
+        style: const TextStyle(fontSize: 14, color: _slate500),
+      ),
+    ];
+  }
+
+  // ── Override warning ─────────────────────────────────────────────────────
+  Widget _overrideWarning() {
+    final diff = widget.finalFeedKg - widget.recommendedFeedKg;
+    final percent = (diff / widget.recommendedFeedKg * 100).round();
+    final isOver = diff > 0;
+    final message = isOver
+        ? "You are feeding ${percent.abs()}% more than recommended"
+        : "You are feeding ${percent.abs()}% below recommended level";
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _amberBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _amberBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top: badges row + amount ──────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Badge row
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          _badge("CURRENT ROUND", _slate400, _slate100),
-                          _badge("NOW", Colors.white, _red),
-                          if (isAdjusted)
-                            _badge("AUTO ADJUSTED", Colors.white, _blue),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Round & time
-                      Text(
-                        "Round ${widget.round}  •  ${widget.time}",
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: _ink,
-                        ),
-                      ),
-                    ],
-                  ),
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 16, color: _amber),
+              const SizedBox(width: 4),
+              Text(
+                isOver ? "Overfeeding" : "Underfeeding",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: _amber,
                 ),
-                const SizedBox(width: 8),
-                // Amount column
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.onEdit != null)
-                          GestureDetector(
-                            onTap: () => _showEditDialog(context),
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(Icons.edit_rounded, size: 13, color: _slate400),
-                            ),
-                          ),
-                        Text(
-                          "${widget.feedQty.toStringAsFixed(1)} kg",
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: _ink,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (isAdjusted && widget.originalFeedQty != null)
-                      Text(
-                        "${widget.originalFeedQty!.toStringAsFixed(1)} kg",
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: _slate400,
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13,
+              color: _slate500,
             ),
           ),
-
-          const SizedBox(height: 12),
-
-          // ── RECOMMENDED ACTION label ──────────────────────────────────
-          if (hasSupplements) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _amber.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _amber.withOpacity(0.3)),
-                ),
-                child: const Text(
-                  "RECOMMENDED ACTION",
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: _amber,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
+          const SizedBox(height: 4),
+          Text(
+            isOver
+                ? "This may increase feed waste and FCR"
+                : "Growth may slow down",
+            style: const TextStyle(
+              fontSize: 13,
+              color: _slate500,
             ),
-            const SizedBox(height: 10),
-
-            // ── Supplement Required box ───────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _slate200, width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.science_rounded, size: 14, color: _purple),
-                        const SizedBox(width: 6),
-                        const Text(
-                          "SUPPLEMENT REQUIRED",
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: _purple,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            "MANDATORY",
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: _red,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    // 2-column supplement grid
-                    _supplementGrid(),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-
-          // ── Adjustment warning box ────────────────────────────────────
-          if (isAdjusted && widget.originalFeedQty != null) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _amberBg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _amberBorder),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber_rounded, size: 16, color: _amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Feed reduced due to leftover",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: _amber,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            "Previous: ${widget.originalFeedQty!.toStringAsFixed(1)} kg → Now: ${widget.feedQty.toStringAsFixed(1)} kg",
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _amber,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-
-          // ── MARK AS FED button ────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 2, 14, 14),
-            child: _markAsFedButton(),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Hero countdown block ──────────────────────────────────────────────────
+  Widget _timerHero({required String label, required Duration duration}) {
+    final positive = duration.isNegative ? duration.abs() : duration;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _amberBorder, width: 1.5),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: _amber,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _fmtDuration(positive),
+              style: const TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w900,
+                color: _amber,
+                letterSpacing: -1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Early feed guidance banner ────────────────────────────────────────────
+  Widget _earlyWarningBanner() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _amberBorder),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.schedule_rounded, size: 14, color: _amber),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Best results when fed at the scheduled time",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _amber,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Overdue banner ────────────────────────────────────────────────────────
+  Widget _overdueBanner() {
+    final overdueBy = _fmtDuration(_timeRemaining.abs());
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_rounded, size: 16, color: _red),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Feed overdue by $overdueBy — feed now",
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _red,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── "Feed Early Anyway" ghost button (STATE 1 only) ───────────────────────
+  Widget _feedEarlyButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: OutlinedButton(
+        onPressed: _isSubmitting
+            ? null
+            : () async {
+                setState(() => _isSubmitting = true);
+                widget.onMarkDone?.call();
+                if (mounted) setState(() => _isSubmitting = false);
+              },
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: _slate300, width: 1.5),
+          foregroundColor: _slate500,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: _slate400),
+              )
+            : const Text(
+                "Feed Early Anyway",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: _slate500,
+                ),
+              ),
       ),
     );
   }
@@ -761,7 +882,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  "${widget.feedQty.toStringAsFixed(1)} kg",
+                  "${widget.finalFeedKg.toStringAsFixed(1)} kg",
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -883,7 +1004,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   Widget _markAsFedButton() {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 56,
       child: ElevatedButton(
         onPressed: _isSubmitting
             ? null
@@ -1005,7 +1126,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   // ── Edit dialog ───────────────────────────────────────────────────
 
   void _showEditDialog(BuildContext context) {
-    double editAmount = widget.feedQty;
+    double editAmount = widget.finalFeedKg;
 
     showDialog(
       context: context,

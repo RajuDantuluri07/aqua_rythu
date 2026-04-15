@@ -36,8 +36,9 @@ class TrayService {
         doc: doc,
         trayStatus: aggregatedStatus,
       );
-    } catch (e) {
-      AppLogger.error('TrayService.saveTrayLog failed for pond $pondId', e);
+    } catch (e, stack) {
+      AppLogger.error('TrayService.saveTrayLog failed for pond $pondId', e, stack);
+      rethrow;
     }
   }
 
@@ -71,8 +72,9 @@ class TrayService {
         'observations': {},
       });
       AppLogger.info('Tray skipped: pond $pondId DOC $doc R$roundNumber');
-    } catch (e) {
-      AppLogger.error('TrayService.markTraySkipped failed for pond $pondId', e);
+    } catch (e, stack) {
+      AppLogger.error('TrayService.markTraySkipped failed for pond $pondId', e, stack);
+      rethrow;
     }
   }
 

@@ -5,6 +5,7 @@ import 'package:aqua_rythu/services/pond_service.dart';
 import 'package:aqua_rythu/core/engines/smart_feed_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
+import 'package:aqua_rythu/core/utils/doc_utils.dart';
 
 enum PondStatus { active, completed }
 
@@ -92,12 +93,7 @@ class Pond {
   }
 
   int calculateDoc(DateTime now) {
-    // Normalize both dates to midnight UTC to ensure consistency
-    final date1 = DateTime.utc(now.year, now.month, now.day);
-    final date2 = DateTime.utc(stockingDate.year, stockingDate.month, stockingDate.day);
-    
-    final diff = date1.difference(date2).inDays + 1;
-    return diff > 0 ? diff : 1; // Default to Day 1 if date is in future
+    return calculateDocFromStockingDate(stockingDate, now: now);
   }
 
 }

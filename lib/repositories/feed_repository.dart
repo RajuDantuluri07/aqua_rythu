@@ -111,15 +111,10 @@ class FeedRepository {
     }
   }
 
-  /// Atomically sets planned_amount + is_smart_adjusted for ONE row.
+  /// Sets the latest smart-adjusted amount for one row.
   ///
-  /// The WHERE clause includes `is_smart_adjusted = false` — PostgreSQL will
-  /// only execute the update if the row has not been adjusted yet. If a
-  /// concurrent call already set it to true, this returns false (0 rows
-  /// affected) and the caller should treat it as a safe no-op.
-  ///
-  /// Returns true if the row was updated, false if a concurrent process
-  /// already claimed it.
+  /// This always recalculates from `base_feed`, so repeated smart-feed passes
+  /// do not compound even when the same future DOC is updated multiple times.
   Future<bool> atomicUpdateRound({
     required String rowId,
     required double newPlannedAmount,
@@ -134,17 +129,17 @@ class FeedRepository {
           'updated_at': DateTime.now().toIso8601String(),
         })
         .eq('id', rowId)
-        .eq('is_smart_adjusted', false) // atomic guard — only succeeds once
         .select();
 
     return updated.isNotEmpty;
   }
 
-  Future<void> logFeedGiven(String pondId, double amount) async {
+  Future<void> logFeedGiven(String pondId, double amount, {String? engineVersion}) async {
     await _supabase.from('feed_logs').insert({
       'pond_id': pondId,
       'feed_given': amount,
       'created_at': DateTime.now().toIso8601String(),
+      if (engineVersion != null) 'engine_version': engineVersion,
     });
   }
 }

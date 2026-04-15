@@ -4,7 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../farm/farm_provider.dart';
 import '../../services/pond_service.dart';
+import '../../services/feed_service.dart';
 import '../../routes/app_routes.dart';
+import '../../core/engines/feed_status_engine.dart';
+import '../../core/utils/doc_utils.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -24,6 +27,21 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   DateTime _stockingDate = DateTime.now();
   int _numTrays = 4;
   bool _isLoading = false;
+
+  // ── Day 1 fix: feeds already done today ──────────────────────────────────
+  // Calculated DOC based on current stocking date selection.
+  int get _currentDoc {
+    return calculateDocFromStockingDate(_stockingDate);
+  }
+
+  late int _feedsDoneToday;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default suggestion based on current time (DOC 1 assumed on new stocking)
+    _feedsDoneToday = FeedStatusEngine.suggestedFeedsDoneNow(1);
+  }
 
   @override
   void dispose() {
@@ -57,6 +75,9 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     if (picked != null && picked != _stockingDate) {
       setState(() {
         _stockingDate = picked;
+        // Recalculate suggested feeds when stocking date changes
+        final newDoc = calculateDocFromStockingDate(picked);
+        _feedsDoneToday = FeedStatusEngine.suggestedFeedsDoneNow(newDoc);
       });
     }
   }
@@ -86,11 +107,14 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     if (count == null) {
       return "Enter a valid whole number";
     }
-    if (count <= 0) {
-      return "Seed count must be greater than 0";
+    // BUG-12 fix: tightened from 10M to 500K to catch phone-keypad typos
+    // (e.g. 1,000,000 instead of 1,00,000). A 10x typo previously produced
+    // ~20 kg/round with no guard — catastrophic overfeed risk.
+    if (count < 1000) {
+      return "Minimum stocking is 1,000 shrimp";
     }
-    if (count > 10000000) {
-      return "Seed count seems too large (max: 10M)";
+    if (count > 500000) {
+      return "Max stocking is 5,00,000. Did you add an extra zero?";
     }
     return null;
   }
@@ -144,7 +168,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
       try {
         final pondService = PondService();
 
-        await pondService.createPond(
+        final pondId = await pondService.createPondAndReturnId(
           farmId: selectedFarmId,
           name: _nameController.text.trim(),
           area: area,
@@ -153,6 +177,15 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           plSize: plSize,
           numTrays: _numTrays,
         );
+
+        // Pre-mark rounds if farmer already fed today
+        if (_feedsDoneToday > 0 && pondId != null) {
+          await FeedService().premarkRoundsCompleted(
+            pondId: pondId,
+            doc: _currentDoc,
+            count: _feedsDoneToday,
+          );
+        }
 
         // Refresh the provider to sync the new pond from Supabase
         await ref.read(farmProvider.notifier).loadFarms(setAsSelectedId: selectedFarmId);
@@ -386,6 +419,141 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // ── Feeds Done Today ──────────────────────────────────────────
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.restaurant_rounded,
+                            color: Theme.of(context).primaryColor, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          "Today's Feeding",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      "How many times have you fed today?",
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: List.generate(
+                        _currentDoc <= 7 ? 3 : 5,
+                        (i) {
+                          final selected = _feedsDoneToday == i;
+                          return Expanded(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  setState(() => _feedsDoneToday = i),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                margin: EdgeInsets.only(
+                                    right: i < (_currentDoc <= 7 ? 2 : 4) ? 8 : 0),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: selected
+                                      ? Theme.of(context).primaryColor
+                                      : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: selected
+                                        ? Theme.of(context).primaryColor
+                                        : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      '$i',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: selected
+                                            ? Colors.white
+                                            : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      i == 0
+                                          ? 'Not yet'
+                                          : i == 1
+                                              ? 'Once'
+                                              : '$i times',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: selected
+                                            ? Colors.white70
+                                            : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    if (_feedsDoneToday > 0) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded,
+                                size: 14, color: Color(0xFF16A34A)),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Rounds 1–$_feedsDoneToday will be marked complete. '
+                                'App starts from Round ${_feedsDoneToday + 1}.',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF15803D),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/engines/feed_plan_generator.dart';
 import '../core/utils/logger.dart';
+import '../core/utils/doc_utils.dart';
 
 class PondService {
   final supabase = Supabase.instance.client;
@@ -9,6 +10,28 @@ class PondService {
   // ✅ CREATE POND (STABLE)
   // ================================
   Future<void> createPond({
+    required String farmId,
+    required String name,
+    required double area,
+    required DateTime stockingDate,
+    required int seedCount,
+    required int plSize,
+    required int numTrays,
+  }) async {
+    await createPondAndReturnId(
+      farmId: farmId,
+      name: name,
+      area: area,
+      stockingDate: stockingDate,
+      seedCount: seedCount,
+      plSize: plSize,
+      numTrays: numTrays,
+    );
+  }
+
+  /// Creates a pond + feed schedule and returns the new pond ID.
+  /// Used when the caller needs the ID (e.g. to pre-mark feed rounds).
+  Future<String?> createPondAndReturnId({
     required String farmId,
     required String name,
     required double area,
@@ -50,6 +73,7 @@ class PondService {
       await generateFeedSchedule(pondId);
 
       AppLogger.info("Pond + feed plan created: $pondId");
+      return pondId;
     } catch (e) {
       throw Exception('Failed to create pond: $e');
     }
@@ -113,13 +137,8 @@ class PondService {
     required String pondId,
     required String stockingDate,
   }) async {
-    // Normalize to UTC midnight — same logic as docProvider/calculateDoc
-    final now = DateTime.now();
-    final todayUtc = DateTime.utc(now.year, now.month, now.day);
     final stockDate = DateTime.parse(stockingDate);
-    final stockUtc = DateTime.utc(stockDate.year, stockDate.month, stockDate.day);
-
-    final doc = todayUtc.difference(stockUtc).inDays + 1;
+    final doc = calculateDocFromStockingDate(stockDate);
 
     AppLogger.debug("Calculated DOC: $doc for pond $pondId");
 

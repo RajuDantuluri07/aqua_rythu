@@ -21,6 +21,23 @@ class TrayLog {
     this.isSkipped = false,
   });
 
+  double? get leftoverPercent {
+    if (isSkipped || trays.isEmpty) return null;
+
+    final total = trays.fold<double>(0.0, (sum, tray) {
+      switch (tray) {
+        case TrayStatus.empty:
+          return sum;
+        case TrayStatus.partial:
+          return sum + 30.0;
+        case TrayStatus.full:
+          return sum + 70.0;
+      }
+    });
+
+    return total / trays.length;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'pondId': pondId,

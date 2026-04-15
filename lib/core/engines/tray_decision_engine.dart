@@ -1,0 +1,250 @@
+import '../../features/tray/tray_model.dart';
+import '../enums/tray_status.dart';
+
+/// Result returned by [TrayDecisionEngine.evaluate].
+class TrayDecisionResult {
+  /// 'INCREASE' | 'REDUCE' | 'MAINTAIN'
+  final String action;
+
+  /// Signed integer percentage change: +5, -10, or 0.
+  final int percentage;
+
+  /// Recommended feed amount after applying the percentage to baseFeed and
+  /// enforcing all safety floors/caps.
+  final double finalFeed;
+
+  /// Average tray score across the rounds considered (-1.0 → +1.0).
+  final double avgScore;
+
+  /// Number of tray rounds actually used in the calculation (1–3).
+  final int roundsUsed;
+
+  /// Human-readable reason shown inside the Today Decision card.
+  final String reason;
+
+  const TrayDecisionResult({
+    required this.action,
+    required this.percentage,
+    required this.finalFeed,
+    required this.avgScore,
+    required this.roundsUsed,
+    required this.reason,
+  });
+
+  /// Formatted percentage string for display, e.g. ' +5%' or ' -10%'.
+  String get percentageLabel {
+    if (percentage == 0) return '';
+    return percentage > 0 ? ' +$percentage%' : ' $percentage%';
+  }
+}
+
+/// Tray-based scoring decision engine (V1).
+///
+/// Replaces the single-round naive logic with a multi-round weighted score,
+/// stability rules, and safety caps.
+///
+/// **Scoring**
+///   EMPTY  → +1   (shrimp eating well → increase)
+///   HALF   →  0   (neutral)
+///   FULL   → -1   (feed leftover → reduce)
+///
+/// **Decision thresholds** (raised to ±0.6 to absorb single-tray noise)
+///   avgScore >=  0.6  → INCREASE +5%
+///   avgScore <= -0.6  → REDUCE   -10%
+///   otherwise         → MAINTAIN
+///
+/// **Minimum confidence gate**
+///   totalTrays < 4 across the window → always MAINTAIN ("Not enough data")
+///
+/// **Safety rules (always enforced)**
+///   1. DOC ≤ 30: blind feed phase → always MAINTAIN, ignore scoring.
+///   2. Max change cap: increase ≤ +10%, decrease ≥ -15%.
+///   3. No consecutive reduce: if the previous window also resolved to REDUCE,
+///      downgrade current REDUCE → MAINTAIN.
+///   4. Feed floor: finalFeed ≥ 70% of baseFeed.
+class TrayDecisionEngine {
+  static const int _maxRounds = 3;
+
+  // ── Tray score mapping ────────────────────────────────────────────────────
+
+  static double _score(TrayStatus s) {
+    switch (s) {
+      case TrayStatus.empty:
+        return 1.0;
+      case TrayStatus.full:
+        return -1.0;
+      case TrayStatus.partial:
+        return 0.0;
+    }
+  }
+
+  // ── Average score across a list of logs ──────────────────────────────────
+
+  static double _avgScore(List<TrayLog> logs) {
+    double total = 0;
+    int count = 0;
+    for (final log in logs) {
+      for (final tray in log.trays) {
+        total += _score(tray);
+        count++;
+      }
+    }
+    return count == 0 ? 0.0 : total / count;
+  }
+
+  // ── Raw action from score ─────────────────────────────────────────────────
+
+  // Raised from ±0.5 to ±0.6 — absorbs single-tray noise, prevents flip-flop
+  // on borderline scores (e.g. 0.49 vs 0.51 no longer triggers a decision jump).
+  static String _actionFromScore(double avg) {
+    if (avg >= 0.6) return 'INCREASE';
+    if (avg <= -0.6) return 'REDUCE';
+    return 'MAINTAIN';
+  }
+
+  // ── Main evaluation ───────────────────────────────────────────────────────
+
+  /// Evaluate tray logs and return a [TrayDecisionResult].
+  ///
+  /// [allTrayLogs] must be sorted newest-first (as returned by the tray
+  /// provider which orders by date DESC, round_number DESC).
+  ///
+  /// [baseFeed] is the total planned daily feed for the pond today.
+  static TrayDecisionResult evaluate({
+    required List<TrayLog> allTrayLogs,
+    required int doc,
+    required double baseFeed,
+  }) {
+    // ── Safety rule 1: blind feed phase ──────────────────────────────────
+    if (doc <= 30) {
+      return TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        finalFeed: baseFeed,
+        avgScore: 0,
+        roundsUsed: 0,
+        reason: doc < 15
+            ? 'Following base feed schedule'
+            : 'Following feed schedule until DOC 30',
+      );
+    }
+
+    // Filter out skipped logs and logs with no tray data
+    final validLogs = allTrayLogs
+        .where((l) => !l.isSkipped && l.trays.isNotEmpty)
+        .toList();
+
+    if (validLogs.isEmpty) {
+      return TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        finalFeed: baseFeed,
+        avgScore: 0,
+        roundsUsed: 0,
+        reason: 'No tray data yet — follow schedule',
+      );
+    }
+
+    // ── Collect current window (last N rounds) ────────────────────────────
+    final currentWindow = validLogs.take(_maxRounds).toList();
+    final roundsUsed = currentWindow.length;
+
+    // ── Minimum confidence gate (Issue 4) ────────────────────────────────
+    // Fewer than 4 individual tray data-points is not enough signal to act.
+    // 1 round × 2 trays = 2 points → too noisy.  2 rounds × 2 trays = 4 → ok.
+    final int totalTrays =
+        currentWindow.fold(0, (sum, l) => sum + l.trays.length);
+    if (totalTrays < 4) {
+      return TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        finalFeed: baseFeed,
+        avgScore: 0,
+        roundsUsed: roundsUsed,
+        reason: 'Not enough tray data yet ($totalTrays tray reads) — follow schedule',
+      );
+    }
+
+    final avg = _avgScore(currentWindow);
+    String action = _actionFromScore(avg);
+
+    // ── Safety rule 3a: no consecutive reduce ────────────────────────────
+    // Check the previous window (logs beyond the current window).
+    if (action == 'REDUCE' && validLogs.length > _maxRounds) {
+      final prevWindow = validLogs.skip(_maxRounds).take(_maxRounds).toList();
+      final prevAction = _actionFromScore(_avgScore(prevWindow));
+      if (prevAction == 'REDUCE') {
+        action = 'MAINTAIN';
+      }
+    }
+
+    // ── Safety rule 3b: dampen consecutive increase ───────────────────────
+    // BUG-09 fix: previously there was no mirror rule for INCREASE.
+    // For ponds with persistently empty trays (fast-growth weeks 5-6), the
+    // engine could INCREASE every evaluation window indefinitely.
+    // Each INCREASE is +5%, so 3 consecutive windows ≈ +15.8% total — beyond
+    // the +10% documented cap. SmartFeedEngine's applySafetyGuards() catches
+    // this when routed through it, but TrayDecisionEngine used standalone
+    // (debug, future paths) had no cap of its own.
+    // Fix: if the previous window also resolved to INCREASE, reduce the
+    // percentage from +5% to +3% (dampened, not blocked — shrimp may still
+    // genuinely be hungry, but we avoid runaway escalation).
+    if (action == 'INCREASE' && validLogs.length > _maxRounds) {
+      final prevWindow = validLogs.skip(_maxRounds).take(_maxRounds).toList();
+      if (_avgScore(prevWindow) >= 0.6) {
+        // Consecutive increase: apply dampened +3% instead of +5%
+        action = 'INCREASE_DAMPENED';
+      }
+    }
+
+    // ── Safety rule 2: max change cap ─────────────────────────────────────
+    int percentage;
+    if (action == 'INCREASE') {
+      percentage = 5; // capped at +10% per ticket, we use +5 (within cap)
+    } else if (action == 'INCREASE_DAMPENED') {
+      percentage = 3; // consecutive increase → dampened to +3% (BUG-09 fix)
+      action = 'INCREASE'; // normalise for output consumers
+    } else if (action == 'REDUCE') {
+      percentage = -10; // capped at -15% per ticket, we use -10 (within cap)
+    } else {
+      percentage = 0;
+    }
+
+    // ── Final feed calculation ────────────────────────────────────────────
+    double finalFeed = baseFeed * (1 + percentage / 100);
+
+    // ── Safety rule 4: minimum feed floor (70% of base) ──────────────────
+    final double floorFeed = baseFeed * 0.70;
+    if (finalFeed < floorFeed) finalFeed = floorFeed;
+
+    // ── Reason generation (trend language) ───────────────────────────────
+    final allTrays = currentWindow.expand((l) => l.trays).toList();
+    final emptyCount = allTrays.where((t) => t == TrayStatus.empty).length;
+    final fullCount = allTrays.where((t) => t == TrayStatus.full).length;
+    final totalCount = allTrays.length;
+    final roundWord = roundsUsed == 1 ? 'round' : 'rounds';
+
+    String reason;
+    if (action == 'INCREASE') {
+      reason = percentage == 3
+          ? '$roundsUsed $roundWord mostly empty '
+              '($emptyCount/$totalCount trays) — small increase (consecutive)'
+          : '$roundsUsed $roundWord mostly empty '
+              '($emptyCount/$totalCount trays) — increasing feed';
+    } else if (action == 'REDUCE') {
+      reason = '$roundsUsed $roundWord with feed left '
+          '($fullCount/$totalCount trays full) — reducing feed';
+    } else {
+      reason = 'Mixed tray response across $roundsUsed $roundWord — stable feed';
+    }
+
+    return TrayDecisionResult(
+      action: action,
+      percentage: percentage,
+      finalFeed: finalFeed,
+      avgScore: avg,
+      roundsUsed: roundsUsed,
+      reason: reason,
+    );
+  }
+}

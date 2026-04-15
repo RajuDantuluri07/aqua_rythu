@@ -15,6 +15,7 @@ class FeedService {
     double? leftoverPercent,
     String? stockingType,
     int? density,
+    String? engineVersion,
   }) async {
     final total = rounds.fold(0.0, (sum, r) => sum + r);
     await supabase.from('feed_logs').insert({
@@ -25,6 +26,7 @@ class FeedService {
       if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
       if (stockingType != null) 'stocking_type': stockingType,
       if (density != null) 'density': density,
+      if (engineVersion != null) 'engine_version': engineVersion,
     });
   }
 
@@ -35,6 +37,23 @@ class FeedService {
         .select('feed_given, created_at')
         .eq('pond_id', pondId)
         .order('created_at', ascending: true);
+  }
+
+  Future<DateTime?> fetchLatestFeedTimeForDoc({
+    required String pondId,
+    required int doc,
+  }) async {
+    final row = await supabase
+        .from('feed_logs')
+        .select('created_at')
+        .eq('pond_id', pondId)
+        .eq('doc', doc)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+
+    if (row == null) return null;
+    return DateTime.tryParse(row['created_at'] as String? ?? '');
   }
 
   /// Fetch all feed plans for a pond
@@ -129,6 +148,31 @@ class FeedService {
           .eq('id', feedPlanId);
     } catch (e) {
       throw Exception('Failed to mark feed plan as completed: $e');
+    }
+  }
+
+  /// Pre-mark the first [count] feed rounds for a pond+doc as completed.
+  /// Called right after pond creation when the farmer reports they've
+  /// already fed N times today.
+  Future<void> premarkRoundsCompleted({
+    required String pondId,
+    required int doc,
+    required int count,
+  }) async {
+    if (count <= 0) return;
+    final rows = await supabase
+        .from('feed_rounds')
+        .select('id, round')
+        .eq('pond_id', pondId)
+        .eq('doc', doc)
+        .order('round', ascending: true)
+        .limit(count);
+
+    for (final row in rows) {
+      await supabase
+          .from('feed_rounds')
+          .update({'status': 'completed'})
+          .eq('id', row['id'] as String);
     }
   }
 

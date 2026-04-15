@@ -9,6 +9,7 @@ import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
 import '../../features/tray/tray_provider.dart';
 import '../tray/tray_model.dart';
+import '../../core/enums/tray_status.dart';
 import '../farm/farm_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../feed/feed_history_provider.dart';
@@ -16,6 +17,7 @@ import '../growth/growth_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_timeline_card.dart';
+import '../feed/feed_hero_card.dart';
 import '../feed/smart_feed_provider.dart';
 import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
@@ -26,12 +28,22 @@ import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
 import 'package:aqua_rythu/core/engines/feed_plan_constants.dart';
+import 'package:aqua_rythu/core/engines/tray_decision_engine.dart';
+import 'package:aqua_rythu/core/engines/pond_value_engine.dart';
+import 'package:aqua_rythu/core/engines/feed_status_engine.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
 import 'package:flutter/foundation.dart';
-import '../debug/debug_feed_screen.dart';
 import '../debug/debug_dashboard_screen.dart';
+import 'package:aqua_rythu/features/home/alert_strip.dart';
+import 'package:aqua_rythu/features/home/kpi_row.dart';
+import 'package:aqua_rythu/features/home/growth_status_card.dart';
+import 'package:aqua_rythu/features/home/waste_insight_card.dart';
+import 'package:aqua_rythu/features/home/feed_trend_card.dart';
+import 'package:aqua_rythu/features/home/activity_timeline.dart';
+import 'package:aqua_rythu/features/home/smart_insight_box.dart';
+import 'package:aqua_rythu/features/home/home_builder.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -45,10 +57,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     with SingleTickerProviderStateMixin {
 
   late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
   bool _showFeedScheduleTip = false;
   bool _showDoc8FeedBanner = false;
   int _debugTapCount = 0;
+  bool _completedRoundsExpanded = false;
 
   @override
   void initState() {
@@ -56,9 +68,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
-    );
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.06).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     _checkFeedScheduleTip();
   }
@@ -393,68 +402,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
     }
   }
 
-  void _showFarmSwitchDialog(FarmState farmState) {
-    showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(AppLocalizations.of(context).t('select_farm')),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        children: [
-          ...farmState.farms.map((farm) {
-            final isSelected = farm.id == farmState.selectedId;
-            return SimpleDialogOption(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-              onPressed: () {
-                ref.read(farmProvider.notifier).selectFarm(farm.id);
-                Navigator.pop(context);
-              },
-              child: Row(
-                children: [
-                  Icon(Icons.landscape,
-                      color: isSelected ? Colors.green : Colors.grey),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      farm.name,
-                      style: TextStyle(
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 16),
-                    ),
-                  ),
-                  if (isSelected)
-                    const Icon(Icons.check_circle,
-                        color: Colors.green, size: 18),
-                ],
-              ),
-            );
-          }),
-          const Divider(),
-          SimpleDialogOption(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-            onPressed: () {
-              Navigator.pop(context);
-              _showAddFarmDialog();
-            },
-            child: Row(
-              children: [
-                Icon(Icons.add_circle_outline,
-                    color: Theme.of(context).primaryColor),
-                const SizedBox(width: 12),
-                Text(
-                  AppLocalizations.of(context).t('add_new_farm'),
-                  style: TextStyle(
-                      color: Theme.of(context).primaryColor,
-                      fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showAddFarmDialog() {
     final nameCtrl = TextEditingController();
     final locCtrl = TextEditingController();
@@ -496,6 +443,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
           ElevatedButton(
             onPressed: () async {
               if (nameCtrl.text.isNotEmpty) {
+                final messenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+                final createdLabel = AppLocalizations.of(context).t('farm_created');
                 try {
                   final farmService = FarmService();
                   await farmService.createFarm(
@@ -504,16 +454,12 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     farmType: 'Semi-Intensive',
                   );
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(AppLocalizations.of(context).t('farm_created'))),
-                    );
-                    Navigator.pop(context);
+                    messenger.showSnackBar(SnackBar(content: Text(createdLabel)));
+                    navigator.pop();
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
+                    messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                 }
               }
@@ -558,6 +504,34 @@ List<SupplementItem> _getPlannedFeedSupplements(
               backgroundColor: Color(0xFF2E7D32),
               behavior: SnackBarBehavior.floating,
               duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+
+      // Warn farmer when a tray log failed to save to the server.
+      // The current session is unaffected, but if the app restarts before
+      // connectivity is restored the round will be locked again.
+      if (next.trayPersistFailed && !(previous?.trayPersistFailed ?? false)) {
+        ref.read(pondDashboardProvider.notifier).clearTrayPersistFailedFlag();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.wifi_off, color: Colors.white, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Tray log could not be saved. Please re-log tray if you restart the app.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFFB45309),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 6),
             ),
           );
         }
@@ -611,7 +585,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
               ),
             ],
           ),
-          bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+          bottomNavigationBar: const AppBottomBar(currentIndex: 1),
           body: SafeArea(
             child: Center(
               child: Column(
@@ -655,7 +629,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
             ),
           ],
         ),
-        bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 1),
         body: SafeArea(
           child: Center(
             child: Column(
@@ -720,7 +694,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
     if (currentFarm != null && currentFarm.ponds.isEmpty) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
-        bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 1),
         body: SafeArea(
           child: Center(
             child: Column(
@@ -849,12 +823,171 @@ List<SupplementItem> _getPlannedFeedSupplements(
         .where((e) => e.value == 'completed')
         .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
-    // Enable Smart Feed when DOC is 30 or when pond has Smart Feed enabled
-    final isSmartFeedEnabled = currentPond.isSmartFeedEnabled || (currentDoc >= 30);
+    // BUG-11 fix: Smart Feed auto-enables at DOC > 30 regardless of the DB flag.
+    // The flag `isSmartFeedEnabled` in the pond record is the farmer's manual
+    // preference. Even if they never toggled it, Smart Mode activates at DOC 31
+    // because the round lock and SmartFeedEngine both trigger on doc > 30 anyway.
+    // Boundary corrected from >= 30 to > 30: DOC 30 is still tray_habit (blind feed).
+    final isSmartFeedEnabled = currentPond.isSmartFeedEnabled || (currentDoc > 30);
+
+    // ── DOC-adaptive mode ────────────────────────────────────────────────────
+    final String mode;
+    if (currentDoc == 1) {
+      mode = 'onboarding';
+    } else if (currentDoc < 30) {
+      mode = 'growth';
+    } else {
+      mode = 'smart';
+    }
+
+    // ── Feeding streak (consecutive days with at least one completed round) ──
+    int streak = 0;
+    {
+      DateTime expected = DateTime(today.year, today.month, today.day);
+      for (final log in history) {
+        final logDay =
+            DateTime(log.date.year, log.date.month, log.date.day);
+        if (logDay == expected && log.total > 0) {
+          streak++;
+          expected = expected.subtract(const Duration(days: 1));
+        } else {
+          break;
+        }
+      }
+    }
+
+    // ── Pond Value ────────────────────────────────────────────────────────────
+    final double survivalFraction = _estimatedSurvivalRate(currentDoc) / 100.0;
+    String? traySignal;
+    {
+      final recentTray = trayLogs
+          .where((l) => !l.isSkipped && l.trays.isNotEmpty)
+          .firstOrNull;
+      if (recentTray != null) {
+        final full = recentTray.trays.where((t) => t == TrayStatus.full).length;
+        final empty =
+            recentTray.trays.where((t) => t == TrayStatus.empty).length;
+        final total = recentTray.trays.length;
+        if (full > total / 2) traySignal = 'full';
+        else if (empty > total / 2) traySignal = 'empty';
+        else traySignal = 'partial';
+      }
+    }
+    final bool hasTrayData =
+        trayLogs.any((l) => !l.isSkipped && l.trays.isNotEmpty);
+    final pondValue = PondValueEngine.calculate(
+      stockCount: currentPond.seedCount,
+      avgWeightG: currentAbw,
+      survivalRate: survivalFraction,
+      doc: currentDoc,
+      fedToday: consumedFeed > 0,
+      missedFeed: consumedFeed == 0 && currentDoc > 1,
+      traySignal: traySignal,
+      feedingConsistent: streak >= 3,
+      hasTrayData: hasTrayData,
+      missingLogs: consumedFeed == 0 && currentDoc > 1,
+    );
+
+    // ── Pending rounds ────────────────────────────────────────────────────────
+    final List<int> pendingRounds = dashboardState.roundFeedStatus.entries
+        .where((e) => e.value != 'completed')
+        .map((e) => e.key)
+        .toList()
+      ..sort();
+
+    final int completedRoundsCount = dashboardState.roundFeedStatus.values
+        .where((s) => s == 'completed')
+        .length;
+
+    // SSOT for live countdown — passed directly to FeedHeroCard.
+    final DateTime? nextFeedAt = FeedStatusEngine.nextFeedAt(
+      now: DateTime.now(),
+      lastFeedTime: dashboardState.lastFeedTime,
+      doc: currentDoc,
+      feedsDoneToday: completedRoundsCount,
+    );
+
+    // ── Tray decision (INCREASE / REDUCE / MAINTAIN) ──────────────────────────
+    final todaySorted = (todayTrayMap.entries.toList()
+          ..sort((a, b) => b.key.compareTo(a.key)))
+        .map((e) => e.value)
+        .toList();
+    final seenKeys = <String>{};
+    final dedupedTrayLogs = <TrayLog>[];
+    for (final log in [...todaySorted, ...trayLogs]) {
+      if (seenKeys.add('${log.doc}_${log.round}')) dedupedTrayLogs.add(log);
+    }
+    final trayDecision = TrayDecisionEngine.evaluate(
+      allTrayLogs: dedupedTrayLogs,
+      doc: currentDoc,
+      baseFeed: plannedFeed,
+    );
+
+    // ── HomeViewModel — single source of truth for all home sections ─────────
+    final vm = HomeBuilder.build(
+      doc:             currentDoc,
+      feedsDone:       completedRoundsCount,
+      maxFeeds:        currentDoc <= 7 ? 2 : 4,
+      lastFeedTime:    dashboardState.lastFeedTime,
+      roundFeedStatus: dashboardState.roundFeedStatus,
+      trayDone:        trayDone,
+      consumedFeed:    consumedFeed,
+      plannedFeed:     plannedFeed,
+      feedHistory:     history,
+      trayLogs:        trayLogs,
+      growthLogs:      growthLogs,
+      currentAbw:      currentAbw,
+      pondFcr:         pondFcr,
+      streak:          streak,
+      seedCount:       currentPond.seedCount,
+    );
+
+    // ── Savings vs plan for completed rounds ──────────────────────────────────
+    const double _feedCostPerKg = 40.0;
+    double? heroSavedToday;
+    if (completedRoundsCount >= 1 && consumedFeed > 0) {
+      final double baseline = dashboardState.roundFeedStatus.entries
+          .where((e) => e.value == 'completed')
+          .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
+      if (baseline > 0) {
+        final diff = baseline - consumedFeed;
+        if (diff > 0.001) heroSavedToday = diff * _feedCostPerKg;
+      }
+    }
+
+    // ── Current (hero) round data ─────────────────────────────────────────────
+    final int? heroRound = pendingRounds.isNotEmpty ? pendingRounds.first : null;
+    String heroTime = '';
+    double heroQty = 0;
+    List<String> heroSupplements = [];
+    if (heroRound != null) {
+      final feedRoundsData =
+          _getFeedRounds(currentDoc, dashboardState.roundFeedAmounts, currentPond);
+      final roundData = feedRoundsData.firstWhere(
+        (r) => r['round'] == heroRound,
+        orElse: () => <String, dynamic>{},
+      );
+      heroTime = (roundData['time'] as String?) ?? '';
+      final heroTimeKey = (roundData['key'] as String?) ?? 'R$heroRound';
+      heroQty = dashboardState.roundFeedAmounts[heroRound] ?? 0;
+      heroSupplements = _getPlannedFeedSupplements(activePlansToday, heroTimeKey, heroQty)
+          .map((s) => '${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}')
+          .toList();
+    }
+
+    // ── Next feed time tomorrow (for AllDone card) ────────────────────────────
+    String? nextRoundTime;
+    {
+      final config = getFeedConfig(currentDoc + 1);
+      if (config.timingsDisplay.isNotEmpty) {
+        final t = config.timingsDisplay[0];
+        if (!t.startsWith('--')) nextRoundTime = t;
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+      bottomNavigationBar: const AppBottomBar(currentIndex: 1),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -993,141 +1126,31 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
               AppSpacing.hBase,
 
-              /// QUICK STATS CARD — SPECIES / DOC / SURVIVAL
-              /// 5-tap anywhere on this strip → opens Feed Engine Debug Dashboard
+              /// POND VALUE CARD — replaces Species/DOC/Survival stats strip
+              /// 5-tap still opens the Feed Engine Debug Dashboard
               GestureDetector(
                 onTap: () => _onDebugTap(selectedPond, currentPond.name),
-                child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: AppRadius.rm,
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4))
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // SPECIES
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context).t('species'),
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF94A3B8),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            "L. vannamei",
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _divider(),
-                    // DOC
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context).t('doc'),
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF94A3B8),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "$currentDoc ${AppLocalizations.of(context).t('days')}",
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _divider(),
-                    // SURVIVAL
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context).t('survival'),
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF94A3B8),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "${_estimatedSurvivalRate(currentDoc)}%",
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF16A34A),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: _buildValueCard(
+                  mode: mode,
+                  pondValue: pondValue,
+                  doc: currentDoc,
+                  streak: streak,
+                  seedCount: currentPond.seedCount,
+                  survivalRate: survivalFraction,
                 ),
               ),
-              ), // GestureDetector — debug 5-tap
 
               const SizedBox(height: 12),
 
-              // ── TODAY FEED PLAN BANNER ────────────────────────────────────
-              Builder(builder: (context) {
-                final feedRoundsToday = dashboardState.roundFeedAmounts.isNotEmpty
-                    ? dashboardState.roundFeedAmounts.values.where((v) => v > 0).length
-                    : (currentDoc <= 7 ? 2 : 4);
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF86EFAC)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.restaurant_menu_rounded,
-                          size: 16, color: Color(0xFF16A34A)),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Today Feed Plan: $feedRoundsToday feeds',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF166534),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+              // ── ALERT STRIP — highest priority status ──────────────────────
+              if (!isCompleted) ...[
+                AlertStrip(data: vm.alert),
+                const SizedBox(height: 10),
+
+                // ── KPI ROW — Feed Today · ABW · FCR ──────────────────────────
+                KpiRow(data: vm.kpis),
+                const SizedBox(height: 12),
+              ],
 
               // ── DOC 8 TRANSITION NOTIFICATION (shown once) ───────────────
               if (_showDoc8FeedBanner) ...[
@@ -1170,133 +1193,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
               if (isCompleted)
                 _buildCompletedDashboard(context, ref, currentPond)
               else ...[
-                /// ── ACTION BUTTONS: Feed Schedule + Supplement Mix ─────────────
-                Row(
-                  children: [
-                    Expanded(
-                      child: AnimatedBuilder(
-                        animation: _pulseAnim,
-                        builder: (context, child) => Transform.scale(
-                          scale: _showFeedScheduleTip ? _pulseAnim.value : 1.0,
-                          child: child,
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            if (_showFeedScheduleTip) {
-                              _pulseController.stop();
-                              setState(() => _showFeedScheduleTip = false);
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => FeedScheduleScreen(pondId: selectedPond),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _showFeedScheduleTip
-                                    ? AppColors.primary
-                                    : AppColors.primary.withOpacity(0.4),
-                                width: 1.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.calendar_month_rounded,
-                                    size: 18, color: AppColors.primary),
-                                const SizedBox(width: 8),
-                                Text(
-                                  AppLocalizations.of(context).t('feed_schedule'),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SupplementMixScreen(pondId: selectedPond),
-                          ),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.primary.withOpacity(0.4),
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.science_rounded,
-                                  size: 18, color: AppColors.primary),
-                              const SizedBox(width: 8),
-                              Text(
-                                AppLocalizations.of(context).t('supplement_mix'),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                /// ── TODAY'S PROGRESS (Smart Feed only: DOC > 30) ──────────────
-                if (isSmartFeedEnabled) ...[
-                  _buildTodayProgressCard(
-                    consumedFeed: consumedFeed,
-                    plannedFeed: plannedFeed,
-                    completedRounds: dashboardState.roundFeedStatus.values
-                        .where((s) => s == 'completed')
-                        .length,
-                    totalRounds: dashboardState.roundFeedAmounts.isNotEmpty
-                        ? dashboardState.roundFeedAmounts.values.where((v) => v > 0).length
-                        : (currentDoc <= 7 ? 2 : 4),
-                    fcrTrend: fcrTrend,
-                  ),
-                  const SizedBox(height: 16),
-                ],
 
                 if (currentDoc > 120) ...[
                   Container(
@@ -1336,7 +1232,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
                         children: [
-                          Icon(Icons.event_busy_rounded, size: 48, color: Colors.grey[400]),
+                          Icon(Icons.restaurant_menu_outlined, size: 48, color: Colors.grey[400]),
                           const SizedBox(height: 12),
                           Text(
                             AppLocalizations.of(context).t('no_feed_plan'),
@@ -1346,6 +1242,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
                               color: AppColors.textSecondary,
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Start feeding to see insights',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1353,6 +1257,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 else
                   Column(
                     children: [
+                      // ── Active rounds (current + upcoming) + water supplements ──
                       ..._buildTimeline(
                         today: today,
                         currentDoc: currentDoc,
@@ -1367,18 +1272,87 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         smartFeedOutput: null,
                         currentPond: currentPond,
                         isSmartFeedEnabled: isSmartFeedEnabled,
+                        valueDelta: pondValue.delta,
+                        showDoneRoundsOnly: false,
+                        nextFeedAt: nextFeedAt,
                       ),
-                    ],
-                  ),
 
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                          onTap: () => setState(() => _completedRoundsExpanded = !_completedRoundsExpanded),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _completedRoundsExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                                  size: 18,
+                                  color: const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _completedRoundsExpanded ? 'Hide Completed Rounds' : 'Completed Rounds',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF16A34A),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${dashboardState.roundFeedStatus.values.where((s) => s == 'completed').length} done',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_completedRoundsExpanded) ...[
+                          const SizedBox(height: 8),
+                          ..._buildTimeline(
+                            today: today,
+                            currentDoc: currentDoc,
+                            pondName: currentPond.name,
+                            pondArea: currentPond.area,
+                            todayTrayMap: todayTrayMap,
+                            dashboardState: dashboardState,
+                            trayDone: trayDone,
+                            activePlansToday: activePlansToday,
+                            todaySupplementLogs: todaySupplementLogs,
+                            selectedPond: selectedPond,
+                            smartFeedOutput: null,
+                            currentPond: currentPond,
+                            isSmartFeedEnabled: isSmartFeedEnabled,
+                            valueDelta: pondValue.delta,
+                            showDoneRoundsOnly: true,
+                          ),
+                        ],
+                      ],
+                      ),
                 const SizedBox(height: 16),
 
-                /// ── TANK OPERATIONS ───────────────────────────────────────────
-                Align(
+                /// ── QUICK ACTIONS (Feed/Supp + Tank Ops) ─────────────────────
+                const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    AppLocalizations.of(context).t('tank_operations'),
-                    style: const TextStyle(
+                    'QUICK ACTIONS',
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF64748B),
@@ -1389,6 +1363,26 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 const SizedBox(height: 10),
                 Row(
                   children: [
+                    _TankOpButton(
+                      label: AppLocalizations.of(context).t('feed_schedule'),
+                      icon: Icons.calendar_month_rounded,
+                      iconColor: AppColors.primary,
+                      onTap: () {
+                        if (_showFeedScheduleTip) {
+                          _pulseController.stop();
+                          setState(() => _showFeedScheduleTip = false);
+                        }
+                        Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => FeedScheduleScreen(pondId: selectedPond)));
+                      },
+                    ),
+                    _TankOpButton(
+                      label: AppLocalizations.of(context).t('supplement_mix'),
+                      icon: Icons.science_rounded,
+                      iconColor: Colors.deepPurple,
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => SupplementMixScreen(pondId: selectedPond))),
+                    ),
                     _TankOpButton(
                       label: AppLocalizations.of(context).t('sampling'),
                       icon: Icons.texture,
@@ -1405,6 +1399,11 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         }
                       },
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
                     _TankOpButton(
                       label: AppLocalizations.of(context).t('water_test'),
                       icon: Icons.water_drop_rounded,
@@ -1445,6 +1444,18 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     ),
                   ],
                 ),
+              // ── INTELLIGENCE LAYER (below quick actions) ───────────────────
+              if (!isCompleted) ...[
+                const SizedBox(height: 20),
+
+                // Feed vs Ideal trend (7-day sparkline)
+                FeedTrendCard(data: vm.trend),
+
+                const SizedBox(height: 10),
+
+                // Removed: Growth status, Waste insight, Activity timeline, Smart insight
+              ],
+              // ── END INTELLIGENCE LAYER ──────────────────────────────────────
               ],
             ],
           ),
@@ -1467,6 +1478,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
     required SmartFeedOutput? smartFeedOutput,
     required Pond? currentPond,
     required bool isSmartFeedEnabled,
+    required double valueDelta,
+    bool showDoneRoundsOnly = false,
+    DateTime? nextFeedAt,
   }) {
     final feedRoundsData = _getFeedRounds(currentDoc, dashboardState.roundFeedAmounts, currentPond);
     final List<Map<String, dynamic>> timelineItems = [];
@@ -1530,8 +1544,12 @@ List<SupplementItem> _getPlannedFeedSupplements(
     timelineItems.sort((a, b) =>
         (a['sortTime'] as DateTime).compareTo(b['sortTime'] as DateTime));
 
-    return timelineItems.map<Widget>((itemData) {
+    return timelineItems.map<Widget?>((itemData) {
       final bool isFeed = itemData['type'] == 'feed';
+
+      // Filter by mode: showDoneRoundsOnly shows only done feed rounds,
+      // otherwise shows active rounds + water supplements (skips done feed)
+      if (!isFeed && showDoneRoundsOnly) return null;
 
       Widget card;
 
@@ -1567,6 +1585,12 @@ List<SupplementItem> _getPlannedFeedSupplements(
         // isPendingTray = tray not yet handled at all (neither logged nor skipped)
         final bool isPendingTray = isDone && currentDoc >= 15 && !isTrayLogged;
 
+        // Filter: skip non-done rounds in done-only mode.
+        if (showDoneRoundsOnly && !isDone) return null;
+        // In active mode: only skip done rounds that have NO pending tray action.
+        // If tray is pending or skipped, keep the card visible so farmer can log it.
+        if (!showDoneRoundsOnly && isDone && !isPendingTray && !isTraySkipped) return null;
+
         final FeedRoundState cardState = isDone
             ? FeedRoundState.done
             : isCurrent
@@ -1590,49 +1614,80 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 .map((s) => "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
                 .toList();
 
+        final double finalFeedKg = dashboardState.roundFinalFeedAmounts[round] ?? qty;
+        final bool isManuallyEdited = dashboardState.roundIsManuallyEdited[round] ?? false;
+
         card = FeedTimelineCard(
           round: round,
           time: time,
-          feedQty: qty,
+          recommendedFeedKg: qty, // TODO: get from engine
+          finalFeedKg: finalFeedKg,
+          isManuallyEdited: isManuallyEdited,
           state: cardState,
           isPendingTray: isPendingTray,
           isTraySkipped: isTraySkipped,
           trayStatuses: thisRoundLog?.isSkipped == true ? null : thisRoundLog?.trays,
           supplements: supplements,
           isSmartFeed: isSmartFeedEnabled,
+          lastFeedKg: round > 1 ? dashboardState.roundFeedAmounts[round - 1] : null,
+          leftoverPercent: thisRoundLog?.leftoverPercent,
+          correctionPercent: 0, // TODO: calculate
+          // Hero timer SSOT — card owns the live countdown internally.
+          // Only supplied for the current (active) round; null for done/upcoming.
+          nextFeedAt: isCurrent ? nextFeedAt : null,
+          onEdit: isCurrent
+              ? (double newQty) {
+                  ref.read(pondDashboardProvider.notifier).editRoundAmount(
+                        round,
+                        newQty,
+                        persistToPlan: currentDoc > 30,
+                      );
+                }
+              : null,
           // MARK AS FED: always available on the current round, for all DOCs
           onMarkDone: isCurrent
               ? () {
-                  if (qty > 0) {
-                    ref.read(feedHistoryProvider.notifier).logFeeding(
-                      pondId: selectedPond,
-                      doc: currentDoc,
-                      round: round,
-                      qty: qty,
-                    );
+                  final actualQty = finalFeedKg;
+                  if (actualQty > 0) {
                     _logFeedSupplementApplication(
                       pondId: selectedPond,
                       pondName: pondName,
                       round: round,
-                      feedQty: qty,
+                      feedQty: actualQty,
                       activePlansToday: activePlansToday,
                     );
                   }
                   // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
                   // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
-                  ref.read(pondDashboardProvider.notifier).markFeedDone(round);
-                }
-              : null,
-          // EDIT: only for DOC > 30, current round only (done/upcoming are not editable here)
-          onEdit: currentDoc > 30 && cardState == FeedRoundState.current
-              ? (double newQty) {
-                  ref.read(pondDashboardProvider.notifier).updateRoundAmount(round, newQty);
+                  ref.read(pondDashboardProvider.notifier).markFeedDone(
+                        round,
+                        actualQty: actualQty,
+                      );
+                  // V2-01: ₹ delta snackbar — closes dopamine loop after every feed.
+                  // Shows "+₹120 added to pond value" immediately after marking done.
+                  final completedAfter = round;
+                  final motivationMsg = _feedMotivationMessage(completedAfter);
+                  final valueLabel = _formatCurrency(valueDelta);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(
+                      valueDelta >= 1
+                          ? '$motivationMsg  •  +$valueLabel added to pond value'
+                          : motivationMsg,
+                    ),
+                    backgroundColor: const Color(0xFF16A34A),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 3),
+                  ));
                 }
               : null,
           // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
           onLogTray: (isPendingTray || isTraySkipped) ? () => openTray(round, false) : null,
           isNext: isNext,
         );
+
+        // External warning strip removed — FeedTimelineCard now owns the timer
+        // and warning UX internally via its 3-state layout (Too Early / Window
+        // Open / Overdue). The nextFeedAt DateTime drives all of this.
       } else {
         final log = itemData['log'] as SupplementLog?;
         final plan = itemData['plan'] as Supplement?;
@@ -1683,71 +1738,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
       }
 
       return card;
-    }).toList();
-  }
-
-  Widget _kpi(String title, String value, IconData icon, Color color,
-      {double? trend, bool inverseColor = false}) {
-    Color? trendColor;
-    IconData? trendIcon;
-
-    if (trend != null && (trend.abs() > 0.001)) {
-      final isPositive = trend > 0;
-      // inverseColor = true means decreasing (negative trend) is good (like FCR)
-      final isGood = inverseColor ? !isPositive : isPositive;
-      trendColor = isGood ? Colors.green : Colors.red;
-      trendIcon =
-          isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded;
-    }
-
-    return Expanded(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 14, color: Colors.grey.shade400),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(title,
-                      style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5)),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(value,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 12,
-                              color: Colors.black87)),
-                    ),
-                    if (trendIcon != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 2),
-                        child: Icon(trendIcon, size: 12, color: trendColor),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _divider() {
-    return Container(width: 1, height: 24, color: Colors.grey.shade300);
+    }).whereType<Widget>().toList();
   }
 
   // ── Estimated survival rate based on DOC ──────────────────────────
@@ -1770,112 +1761,467 @@ List<SupplementItem> _getPlannedFeedSupplements(
     return null;
   }
 
-  // ── TODAY'S PROGRESS card (Smart Feed only) ───────────────────────
-  Widget _buildTodayProgressCard({
-    required double consumedFeed,
-    required double plannedFeed,
-    required int completedRounds,
-    required int totalRounds,
-    required double fcrTrend,
+  // ── POND VALUE CARD ────────────────────────────────────────────────────
+  // Replaces the Species/DOC/Survival stats strip.
+  // Shows harvest value range, daily delta, confidence, DOC badge, streak.
+  Widget _buildValueCard({
+    required String mode,
+    required PondValue pondValue,
+    required int doc,
+    required int streak,
+    required int seedCount,
+    required double survivalRate,
   }) {
-    final progress = plannedFeed == 0 ? 0.0 : (consumedFeed / plannedFeed).clamp(0.0, 1.0);
-    final isOnTrack = progress >= (completedRounds / totalRounds) - 0.1;
+    final String subtitle;
+    switch (mode) {
+      case 'onboarding':
+        subtitle = 'Expected Harvest Value';
+        break;
+      case 'growth':
+        subtitle = 'Pond Potential';
+        break;
+      default:
+        subtitle = 'Projected Value';
+    }
+
+    final minK = (pondValue.min / 1000).toStringAsFixed(0);
+    final maxK = (pondValue.max / 1000).toStringAsFixed(0);
+    final deltaRs = pondValue.delta.round();
+    final deltaLabel = deltaRs >= 1000
+        ? '₹${(deltaRs / 1000).toStringAsFixed(1)}K'
+        : '₹$deltaRs';
+
+    // Seed count display: 100000 → "1L", 200000 → "2L", else "Xk"
+    final String seedLabel;
+    if (seedCount >= 100000) {
+      seedLabel = '${(seedCount / 100000).toStringAsFixed(seedCount % 100000 == 0 ? 0 : 1)}L';
+    } else {
+      seedLabel = '${(seedCount / 1000).toStringAsFixed(0)}k';
+    }
+    final survivalPct = (survivalRate * 100).round();
+    const int pricePerKg = 150; // default price from PondValueEngine
+
+    // Confidence color thresholds
+    final Color confidenceColor;
+    if (pondValue.confidence >= 80) {
+      confidenceColor = const Color(0xFF16A34A); // green
+    } else if (pondValue.confidence >= 60) {
+      confidenceColor = const Color(0xFFD97706); // amber
+    } else {
+      confidenceColor = const Color(0xFFDC2626); // red
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: AppRadius.rm,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top row: Feed Mode badge  |  rounds  |  status icon ────────
+          // Row 1: subtitle + DOC badge
           Row(
             children: [
-              // Feed Mode badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: const Text(
-                  "FEED MODE",
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF2563EB),
-                    letterSpacing: 0.3,
-                  ),
+              Text(
+                subtitle.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF94A3B8),
+                  letterSpacing: 0.6,
                 ),
               ),
               const Spacer(),
-              // Rounds counter
-              Text(
-                "$completedRounds / $totalRounds rounds",
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF16A34A),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // On-track icon
-              Icon(
-                isOnTrack ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
-                size: 15,
-                color: isOnTrack ? const Color(0xFF16A34A) : const Color(0xFFD97706),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          // ── Progress bar + kg inline ────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 7,
-                    backgroundColor: const Color(0xFFE2E8F0),
-                    color: isOnTrack ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                child: Text(
+                  'DOC $doc',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF2563EB),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: "${consumedFeed.toStringAsFixed(1)}",
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    TextSpan(
-                      text: " / ${plannedFeed.toStringAsFixed(0)} kg",
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Row 2: DOMINANT value range
+          Text(
+            '₹${minK}K – ₹${maxK}K',
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Row 3: delta + confidence on same line
+          Row(
+            children: [
+              Text(
+                '+$deltaLabel today ↑',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF16A34A),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: confidenceColor.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  '${pondValue.confidence}% confidence',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: confidenceColor,
+                  ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          // Row 4: "Based on" trust line
+          Text(
+            'Based on: $seedLabel seed • $survivalPct% survival • ₹$pricePerKg/kg',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF94A3B8),
+            ),
+          ),
+          // Row 5: streak pill (only when streak > 0)
+          if (streak > 0) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.local_fire_department_rounded,
+                    size: 14, color: Color(0xFFEA580C)),
+                const SizedBox(width: 4),
+                Text(
+                  '$streak day feeding streak',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFEA580C),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── TODAY DECISION CARD ─────────────────────────────────────────────────
+  // T1 + T8 + T9: Decision, money impact, tray-based action
+  Widget _buildTodayDecisionCard({
+    required int currentDoc,
+    required Map<int, TrayLog> todayTrayMap,
+    required List<TrayLog> allTrayLogs,
+    required Map<int, double> roundFeedAmounts,
+    required Map<int, String> roundFeedStatus,
+    required double plannedFeed,
+    required double consumedFeed,
+    required String mode,
+    FeedDecision? feedStatus,
+  }) {
+    // ── mode-based display strings ──────────────────────────────────────
+    final String cardTitle;
+    switch (mode) {
+      case 'onboarding':
+        cardTitle = 'Day 1 Growth Plan';
+        break;
+      case 'growth':
+        cardTitle = 'Growth Phase';
+        break;
+      default: // 'smart'
+        cardTitle = 'Smart Feed Decision';
+    }
+
+    // T9: Multi-round tray scoring via TrayDecisionEngine.
+    // Merges today's tray map and allTrayLogs into a single newest-first list
+    // so the engine gets a complete cross-day view of recent rounds.
+    final todaySorted = (todayTrayMap.entries.toList()
+          ..sort((a, b) => b.key.compareTo(a.key)))
+        .map((e) => e.value)
+        .toList();
+    // Deduplicate: today's logs take priority; skip any duplicate from allTrayLogs
+    final seenKeys = <String>{};
+    final dedupedLogs = <TrayLog>[];
+    for (final log in [...todaySorted, ...allTrayLogs]) {
+      if (seenKeys.add('${log.doc}_${log.round}')) dedupedLogs.add(log);
+    }
+
+    final trayDecision = TrayDecisionEngine.evaluate(
+      allTrayLogs: dedupedLogs,
+      doc: currentDoc,
+      baseFeed: plannedFeed,
+    );
+
+    final String action = trayDecision.action;
+    final String percentage = trayDecision.percentageLabel;
+    final String reason = trayDecision.reason;
+
+    // T8: Savings / Loss — only valid after at least one round is completed.
+    // baseline = planned amounts for COMPLETED rounds only (NOT the full-day total).
+    // consumedFeed < baseline → saved money (under-fed vs plan, smart feed win)
+    // consumedFeed > baseline → lost money  (over-fed vs plan, farmer needs correction)
+    // consumedFeed == baseline → neutral    → show nothing
+    final int completedRounds =
+        roundFeedStatus.values.where((s) => s == 'completed').length;
+    const double feedCostPerKg = 40.0;
+    double? savedToday;
+    if (completedRounds >= 1 && consumedFeed > 0) {
+      final double baselineFeed = roundFeedStatus.entries
+          .where((e) => e.value == 'completed')
+          .fold(0.0, (sum, e) => sum + (roundFeedAmounts[e.key] ?? 0.0));
+      if (baselineFeed > 0) {
+        final double diff = baselineFeed - consumedFeed;
+        if (diff > 0.001) {
+          savedToday = diff * feedCostPerKg;
+        }
+      }
+    }
+
+    final Color actionColor = action == 'INCREASE'
+        ? const Color(0xFF16A34A)
+        : action == 'REDUCE'
+            ? const Color(0xFFDC2626)
+            : const Color(0xFF2563EB);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFA5D6A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header: mode title ────────────────────────────────────────
+          Text(
+            cardTitle.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1B5E20),
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // ── Action row: badge only for INCREASE/REDUCE; MAINTAIN is
+          //    hidden so only the farmer-friendly reason is shown. ─────
+          if (action != 'MAINTAIN') ...[
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: actionColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: actionColor.withOpacity(0.35)),
+                  ),
+                  child: Text(
+                    '$action$percentage',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: actionColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    reason,
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF2E7D32)),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            Text(
+              reason,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF2E7D32)),
+            ),
+          ],
+
+          // ── Savings / Loss row ────────────────────────────────────────
+          if (savedToday != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Text(
+                  'Saved Today: ',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1B5E20),
+                  ),
+                ),
+                Text(
+                  '₹${savedToday.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF16A34A),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+        ],
+      ),
+    );
+  }
+
+  // ── V2-05: NEXT ACTION CARD ──────────────────────────────────────────────
+  // Always visible — never shows a blank state. Single clear instruction.
+  Widget _buildNextActionCard(String actionText) {
+    final bool isDone = actionText.startsWith('✅');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: isDone ? const Color(0xFFDCFCE7) : const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDone ? const Color(0xFF86EFAC) : const Color(0xFF6EE7B7),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isDone ? Icons.check_circle_rounded : Icons.arrow_forward_ios_rounded,
+            size: isDone ? 18 : 14,
+            color: const Color(0xFF16A34A),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              actionText,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF14532D),
+              ),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  // ── P3-04: ALL ROUNDS DONE CARD ─────────────────────────────────────────
+  Widget _buildAllDoneCard({required int completedRounds, required int totalRounds}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFDCFCE7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF86EFAC)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFF16A34A),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'All $totalRounds rounds completed today',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF14532D),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // P3.5-03: forward-looking — reinforce next-day return habit
+                const Text(
+                  'Your pond stayed on track today.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF166534),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Come back tomorrow and keep the same consistency.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF166534),
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── V2-01: CURRENCY FORMATTER ────────────────────────────────────────────
+  // Compact ₹ display: ₹500, ₹1.2K, ₹15.0K — consistent across all ₹ labels.
+  static String _formatCurrency(double value) {
+    if (value >= 1000) return '₹${(value / 1000).toStringAsFixed(1)}K';
+    return '₹${value.toInt()}';
+  }
+
+  // ── P3-05: MOTIVATION MESSAGE BY ROUND PROGRESS ──────────────────────────
+  static String _feedMotivationMessage(int completedRound) {
+    switch (completedRound) {
+      case 1:
+        return 'Good start today';
+      case 2:
+        return 'Nice consistency';
+      case 3:
+        return 'Great discipline';
+      case 4:
+        // P3.5-02: connect action → outcome for stronger habit loop
+        return 'Perfect feeding today — pond on track for best growth';
+      default:
+        return 'Round $completedRound done';
+    }
   }
 
   Widget _buildCompletedDashboard(
@@ -2103,7 +2449,9 @@ class _WaterRoundCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           const Text(
                             "WATER SUPPLEMENT",
@@ -2114,7 +2462,6 @@ class _WaterRoundCard extends StatelessWidget {
                               letterSpacing: 0.4,
                             ),
                           ),
-                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -2285,6 +2632,7 @@ class _WaterRoundCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         "$title  •  $time",
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/engines/feeding_engine_v1.dart';
 import '../../core/utils/logger.dart';
+import '../../core/utils/doc_utils.dart';
 
 class DebugDashboardState {
   final bool isLoading;
@@ -88,11 +89,7 @@ class DebugDashboardNotifier
       }
 
       final stockingDate = DateTime.parse(pond['stocking_date'] as String);
-      final doc = DateTime.now()
-              .difference(DateTime(stockingDate.year, stockingDate.month,
-                  stockingDate.day))
-              .inDays +
-          1;
+      final doc = calculateDocFromStockingDate(stockingDate);
 
       final stockingType =
           (pond['stocking_type'] as String?) ?? 'nursery';

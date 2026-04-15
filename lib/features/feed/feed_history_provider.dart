@@ -55,13 +55,13 @@ class FeedHistoryNotifier
   }
 
   /// 🍽 LOG REAL-TIME FEEDING
-  void logFeeding({
+  Future<void> logFeeding({
     required String pondId,
     required int doc,
     required int round,
     required double qty,
     double? smartFeedQty,
-  }) {
+  }) async {
     if (qty <= 0) {
       return;
     }
@@ -144,9 +144,10 @@ class FeedHistoryNotifier
     state = Map<String, List<FeedHistoryLog>>.from(state)
       ..[pondId] = pondLogs;
     
-    // ✅ Persist to database (fire-and-forget with error handling)
+    // ✅ Persist to database before returning so callers can safely reload
+    //    the dashboard and reconstruct lastFeedTime from persisted data.
     final logToSave = pondLogs[todayIdx != -1 ? todayIdx : 0];
-    _persistFeedLog(
+    await _persistFeedLog(
       pondId: pondId,
       log: logToSave,
     );

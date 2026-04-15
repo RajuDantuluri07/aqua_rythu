@@ -7,14 +7,20 @@ class FeedInputValidator {
   /// Throws Exception with descriptive message if validation fails
   static void validate(FeedInput input) {
     // Seed count validation
-    if (input.seedCount <= 0) {
+    // BUG-12 fix: previous max was 10M — far too high for AP coastal ponds.
+    // Realistic range: 1,000 (minimum viable) → 500,000 (max stocking density).
+    // A typo of 1,000,000 instead of 100,000 (easy on phone keypad) previously
+    // produced 20 kg/round — catastrophic overfeed with no guard.
+    if (input.seedCount < 1000) {
       throw Exception(
-        "Invalid seedCount: ${input.seedCount}. Must be > 0 (e.g., 100000)",
+        "Invalid seedCount: ${input.seedCount}. Minimum stocking is 1,000 shrimp",
       );
     }
-    if (input.seedCount > 10000000) {
+    if (input.seedCount > 500000) {
       throw Exception(
-        "Invalid seedCount: ${input.seedCount}. Exceeds reasonable pond capacity (max 10M)",
+        "Invalid seedCount: ${input.seedCount}. "
+        "Exceeds maximum supported stocking density (500,000 per pond). "
+        "Check for a typo — e.g., 1,00,000 instead of 1,00,000.",
       );
     }
 
@@ -118,8 +124,14 @@ class FeedInputValidator {
 
     // Tray statuses validation
     // ✅ Allow empty trays for DOC ≤ 30 (blind feeding)
-    if (input.trayStatuses.isEmpty && input.doc > 30) {
-      throw Exception("Invalid trayStatuses: Empty list");
+    // ✅ In smart mode, either a current tray log or valid recent tray history
+    //    is required. Sentinel values like [-1.0] do not count as tray data.
+    final hasValidRecentTrayHistory =
+        input.recentTrayLeftoverPct.any((value) => value >= 0);
+    if (input.trayStatuses.isEmpty &&
+        input.doc > 30 &&
+        !hasValidRecentTrayHistory) {
+      throw Exception("Invalid trayStatuses: Empty list and no recent tray history available");
     }
 
     // FCR validation if provided

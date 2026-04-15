@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/utils/doc_utils.dart';
 
 class DashboardService {
   final supabase = Supabase.instance.client;
@@ -31,7 +32,7 @@ class DashboardService {
       if (feedRounds != null && feedRounds.isNotEmpty) {
         // Calculate today's DOC
         final stockingDate = DateTime.parse(pond['stocking_date'] as String);
-        final todayDoc = DateTime.now().difference(stockingDate).inDays + 1;
+        final todayDoc = calculateDocFromStockingDate(stockingDate);
         
         // Calculate today's total feed from rounds
         final todayTotal = feedRounds

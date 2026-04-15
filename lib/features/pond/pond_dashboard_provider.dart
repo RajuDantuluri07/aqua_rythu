@@ -27,6 +27,16 @@ class PondDashboardState {
   final bool isFeedLoading;
   /// True for one frame after auto-recovery succeeds — screen listens and shows SnackBar
   final bool feedAutoRecovered;
+  /// Timestamp of the last completed feed round (used by FeedStatusEngine gap check).
+  /// Set in-memory when markFeedDone is called; null on first feed of the day.
+  final DateTime? lastFeedTime;
+  /// Set to true when a tray log fails to persist to DB.
+  /// Screen listens and shows a non-blocking retry banner.
+  final bool trayPersistFailed;
+  /// Final feed amounts per round (after manual edits)
+  final Map<int, double> roundFinalFeedAmounts;
+  /// Whether each round was manually edited
+  final Map<int, bool> roundIsManuallyEdited;
 
   PondDashboardState({
     required this.selectedPond,
@@ -38,6 +48,10 @@ class PondDashboardState {
     this.roundFeedStatus = const {},
     this.isFeedLoading = false,
     this.feedAutoRecovered = false,
+    this.lastFeedTime,
+    this.trayPersistFailed = false,
+    this.roundFinalFeedAmounts = const {},
+    this.roundIsManuallyEdited = const {},
   });
 
   PondDashboardState copyWith({
@@ -50,6 +64,11 @@ class PondDashboardState {
     Map<int, String>? roundFeedStatus,
     bool? isFeedLoading,
     bool? feedAutoRecovered,
+    DateTime? lastFeedTime,
+    bool clearLastFeedTime = false,
+    bool? trayPersistFailed,
+    Map<int, double>? roundFinalFeedAmounts,
+    Map<int, bool>? roundIsManuallyEdited,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -61,6 +80,10 @@ class PondDashboardState {
       roundFeedStatus: roundFeedStatus ?? this.roundFeedStatus,
       isFeedLoading: isFeedLoading ?? this.isFeedLoading,
       feedAutoRecovered: feedAutoRecovered ?? this.feedAutoRecovered,
+      lastFeedTime: clearLastFeedTime ? null : (lastFeedTime ?? this.lastFeedTime),
+      trayPersistFailed: trayPersistFailed ?? this.trayPersistFailed,
+      roundFinalFeedAmounts: roundFinalFeedAmounts ?? this.roundFinalFeedAmounts,
+      roundIsManuallyEdited: roundIsManuallyEdited ?? this.roundIsManuallyEdited,
     );
   }
 }
@@ -108,6 +131,20 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       AppLogger.error("Pond not found in state: $pondId");
       state = state.copyWith(isFeedLoading: false);
       return;
+    }
+
+    // Persist smart feed activation when DOC crosses 31.
+    // The UI already compensates with `|| doc > 30`, but the DB flag must be
+    // kept in sync so any direct reads of pond.isSmartFeedEnabled are correct.
+    final currentDoc = ref.read(docProvider(pondId));
+    if (currentDoc > 30 && !pond.isSmartFeedEnabled) {
+      PondService().updateSmartFeedStatus(pondId: pondId, isEnabled: true)
+          .then((_) {
+        // Sync in-memory Pond model so all providers see the correct flag.
+        ref.read(farmProvider.notifier).updateSmartFeedStatus(pondId, true);
+      }).catchError((e) {
+        AppLogger.error('Failed to activate smart feed for pond $pondId', e);
+      });
     }
 
     var data = await PondService().getTodayFeed(
@@ -209,16 +246,28 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     AppLogger.debug("Loaded feed from DB: ${feedMap.entries.map((e) => 'R${e.key}:${e.value.toStringAsFixed(2)}kg(${statusMap[e.key]})').join(' | ')}");
 
+    final persistedLastFeedTime = await FeedService().fetchLatestFeedTimeForDoc(
+      pondId: pondId,
+      doc: currentDoc,
+    );
+    final lastFeedTime = state.lastFeedTime != null &&
+            (persistedLastFeedTime == null ||
+                state.lastFeedTime!.isAfter(persistedLastFeedTime))
+        ? state.lastFeedTime
+        : persistedLastFeedTime;
+
     state = state.copyWith(
       roundFeedAmounts: feedMap,
       roundToFeedId: idMap,
       roundFeedStatus: statusMap,
       isFeedLoading: false,
       feedAutoRecovered: didAutoRecover,
+      lastFeedTime: lastFeedTime,
+      clearLastFeedTime: lastFeedTime == null,
     );
 
     // Ensure the rolling 7-day feed window exists ahead of today (fire-and-forget)
-    final currentDoc = ref.read(docProvider(pondId));
+    // currentDoc was computed earlier in this method — reuse it here.
     ensureFutureFeedExists(pondId, currentDoc).catchError((e) {
       AppLogger.error('ensureFutureFeedExists failed on load', e);
     });
@@ -227,6 +276,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   /// Called by the screen after it has shown the auto-recovery notification.
   void clearAutoRecoveredFlag() {
     state = state.copyWith(feedAutoRecovered: false);
+  }
+
+  /// Called by the screen after it has shown the tray-persist-failed notification.
+  void clearTrayPersistFailedFlag() {
+    state = state.copyWith(trayPersistFailed: false);
   }
 
   Future<void> _updateStateForPond(String pondId) async {
@@ -245,7 +299,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   }
 
   void selectPond(String pondId) {
-    state = state.copyWith(selectedPond: pondId);
+    state = state.copyWith(selectedPond: pondId, clearLastFeedTime: true);
     _updateStateForPond(pondId);
   }
 
@@ -286,11 +340,30 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     await loadTodayFeed(state.selectedPond);
   }
 
+  Future<void> editRoundAmount(
+    int round,
+    double newAmount, {
+    required bool persistToPlan,
+  }) async {
+    final updatedFinalAmounts = Map<int, double>.from(state.roundFinalFeedAmounts);
+    final updatedIsEdited = Map<int, bool>.from(state.roundIsManuallyEdited);
+    updatedFinalAmounts[round] = newAmount;
+    updatedIsEdited[round] = true;
+    state = state.copyWith(
+      roundFinalFeedAmounts: updatedFinalAmounts,
+      roundIsManuallyEdited: updatedIsEdited,
+    );
+
+    if (persistToPlan) {
+      await updateRoundAmount(round, newAmount);
+    }
+  }
+
   // =========================================================
   // 🍽 FEED MARKING
   // =========================================================
 
-  Future<void> markFeedDone(int round) async {
+  Future<void> markFeedDone(int round, {double? actualQty}) async {
     // Auto-skip tray for previous rounds that had feed done but no tray logged.
     // Only applies DOC >= 15 (tray is not relevant before that).
     final doc = state.doc;
@@ -299,21 +372,27 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       for (int prev = 1; prev < round; prev++) {
         final prevFeedDone = state.roundFeedStatus[prev] == 'completed';
         if (prevFeedDone) {
-          // markTraySkipped is idempotent — silently no-ops if already logged
-          await TrayService().markTraySkipped(
-            pondId: state.selectedPond,
-            doc: doc,
-            roundNumber: prev,
-          ).catchError((e) {
+          final didSkip = await TrayService()
+              .markTraySkipped(
+                pondId: state.selectedPond,
+                doc: doc,
+                roundNumber: prev,
+              )
+              .then((_) => true)
+              .catchError((e) {
             AppLogger.error('Auto-skip tray failed for pond ${state.selectedPond} R$prev', e);
+            return false;
           });
-          didSkipAnyTray = true;
+          if (didSkip == true) {
+            didSkipAnyTray = true;
+          }
         }
       }
     }
 
     String? feedId = state.roundToFeedId[round];
-    final qty = state.roundFeedAmounts[round] ?? 0.0;
+    final plannedQty = state.roundFeedAmounts[round] ?? 0.0;
+    final qty = actualQty ?? state.roundFinalFeedAmounts[round] ?? plannedQty;
 
     // For DOC > 30 with no pre-existing plan row, create one on-the-fly
     if (feedId == null || feedId.isEmpty) {
@@ -337,11 +416,18 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     // Optimistic local update so UI reflects change immediately
     final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
     updatedStatus[round] = 'completed';
-    state = state.copyWith(roundFeedStatus: updatedStatus);
+    state = state.copyWith(
+      roundFeedStatus: updatedStatus,
+      lastFeedTime: DateTime.now(), // for FeedStatusEngine gap check
+    );
 
     if (qty > 0) {
-      ref.read(feedHistoryProvider.notifier).logFeeding(
-          pondId: state.selectedPond, doc: state.doc, round: round, qty: qty);
+      await ref.read(feedHistoryProvider.notifier).logFeeding(
+            pondId: state.selectedPond,
+            doc: state.doc,
+            round: round,
+            qty: qty,
+          );
     }
 
     // 🔄 Refresh from DB → provider state → Riverpod rebuild
@@ -406,7 +492,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       trayResults: newMap,
     );
 
-    // Persist tray log to DB + trigger SmartFeedEngine (fire-and-forget)
+    // Persist tray log to DB + trigger SmartFeedEngine.
+    // On success: reload trayProvider from DB so it's backed by persisted state.
+    // On failure: set trayPersistFailed so the screen can show a retry banner.
+    // The round is already unlocked in the current session because TrayLogScreen
+    // called trayProvider.notifier.addTrayLog() before popping.
     final pondId = state.selectedPond;
     final doc = state.doc;
     TrayService().saveTrayLog(
@@ -420,8 +510,22 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           ) ??
           {},
       aggregatedStatus: finalStatus,
-    ).catchError((e) {
+    ).then((_) async {
+      // CRITICAL: After tray is logged, SmartFeedEngine updates feed_rounds
+      // with new factor adjustments. Reload feed amounts to display new suggestion.
+      // Without this, feed_rounds table is updated but UI shows stale data.
+      ref.invalidate(trayProvider(pondId));
+      
+      // 🔥 FIX: Reload feed data so next feed suggestion shows SmartFeedEngine's adjustment
+      await loadTodayFeed(pondId);
+      
+      // Update currentFeed in state after reload
+      final totalFeed = state.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
+      state = state.copyWith(currentFeed: totalFeed);
+    }).catchError((e) {
       AppLogger.error('Failed to persist tray log for pond $pondId', e);
+      // Surface error to farmer so they know to re-log if they restart the app.
+      state = state.copyWith(trayPersistFailed: true);
     });
   }
 

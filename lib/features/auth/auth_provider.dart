@@ -52,10 +52,15 @@ String _friendlyAuthError(Object e, {_AuthFlow flow = _AuthFlow.email}) {
         ? 'This phone number is already registered. Please log in.'
         : 'This email is already registered. Please log in.';
   }
-  if (msg.contains('otp') || msg.contains('token') || msg.contains('expired')) {
-    return 'OTP expired or invalid. Please request a new one.';
+  if (msg.contains('otp') || msg.contains('token has expired') || msg.contains('otp expired')) {
+    return flow == _AuthFlow.otp
+        ? 'OTP expired or invalid. Please request a new one.'
+        : 'Your confirmation link has expired. Please sign up again.';
   }
-  if (msg.contains('network') || msg.contains('socketexception') || msg.contains('connection')) {
+  if (msg.contains('email not confirmed') || msg.contains('not confirmed')) {
+    return 'Please confirm your email first. Check your inbox for the confirmation link.';
+  }
+  if (msg.contains('network') || msg.contains('socketexception') || msg.contains('connection') || msg.contains('failed to fetch')) {
     return 'No internet connection. Please check your network and try again.';
   }
   if (msg.contains('too many requests') || msg.contains('rate limit')) {

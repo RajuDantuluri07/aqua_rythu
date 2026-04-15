@@ -15,10 +15,10 @@ class AppBottomBar extends StatelessWidget {
 
         switch (index) {
           case 0:
-            Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
+            Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
             break;
           case 1:
-            Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+            Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
             break;
           case 2:
             Navigator.pushReplacementNamed(context, AppRoutes.profile);
@@ -26,8 +26,8 @@ class AppBottomBar extends StatelessWidget {
         }
       },
       items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
         BottomNavigationBarItem(icon: Icon(Icons.layers), label: "Ponds"),
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: "Overview"),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
       ],
     );
