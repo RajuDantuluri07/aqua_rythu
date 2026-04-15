@@ -68,12 +68,17 @@ Future<void> generateFeedPlan({
 
   if (batch.isNotEmpty) {
     try {
-      await supabase.from('feed_rounds').insert(batch);
+      // Upsert instead of insert so concurrent auto-recovery calls are safe.
+      // The unique constraint on (pond_id, doc, round) means the second call
+      // simply no-ops on conflicts rather than throwing a duplicate key error.
+      await supabase
+          .from('feed_rounds')
+          .upsert(batch, onConflict: 'pond_id,doc,round', ignoreDuplicates: true);
       AppLogger.info(
-          'Inserted ${batch.length} feed rounds for pond $pondId '
+          'Upserted ${batch.length} feed rounds for pond $pondId '
           '(DOC $startDoc–$clampedEnd)');
     } catch (e) {
-      AppLogger.error('Feed plan insert failed for pond $pondId', e);
+      AppLogger.error('Feed plan upsert failed for pond $pondId', e);
     }
   }
 }

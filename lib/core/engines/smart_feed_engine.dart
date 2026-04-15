@@ -1,9 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
 import '../enums/tray_status.dart';
-import '../constants/expected_abw_table.dart';
+import 'feed_input_builder.dart';
 import 'feed_plan_generator.dart';
-import 'feeding_engine_v1.dart';
+import 'master_feed_engine.dart';
+import 'models/feed_output.dart';
 import '../../repositories/feed_repository.dart';
 
 /// Feed phase for a given DOC.
@@ -39,8 +40,7 @@ class SmartFeedEngine {
   // ── PUBLIC ENTRY POINTS ───────────────────────────────────────────────────
 
   /// Called immediately after a tray log is saved.
-  /// Applies hybrid factor to DOC+1, DOC+2, DOC+3.
-  /// Only active in SMART phase (DOC > 30).
+  /// Orchestrates the unified feed calculation and updates planned rounds.
   static Future<void> applyTrayAdjustment({
     required String pondId,
     required int doc,
@@ -49,187 +49,82 @@ class SmartFeedEngine {
     final mode = getFeedMode(doc);
     if (mode == FeedMode.normal) return;
 
-    final last3DaysLeftover = await _last3DaysLeftoverPct(pondId);
-    final trayFactor = calculateTrayFactor(last3DaysLeftover);
+    final input = await FeedInputBuilder.fromDB(pondId);
+    final output = MasterFeedEngine.run(input);
 
-    // TRAY_HABIT: only tray signal, smart = 1.0, sampling = 1.0
-    // SMART: full hybrid
-    double smartFactor = 1.0;
-    double? latestAbw;
-    int sampleAgeDays = 0;
-    if (mode == FeedMode.smart) {
-      final pond = await _getPond(pondId);
-      if (pond == null) return;
-      final seedCount = (pond['seed_count'] as int?) ?? 100000;
-      // Read ABW freshness from pond cache — no extra DB hit
-      final sample = _latestAbwFromPondData(pond);
-      latestAbw = sample.abw;
-      sampleAgeDays = sample.ageDays;
-      final feedHistory = await _feedHistory(pondId, days: 14);
-      smartFactor = getSmartFactor(
-        doc: doc,
-        abw: latestAbw,
-        feedHistory: feedHistory,
-        seedCount: seedCount,
-      );
-    }
+    if (output.finalFactor <= 0.0) return;
 
-    // Single source of truth for raw factor with confidence decay
-    final samplingFactor = getSamplingFactor(latestAbw, doc, sampleAgeDays: sampleAgeDays);
-    final rawFactor = computeFinalFactor(
-      trayFactor: trayFactor,
-      smartFactor: smartFactor,
-      samplingFactor: samplingFactor,
-    );
+    final reasonTag = _reasonTag(output.finalFactor, trayStatus.name, mode);
 
-    final currentFeed = await _todayTotalFeed(pondId, doc);
-    final baseFeed = await _todayBaseFeed(pondId, doc);
-
-    final finalFactor = applySafetyGuards(
-      factor: rawFactor,
-      consecutiveIncreaseDays: await _consecutiveIncreaseDays(pondId, doc),
-      consecutiveDecreaseDays: await _consecutiveDecreaseDays(pondId, doc),
-      currentFeed: currentFeed,
-      baseFeed: baseFeed,
-    );
-
-    final reasonTag = _reasonTag(finalFactor, trayStatus.name, mode);
-
-    // Fix #3: only log expectedAbw when a sample actually exists — avoids misleading nulls
     await _logDebug(
       pondId: pondId,
       doc: doc,
       mode: mode,
-      baseFeed: baseFeed,
-      trayFactor: trayFactor,
-      smartFactor: smartFactor,
-      samplingFactor: samplingFactor,
-      abw: latestAbw,
-      expectedAbw: latestAbw != null ? getExpectedABW(doc) : null,
-      finalFactor: finalFactor,
-      finalFeed: baseFeed * finalFactor,
+      output: output,
       reason: reasonTag,
+      abw: input.abw,
     );
-
-    if ((finalFactor - 1.0).abs() < 0.005) return;
 
     if (debugMode) {
       AppLogger.debug(
         '[HybridFeed] applyTrayAdjustment pond=$pondId DOC=$doc mode=${mode.name} '
-        'tray=${trayFactor.toStringAsFixed(3)} '
-        'smart=${smartFactor.toStringAsFixed(3)} '
-        'sampling=${samplingFactor.toStringAsFixed(3)} '
-        'final=${finalFactor.toStringAsFixed(3)}',
+        'tray=${(output.factors['tray'] ?? 1.0).toStringAsFixed(3)} '
+        'growth=${(output.factors['growth'] ?? 1.0).toStringAsFixed(3)} '
+        'sampling=${(output.factors['sampling'] ?? 1.0).toStringAsFixed(3)} '
+        'environment=${(output.factors['environment'] ?? 1.0).toStringAsFixed(3)} '
+        'final=${output.finalFactor.toStringAsFixed(3)}',
       );
     }
 
     for (int i = 1; i <= 3; i++) {
       final futureDoc = doc + i;
       if (futureDoc > 120) break;
-      await _applyFactorFromBase(pondId, futureDoc, finalFactor, reasonTag);
+      await _applyFactorFromBase(pondId, futureDoc, output.finalFactor, reasonTag);
     }
 
     AppLogger.info(
       'HybridFeed.applyTrayAdjustment: pond $pondId DOC $doc (${mode.name}) → +1/+2/+3 '
-      'tray=${trayStatus.name} factor=${finalFactor.toStringAsFixed(3)}',
+      'tray=${trayStatus.name} factor=${output.finalFactor.toStringAsFixed(3)}',
     );
   }
 
   /// Called after feed logs and on dashboard load.
-  /// Recalculates next DOC using full hybrid engine.
-  /// Only active in SMART phase (DOC > 30).
+  /// Recalculates the next DOC using the shared MasterFeedEngine.
   static Future<void> recalculateFeedPlan(String pondId) async {
     try {
-      final pond = await _getPond(pondId);
-      if (pond == null) return;
+      final input = await FeedInputBuilder.fromDB(pondId);
+      await ensureFutureFeedExists(pondId, input.doc);
 
-      final currentDoc = _computeDoc(pond['stocking_date'] as String);
-      final mode = getFeedMode(currentDoc);
-      if (mode == FeedMode.normal) return;
+      final output = MasterFeedEngine.run(input);
+      if (output.finalFactor <= 0.0) return;
 
-      await ensureFutureFeedExists(pondId, currentDoc);
+      final nextDoc = input.doc + 1;
+      final reason = _reasonTag(output.finalFactor, 'RECALC', getFeedMode(input.doc));
 
-      final last3DaysLeftover = await _last3DaysLeftoverPct(pondId);
-      final trayFactor = calculateTrayFactor(last3DaysLeftover);
-
-      double smartFactor = 1.0;
-      double? latestAbw;
-      int sampleAgeDays = 0;
-      if (mode == FeedMode.smart) {
-        final seedCount = (pond['seed_count'] as int?) ?? 100000;
-        // Read ABW freshness from pond cache — no extra DB hit
-        final sample = _latestAbwFromPondData(pond);
-        latestAbw = sample.abw;
-        sampleAgeDays = sample.ageDays;
-        final feedHistory = await _feedHistory(pondId, days: 14);
-        smartFactor = getSmartFactor(
-          doc: currentDoc,
-          abw: latestAbw,
-          feedHistory: feedHistory,
-          seedCount: seedCount,
-        );
-      }
-
-      // Single source of truth for raw factor with confidence decay
-      final samplingFactor = getSamplingFactor(latestAbw, currentDoc, sampleAgeDays: sampleAgeDays);
-      final rawFactor = computeFinalFactor(
-        trayFactor: trayFactor,
-        smartFactor: smartFactor,
-        samplingFactor: samplingFactor,
-      );
-
-      final currentFeed = await _todayTotalFeed(pondId, currentDoc);
-      final baseFeed = await _todayBaseFeed(pondId, currentDoc);
-
-      final finalFactor = applySafetyGuards(
-        factor: rawFactor,
-        consecutiveIncreaseDays: await _consecutiveIncreaseDays(pondId, currentDoc),
-        consecutiveDecreaseDays: await _consecutiveDecreaseDays(pondId, currentDoc),
-        currentFeed: currentFeed,
-        baseFeed: baseFeed,
-      );
-
-      final nextDoc = currentDoc + 1;
-      final pct = ((finalFactor - 1.0) * 100).round();
-      final reason = pct >= 0
-          ? '${mode.name.toUpperCase()}_ADJUST +$pct%'
-          : '${mode.name.toUpperCase()}_ADJUST $pct%';
-
-      // Fix #3: only log expectedAbw when a sample actually exists — avoids misleading nulls
       await _logDebug(
         pondId: pondId,
-        doc: currentDoc,
-        mode: mode,
-        baseFeed: baseFeed,
-        trayFactor: trayFactor,
-        smartFactor: smartFactor,
-        samplingFactor: samplingFactor,
-        abw: latestAbw,
-        expectedAbw: latestAbw != null ? getExpectedABW(currentDoc) : null,
-        finalFactor: finalFactor,
-        finalFeed: baseFeed * finalFactor,
+        doc: input.doc,
+        mode: getFeedMode(input.doc),
+        output: output,
         reason: reason,
+        abw: input.abw,
       );
 
-      if ((finalFactor - 1.0).abs() < 0.005) return;
-
-      await _applyFactorFromBase(pondId, nextDoc, finalFactor, reason);
+      await _applyFactorFromBase(pondId, nextDoc, output.finalFactor, reason);
 
       if (debugMode) {
         AppLogger.debug(
-          '[HybridFeed] recalculate pond=$pondId DOC=$currentDoc '
-          'tray=${trayFactor.toStringAsFixed(3)} '
-          'smart=${smartFactor.toStringAsFixed(3)} '
-          'sampling=${samplingFactor.toStringAsFixed(3)} '
-          'final=${finalFactor.toStringAsFixed(3)}',
+          '[HybridFeed] recalculate pond=$pondId DOC=${input.doc} '
+          'tray=${(output.factors['tray'] ?? 1.0).toStringAsFixed(3)} '
+          'growth=${(output.factors['growth'] ?? 1.0).toStringAsFixed(3)} '
+          'sampling=${(output.factors['sampling'] ?? 1.0).toStringAsFixed(3)} '
+          'final=${output.finalFactor.toStringAsFixed(3)}',
         );
       }
 
       AppLogger.info(
-        'HybridFeed.recalculate: pond $pondId DOC $currentDoc → DOC $nextDoc '
-        'tray=${trayFactor.toStringAsFixed(3)} '
-        'smart=${smartFactor.toStringAsFixed(3)} '
-        'applied=${finalFactor.toStringAsFixed(3)}',
+        'HybridFeed.recalculate: pond $pondId DOC=${input.doc} → DOC $nextDoc '
+        'final=${output.finalFactor.toStringAsFixed(3)}',
       );
     } catch (e) {
       AppLogger.error('SmartFeedEngine.recalculateFeedPlan failed for $pondId', e);
@@ -238,179 +133,6 @@ class SmartFeedEngine {
 
   /// Legacy no-op — kept for call-site compatibility.
   static Future<void> checkAndActivateSmartFeed(dynamic pond) async {}
-
-  // ── LAYER 1: TRAY FACTOR ─────────────────────────────────────────────────
-
-  /// Tray factor from last 3 days average leftover %.
-  /// Delegates to [FeedingEngineV1.trayFactor] — single source of truth.
-  ///   0%        → 1.1  (clean tray)
-  ///   1–10%     → 1.0  (on track)
-  ///   11–25%    → 0.9  (moderate reduction)
-  ///   > 25%     → 0.75 (heavy leftover)
-  /// No data → 1.0 (no adjustment).
-  static double calculateTrayFactor(List<double> last3DaysLeftover) {
-    if (last3DaysLeftover.isEmpty) return 1.0;
-    final avg = last3DaysLeftover.reduce((a, b) => a + b) / last3DaysLeftover.length;
-    return FeedingEngineV1.trayFactor(avg);
-  }
-
-  // ── LAYER 1.5: SAMPLING FACTOR ───────────────────────────────────────────
-
-  /// Smooth confidence decay based on how old the sample is.
-  ///
-  ///   ≤ 2 days → full influence  (1.0)
-  ///   ≤ 5 days → 70% influence   (0.7)
-  ///   ≤ 7 days → 40% influence   (0.4)
-  ///   > 7 days → ignored         (0.0)
-  ///
-  /// Replaces the hard cutoff with a gradual fade so feed doesn't jump
-  /// abruptly when a sample crosses the 7-day boundary.
-  static double getSamplingWeight(int ageDays) {
-    if (ageDays <= 2) return 1.0;
-    if (ageDays <= 5) return 0.7;
-    if (ageDays <= 7) return 0.4;
-    return 0.0;
-  }
-
-  /// Optional light correction based on actual vs expected ABW.
-  /// Uses [expectedAbwTable] as the single source of truth for expected weights.
-  ///
-  ///   ratio > 1.1  → base +5% (ahead of schedule)
-  ///   ratio < 0.9  → base −5% (behind schedule)
-  ///   otherwise    → 0%       (on track)
-  ///
-  /// The raw signal is first attenuated by 0.7 (avoids double-counting with
-  /// smartFactor's growth signal), then further scaled by [getSamplingWeight]
-  /// for smooth confidence decay as the sample ages.
-  ///
-  /// Guards:
-  ///   - Returns 1.0 when no fresh sample exists (null / non-positive ABW)
-  ///   - Returns 1.0 for early DOC (expected < 0.5g) — ratio unreliable
-  ///   - Hard-clamped to [0.9, 1.1]
-  static double getSamplingFactor(double? actualAbw, int doc,
-      {int sampleAgeDays = 0}) {
-    if (actualAbw == null || actualAbw <= 0) return 1.0;
-
-    final expected = getExpectedABW(doc);
-
-    // Ignore sampling when expected weight is tiny — ratio explodes (fix #2)
-    if (expected < 0.5) return 1.0;
-
-    final ratio = actualAbw / expected;
-    double rawFactor;
-    if (ratio > 1.1) {
-      rawFactor = 1.05;
-    } else if (ratio < 0.9) {
-      rawFactor = 0.95;
-    } else {
-      rawFactor = 1.0;
-    }
-
-    // Attenuate by 0.7 to reduce overlap with smart factor's growth signal (fix #4)
-    final attenuated = 1.0 + (rawFactor - 1.0) * 0.7;
-
-    // Smooth decay: older samples have less influence
-    final weight = getSamplingWeight(sampleAgeDays);
-    final decayed = 1.0 + (attenuated - 1.0) * weight;
-
-    // Hard safety clamp — sampling can never move feed more than ±10%
-    return decayed.clamp(0.9, 1.1);
-  }
-
-  // ── COMBINED FACTOR (single source of truth) ──────────────────────────────
-
-  /// Combines tray, smart, and sampling factors with TRAY > SMART > SAMPLING
-  /// priority enforcement.
-  ///
-  /// When the tray signal is extreme (outside [0.8, 1.2]), sampling is silenced
-  /// so that the dominant tray signal is not compounded by sampling noise.
-  static double computeFinalFactor({
-    required double trayFactor,
-    required double smartFactor,
-    required double samplingFactor,
-  }) {
-    // Enforce TRAY priority: strong tray signal overrides sampling correction
-    final effectiveSampling =
-        (trayFactor < 0.8 || trayFactor > 1.2) ? 1.0 : samplingFactor;
-
-    return trayFactor * smartFactor * effectiveSampling;
-  }
-
-  /// Convenience wrapper — single entry point for the combined raw factor.
-  /// Computes samplingFactor internally so callers have no duplicate logic.
-  static double computeFinalFeedFactor({
-    required double trayFactor,
-    required double smartFactor,
-    required double? abw,
-    required int doc,
-    int sampleAgeDays = 0,
-  }) {
-    final samplingFactor = getSamplingFactor(abw, doc, sampleAgeDays: sampleAgeDays);
-    return computeFinalFactor(
-      trayFactor: trayFactor,
-      smartFactor: smartFactor,
-      samplingFactor: samplingFactor,
-    );
-  }
-
-  // ── LAYER 2: SMART FACTOR ────────────────────────────────────────────────
-
-  /// Growth factor based on actual vs expected ABW ratio.
-  static double getGrowthFactor(double ratio) {
-    if (ratio > 1.1) return 1.05; // Growing faster than expected
-    if (ratio < 0.9) return 0.95; // Growing slower — restrict
-    return 1.0;
-  }
-
-  // getFCRFactor REMOVED — FCR caused incorrect feed reduction (totalFeed/biomassKg formula).
-
-  /// Smart factor based on growth signal only, clamped [0.9, 1.1].
-  /// Returns 1.0 when ABW data is unavailable (safe default).
-  static double getSmartFactor({
-    required int doc,
-    required double? abw,
-    required List<double> feedHistory,
-    required int seedCount,
-  }) {
-    if (abw == null || abw <= 0) return 1.0;
-
-    final expectedAbw = getExpectedABW(doc);
-    if (expectedAbw <= 0) return 1.0;
-
-    final growthFactor = getGrowthFactor(abw / expectedAbw);
-    return growthFactor.clamp(0.9, 1.1);
-  }
-
-  // ── LAYER 3: SAFETY GUARDRAILS (Option-A) ────────────────────────────────
-
-  /// Hard safety bounds to protect crop.
-  static double applySafetyGuards({
-    required double factor,
-    required int consecutiveIncreaseDays,
-    required int consecutiveDecreaseDays,
-    required double currentFeed,
-    required double baseFeed,
-  }) {
-    // 3.1 Daily change limit ±10%
-    double result = factor.clamp(0.90, 1.10);
-
-    // 3.2 Increase streak cap — 3 consecutive increases → cap at +5%
-    if (consecutiveIncreaseDays >= 3 && result > 1.05) {
-      result = 1.05;
-    }
-
-    // 3.3 Decrease streak cap — 3 consecutive decreases → hold (no further reduction)
-    if (consecutiveDecreaseDays >= 3 && result < 1.0) {
-      result = 1.0;
-    }
-
-    // 3.4 Overfeeding protection — already >130% of base → hold
-    if (baseFeed > 0 && currentFeed > baseFeed * 1.3 && result > 1.0) {
-      result = 1.0;
-    }
-
-    return result;
-  }
 
   // ── DB APPLICATION ────────────────────────────────────────────────────────
 
@@ -425,8 +147,7 @@ class SmartFeedEngine {
         .select('id, base_feed, is_manual')
         .eq('pond_id', pondId)
         .eq('doc', doc)
-        .eq('status', 'pending')
-        .eq('is_smart_adjusted', false);
+        .eq('status', 'pending');
 
     for (final row in rows) {
       if (row['is_manual'] == true) continue;
@@ -459,29 +180,25 @@ class SmartFeedEngine {
     required String pondId,
     required int doc,
     required FeedMode mode,
-    required double baseFeed,
-    required double trayFactor,
-    required double smartFactor,
-    required double samplingFactor,
-    required double? abw,
-    required double? expectedAbw,
-    required double finalFactor,
-    required double finalFeed,
+    required FeedOutput output,
     required String reason,
+    double? abw,
   }) async {
     try {
       await _supabase.from('feed_debug_logs').insert({
         'pond_id': pondId,
         'doc': doc,
         'mode': mode.name,
-        'base_feed': baseFeed,
-        'tray_factor': trayFactor,
-        'smart_factor': smartFactor,
-        'sampling_factor': samplingFactor,
+        'base_feed': output.baseFeed,
+        'tray_factor': output.factors['tray'] ?? 1.0,
+        'growth_factor': output.factors['growth'] ?? 1.0,
+        'sampling_factor': output.factors['sampling'] ?? 1.0,
+        'environment_factor': output.factors['environment'] ?? 1.0,
+        'fcr_factor': output.factors['fcr'] ?? 1.0,
         'abw': abw,
-        'expected_abw': expectedAbw,
-        'final_factor': finalFactor,
-        'final_feed': finalFeed,
+        'final_factor': output.finalFactor,
+        'final_feed': output.recommendedFeed,
+        'engine_version': output.engineVersion,
         'reason': reason,
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -491,203 +208,7 @@ class SmartFeedEngine {
     }
   }
 
-  // ── DATA FETCHERS ─────────────────────────────────────────────────────────
-
-  /// Fetches pond data including ABW cache fields to avoid a separate
-  /// sampling_logs query on every feed calculation (fix #5).
-  static Future<Map<String, dynamic>?> _getPond(String pondId) async {
-    return await _supabase
-        .from('ponds')
-        .select('seed_count, stocking_date, current_abw, latest_sample_date')
-        .eq('id', pondId)
-        .maybeSingle();
-  }
-
-  /// Returns `(abw, ageDays)` from the already-fetched pond map.
-  /// `abw` is null when no sample exists or sample is stale (> 7 days).
-  /// `ageDays` is the age of the sample in days (0 when no sample).
-  /// Reads from pond cache — no extra DB hit (fix #5).
-  static ({double? abw, int ageDays}) _latestAbwFromPondData(
-      Map<String, dynamic> pond) {
-    final abw = (pond['current_abw'] as num?)?.toDouble();
-    if (abw == null || abw <= 0) return (abw: null, ageDays: 0);
-
-    final sampleDateStr = pond['latest_sample_date'] as String?;
-    if (sampleDateStr == null) return (abw: null, ageDays: 0);
-
-    final sampledAt = DateTime.tryParse(sampleDateStr);
-    if (sampledAt == null) return (abw: null, ageDays: 0);
-
-    final ageDays = DateTime.now().difference(sampledAt).inDays;
-    if (ageDays > 7) return (abw: null, ageDays: ageDays);
-
-    return (abw: abw, ageDays: ageDays);
-  }
-
-  /// Feed given over the last [days] days from feed_logs.
-  static Future<List<double>> _feedHistory(String pondId, {int days = 14}) async {
-    try {
-      final since = DateTime.now().subtract(Duration(days: days)).toIso8601String().split('T')[0];
-      final rows = await _supabase
-          .from('feed_logs')
-          .select('feed_given')
-          .eq('pond_id', pondId)
-          .gte('created_at', since);
-
-      return rows
-          .map<double>((r) => (r['feed_given'] as num?)?.toDouble() ?? 0.0)
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Last 3 days of tray leftover expressed as percentages.
-  /// Maps existing tray_statuses array (empty/partial/full) to leftover %:
-  ///   empty → 0%,  partial → 30%,  full → 70%
-  static Future<List<double>> _last3DaysLeftoverPct(String pondId) async {
-    try {
-      final since = DateTime.now()
-          .subtract(const Duration(days: 3))
-          .toIso8601String()
-          .split('T')[0];
-      final rows = await _supabase
-          .from('tray_logs')
-          .select('tray_statuses')
-          .eq('pond_id', pondId)
-          .gte('date', since)
-          .order('date', ascending: false)
-          .limit(3);
-
-      return rows
-          .map<double>((row) => _statusesToLeftoverPct(
-                List<String>.from(row['tray_statuses'] as List? ?? []),
-              ))
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Converts a list of tray status strings to a single leftover %.
-  /// 'skipped' → 0.0 (neutral: engine uses trayFactor = 1.0, no adjustment).
-  static double _statusesToLeftoverPct(List<String> statuses) {
-    if (statuses.isEmpty) return 0.0;
-    // Skipped tray check — treat as no information, use neutral factor
-    if (statuses.length == 1 && statuses.first == 'skipped') return 0.0;
-    int full = 0, empty = 0;
-    for (final s in statuses) {
-      if (s == 'full') full++;
-      if (s == 'empty') empty++;
-    }
-    final majority = statuses.length / 2;
-    if (full > majority) return 70.0;
-    if (empty > majority) return 0.0;
-    return 30.0; // partial majority
-  }
-
-  /// Sum of today's planned feed (overfeeding guard).
-  static Future<double> _todayTotalFeed(String pondId, int doc) async {
-    try {
-      final rows = await _supabase
-          .from('feed_rounds')
-          .select('planned_amount')
-          .eq('pond_id', pondId)
-          .eq('doc', doc);
-      return rows.fold<double>(
-          0.0, (s, r) => s + ((r['planned_amount'] as num?)?.toDouble() ?? 0.0));
-    } catch (_) {
-      return 0.0;
-    }
-  }
-
-  /// Sum of today's base feed (overfeeding guard comparison).
-  static Future<double> _todayBaseFeed(String pondId, int doc) async {
-    try {
-      final rows = await _supabase
-          .from('feed_rounds')
-          .select('base_feed')
-          .eq('pond_id', pondId)
-          .eq('doc', doc);
-      return rows.fold<double>(
-          0.0, (s, r) => s + ((r['base_feed'] as num?)?.toDouble() ?? 0.0));
-    } catch (_) {
-      return 0.0;
-    }
-  }
-
-  /// Counts consecutive DOCs with a negative adjustment (for decrease streak cap).
-  static Future<int> _consecutiveDecreaseDays(String pondId, int currentDoc) async {
-    try {
-      int count = 0;
-      for (int i = 1; i <= 3; i++) {
-        final checkDoc = currentDoc - i;
-        if (checkDoc < 1) break;
-
-        final rows = await _supabase
-            .from('feed_rounds')
-            .select('planned_amount, base_feed')
-            .eq('pond_id', pondId)
-            .eq('doc', checkDoc)
-            .limit(1);
-
-        if (rows.isEmpty) break;
-        final planned = (rows.first['planned_amount'] as num?)?.toDouble() ?? 0.0;
-        final base = (rows.first['base_feed'] as num?)?.toDouble() ?? 0.0;
-
-        if (base > 0 && planned < base) {
-          count++;
-        } else {
-          break;
-        }
-      }
-      return count;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  /// Counts consecutive DOCs with a positive adjustment (for increase streak cap).
-  static Future<int> _consecutiveIncreaseDays(String pondId, int currentDoc) async {
-    try {
-      int count = 0;
-      for (int i = 1; i <= 3; i++) {
-        final checkDoc = currentDoc - i;
-        if (checkDoc < 1) break;
-
-        final rows = await _supabase
-            .from('feed_rounds')
-            .select('planned_amount, base_feed')
-            .eq('pond_id', pondId)
-            .eq('doc', checkDoc)
-            .limit(1);
-
-        if (rows.isEmpty) break;
-        final planned = (rows.first['planned_amount'] as num?)?.toDouble() ?? 0.0;
-        final base = (rows.first['base_feed'] as num?)?.toDouble() ?? 0.0;
-
-        if (base > 0 && planned > base) {
-          count++;
-        } else {
-          break;
-        }
-      }
-      return count;
-    } catch (_) {
-      return 0;
-    }
-  }
-
   // ── HELPERS ───────────────────────────────────────────────────────────────
-
-  static int _computeDoc(String stockingDateStr) {
-    final stocking = DateTime.parse(stockingDateStr);
-    final today = DateTime.now();
-    return today
-            .difference(DateTime(stocking.year, stocking.month, stocking.day))
-            .inDays +
-        1;
-  }
 
   static String _reasonTag(double factor, String trayStatus, FeedMode mode) {
     final pct = ((factor - 1.0) * 100).round();

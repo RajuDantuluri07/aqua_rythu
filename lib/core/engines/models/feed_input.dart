@@ -4,6 +4,7 @@ class FeedInput {
   final int seedCount;
   final int doc;
   final double? abw;
+  final String stockingType;
 
   final double feedingScore;
   final double intakePercent;
@@ -16,6 +17,8 @@ class FeedInput {
   final int mortality;
 
   final List<TrayStatus> trayStatuses;
+  final int sampleAgeDays;
+  final List<double> recentTrayLeftoverPct;
 
   final double? lastFcr;
   final double? actualFeedYesterday;
@@ -24,6 +27,7 @@ class FeedInput {
     required this.seedCount,
     required this.doc,
     this.abw,
+    this.stockingType = 'nursery',
     required this.feedingScore,
     required this.intakePercent,
     required this.dissolvedOxygen,
@@ -32,6 +36,8 @@ class FeedInput {
     required this.ammonia,
     required this.mortality,
     required this.trayStatuses,
+    this.sampleAgeDays = 0,
+    this.recentTrayLeftoverPct = const [],
     this.lastFcr,
     this.actualFeedYesterday,
   });

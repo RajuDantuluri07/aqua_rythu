@@ -1,14 +1,13 @@
 import 'models/feed_input.dart';
 import 'models/feed_output.dart';
-import 'feed_calculation_engine.dart';
-import 'adjustment_engine.dart';
-import 'tray_engine.dart';
-import 'fcr_engine.dart';
+import 'feeding_engine_v1.dart';
+import 'feed_factor_engine.dart';
 import 'enforcement_engine.dart';
-import 'feed_state_engine.dart';
 import '../validators/feed_input_validator.dart';
 
 class MasterFeedEngine {
+  static const String version = 'v1.0.0';
+
   static FeedOutput run(FeedInput input) {
     // 🔐 STEP 0: Validate all inputs
     try {
@@ -18,6 +17,22 @@ class MasterFeedEngine {
         recommendedFeed: 0,
         baseFeed: 0,
         finalFactor: 0,
+        fcrFactor: 1.0,
+        factorBreakdown: {
+          'tray': 1.0,
+          'growth': 1.0,
+          'sampling': 1.0,
+          'environment': 1.0,
+          'fcr': 1.0,
+        },
+        factors: {
+          'tray': 1.0,
+          'growth': 1.0,
+          'sampling': 1.0,
+          'environment': 1.0,
+          'fcr': 1.0,
+        },
+        engineVersion: version,
         alerts: ["🚨 INVALID INPUT: ${e.toString()}"],
         reasons: ["Cannot process feed calculation due to data error"],
       );
@@ -25,32 +40,54 @@ class MasterFeedEngine {
 
     final reasons = <String>[];
 
-    // 1. Base feed
-    final baseFeed = FeedCalculationEngine.calculateFeed(
-      seedCount: input.seedCount,
+    // 1. Base feed (using FeedingEngineV1 as single source of truth)
+    final baseFeed = FeedingEngineV1.calculateFeed(
       doc: input.doc,
-      currentAbw: input.abw,
+      stockingType: input.stockingType,
+      density: input.seedCount,
+      leftoverPercent: null,
     );
 
-    // 2. Adjustment
-    final adjustmentFactor = AdjustmentEngine.calculate(input);
+    final trayFactor = FeedFactorEngine.calculateTrayFactor(
+      doc: input.doc,
+      trayStatuses: input.trayStatuses,
+      recentTrayLeftoverPct: input.recentTrayLeftoverPct,
+    );
+    final growthFactor = FeedFactorEngine.calculateGrowthFactor(input.abw, input.doc);
+    final samplingFactor = FeedFactorEngine.calculateSamplingFactor(
+      input.abw,
+      input.doc,
+      sampleAgeDays: input.sampleAgeDays,
+    );
+    final environmentFactor = FeedFactorEngine.calculateEnvironmentFactor(
+      dissolvedOxygen: input.dissolvedOxygen,
+      ammonia: input.ammonia,
+    );
+    final fcrFactor = FeedFactorEngine.calculateFcrFactor(input.lastFcr);
 
-    // 🚨 STOP CONDITION
-    if (adjustmentFactor == 0.0) {
-      return FeedOutput(
-        recommendedFeed: 0,
-        baseFeed: baseFeed,
-        finalFactor: 0,
-        alerts: ["🚨 DO too low - STOP feeding"],
-        reasons: ["Critical: Dissolved oxygen < 4 ppm"],
-      );
+    final factorBreakdown = {
+      'tray': trayFactor,
+      'growth': growthFactor,
+      'sampling': samplingFactor,
+      'environment': environmentFactor,
+      'fcr': fcrFactor,
+    };
+    final factors = Map<String, double>.from(factorBreakdown);
+
+    if (trayFactor != 1.0) {
+      reasons.add("Tray signal: ${(trayFactor * 100).toStringAsFixed(0)}% factor");
     }
-
-    // Track adjustment reasons
-    if (adjustmentFactor > 1.0) {
-      reasons.add("✅ Positive conditions (+${((adjustmentFactor - 1) * 100).toStringAsFixed(0)}%)");
-    } else if (adjustmentFactor < 1.0) {
-      reasons.add("⚠️ Challenging conditions (-${((1 - adjustmentFactor) * 100).toStringAsFixed(0)}%)");
+    if (growthFactor != 1.0) {
+      reasons.add("Growth signal: ${(growthFactor * 100).toStringAsFixed(0)}% factor");
+    }
+    if (samplingFactor != 1.0) {
+      reasons.add("Sampling confidence: ${(samplingFactor * 100).toStringAsFixed(0)}% factor");
+    }
+    if (environmentFactor != 1.0) {
+      reasons.add("Environment adjustment: ${(environmentFactor * 100).toStringAsFixed(0)}% factor");
+    }
+    if (fcrFactor != 1.0) {
+      reasons.add("FCR adjustment: ${(fcrFactor * 100).toStringAsFixed(0)}% factor");
     }
 
     if (input.feedingScore >= 4) reasons.add("✅ Good feeding response");
@@ -59,97 +96,64 @@ class MasterFeedEngine {
     if (input.dissolvedOxygen < 5) reasons.add("⚠️ Low dissolved oxygen");
     if (input.ammonia > 0.1) reasons.add("⚠️ High ammonia levels");
 
-    double feed = baseFeed * adjustmentFactor;
+    if (environmentFactor == 0.0) {
+      return FeedOutput(
+        recommendedFeed: 0,
+        baseFeed: baseFeed,
+        finalFactor: 0,
+        fcrFactor: fcrFactor,
+        factorBreakdown: factorBreakdown,
+        factors: factors,
+        engineVersion: version,
+        alerts: ["🚨 Critical environment: stop feeding"],
+        reasons: reasons.isEmpty
+            ? ["Critical: Dissolved oxygen or ammonia level requires no feeding"]
+            : reasons,
+      );
+    }
 
-    // 3. Tray adjustment
-    final mode = FeedStateEngine.getMode(input.doc);
-    final originalFeed = feed;
-    feed = TrayEngine.apply(
-      input.trayStatuses,
-      feed,
-      mode,
+    final rawFactor = FeedFactorEngine.combineFactors(
+      trayFactor: trayFactor,
+      growthFactor: growthFactor,
+      samplingFactor: samplingFactor,
+      environmentFactor: environmentFactor,
     );
 
-    if ((feed - originalFeed).abs() > 0.01) {
-      final adjustment = ((feed - originalFeed) / originalFeed * 100).toStringAsFixed(0);
-      reasons.add("Tray adjustment: $adjustment%");
-    }
+    final guardedFactor = FeedFactorEngine.applyFactorGuards(rawFactor * fcrFactor);
+    double recommendedFeed = baseFeed * guardedFactor;
 
-    // 4. FCR correction
-    final fcrFactor = FCREngine.correction(input.lastFcr);
-    if ((fcrFactor - 1.0).abs() > 0.001) {
-      if (input.lastFcr != null && input.lastFcr! <= 1.2) {
-        reasons.add("✅ Good FCR: Reward with more feed");
-      } else if (input.lastFcr != null && input.lastFcr! > 1.4) {
-        reasons.add("⚠️ Poor FCR: Reduce feed");
-      }
-    }
-    feed = feed * fcrFactor;
-
-    // 5. Enforcement (improved proportional model)
     final enforcementReason = EnforcementEngine.getEnforcementReason(
       input.actualFeedYesterday,
-      feed,
+      recommendedFeed,
     );
-    feed = EnforcementEngine.apply(
-      recommendedFeed: feed,
+    final enforcedFeed = EnforcementEngine.apply(
+      recommendedFeed: recommendedFeed,
       actualFeedYesterday: input.actualFeedYesterday,
     );
     if (enforcementReason.isNotEmpty) {
       reasons.add(enforcementReason);
     }
+    recommendedFeed = enforcedFeed;
 
-    // 🔒 6. IMPROVED SAFETY CLAMP: Smart bounds based on conditions
-    // If critical conditions detected, DON'T hide them with clamps
-    bool hasCriticalCondition = false;
-    if (input.dissolvedOxygen < 5) hasCriticalCondition = true;
-    if (input.ammonia > 0.2) hasCriticalCondition = true;
-    if (input.feedingScore <= 2) hasCriticalCondition = true;
-    if (input.intakePercent < 70) hasCriticalCondition = true;
-    if (input.mortality > input.seedCount * 0.05) hasCriticalCondition = true;
+    final finalFactor = baseFeed > 0 ? recommendedFeed / baseFeed : 0.0;
 
-    // Smart clamping: Allow stricter bounds when problems detected
-    double minFeed, maxFeed;
-    if (hasCriticalCondition) {
-      // In crisis: narrow the range to prevent masking issues
-      minFeed = baseFeed * 0.5;    // Hard minimum (50%)
-      maxFeed = baseFeed * 1.1;    // Tight maximum (110%)
-    } else {
-      // Normal conditions: standard safety margins
-      minFeed = baseFeed * 0.6;
-      maxFeed = baseFeed * 1.3;
-    }
-
-    final originalFeedBeforeClamp = feed;
-    // Ensure feed is never negative and stays within safety bounds
-    final clampedFeed = feed.clamp(minFeed, maxFeed).toDouble();
-    
-    if ((clampedFeed - originalFeedBeforeClamp).abs() > 0.01) {
-      final clampPercent = ((clampedFeed - originalFeedBeforeClamp) / originalFeedBeforeClamp * 100).toStringAsFixed(0);
-      if (hasCriticalCondition) {
-        reasons.add("⚠️ Critical condition clamp ($clampPercent%) - Review water quality immediately");
-      } else {
-        reasons.add("Safety clamp applied ($clampPercent%)");
-      }
-    }
-    feed = clampedFeed;
-
-    // 7. Final validation (Production Safety Wrapper)
     final alerts = _generateAlerts(input);
     try {
-      FeedInputValidator.validateOutput(feed, baseFeed);
+      FeedInputValidator.validateOutput(recommendedFeed, baseFeed);
     } catch (e) {
-      // Log critical warning but do not crash. 
-      // Fallback to safe base feed to allow the UI to function.
       reasons.add("🚨 CRITICAL CALCULATION ANOMALY: ${e.toString()}");
       alerts.add("🚨 System warning: Feed calculation anomaly - using safety base feed");
-      feed = baseFeed;
+      recommendedFeed = baseFeed;
     }
 
     return FeedOutput(
-      recommendedFeed: feed,
+      recommendedFeed: recommendedFeed,
       baseFeed: baseFeed,
-      finalFactor: adjustmentFactor,
+      finalFactor: finalFactor,
+      fcrFactor: fcrFactor,
+      factorBreakdown: factorBreakdown,
+      factors: factors,
+      engineVersion: version,
       alerts: alerts,
       reasons: reasons,
     );

@@ -37,4 +37,18 @@ class FeedEngineConstants {
   static const double lastMealFactor = 1.2;
 
   // Tray multipliers REMOVED — use FeedingEngineV1.trayFactor() instead.
+
+  // ── Feed cost constants ───────────────────────────────────────────────────
+
+  /// Approximate cost of shrimp feed per kg (₹).
+  /// Used for ₹-framed warnings (e.g. "Feeding early wastes ₹X").
+  /// Typical commercial pellet range: ₹60–90/kg. Conservative midpoint used.
+  /// BUG-13 fix: was hardcoded as ₹20/kg in FeedStatusEngine.estimateFeedLoss,
+  /// which under-stated the loss 3–4x. Centralised here for easy tuning.
+  /// TODO V2: make this configurable per-farm (user-entered purchase price).
+  static const double feedCostPerKg = 70.0;
+
+  /// Default market price per kg of harvested L. vannamei (₹).
+  /// Shared across PondValueEngine and insight calculations.
+  static const double harvestPricePerKg = 150.0;
 }
