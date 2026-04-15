@@ -19,6 +19,9 @@ class FeedResult {
   /// Actionable recommendations for the farmer
   final List<String> recommendations;
 
+  /// Step-by-step decision trace for debugging and transparency
+  final List<String> decisionTrace;
+
   FeedResult({
     required this.finalFeed,
     required this.source,
@@ -30,6 +33,7 @@ class FeedResult {
     required this.explanation,
     required this.confidenceScore,
     this.recommendations = const [],
+    this.decisionTrace = const [],
   });
 }
 

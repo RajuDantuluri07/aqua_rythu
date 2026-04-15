@@ -61,8 +61,12 @@ class SmartFeedOutput {
   /// Example: ["Reduce feed slightly for next 2 days", "Check tray after next feeding"]
   final List<String> recommendations;
 
+  /// Step-by-step trace of decisions made by the engine
+  /// Example: ["DOC = 40", "Using biomass (ABW: 12.5g)", "DOC Feed = 11.25", ...]
+  final List<String> decisionTrace;
+
   // ── METADATA ───────────────────────────────────────────────────────────────
-  
+
   /// Engine version that generated this output
   final String engineVersion;
 
@@ -81,6 +85,7 @@ class SmartFeedOutput {
     required this.explanation,
     required this.confidenceScore,
     required this.recommendations,
+    this.decisionTrace = const [],
     this.engineVersion = "v2.1",
     DateTime? calculatedAt,
   }) : calculatedAt = calculatedAt ?? DateTime.now();

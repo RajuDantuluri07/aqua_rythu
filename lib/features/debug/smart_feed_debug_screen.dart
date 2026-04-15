@@ -30,7 +30,9 @@ class SmartFeedDebugScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _explanationCard(),
             const SizedBox(height: 16),
-            _recommendationCard(), // 🔥 NEW
+            _recommendationCard(),
+            const SizedBox(height: 16),
+            _decisionTraceCard(),
             const SizedBox(height: 16),
             _debugLogs(),
           ],
@@ -313,7 +315,45 @@ class SmartFeedDebugScreen extends StatelessWidget {
     );
   }
 
-  // 🔷 7. Debug Logs
+  // 🔷 7. Decision Trace
+  Widget _decisionTraceCard() {
+    if (data.decisionTrace.isEmpty) return const SizedBox.shrink();
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Decision Trace",
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          const SizedBox(height: 10),
+          ...data.decisionTrace.map(
+            (step) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "• ",
+                    style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.bold),
+                  ),
+                  Expanded(
+                    child: Text(
+                      step,
+                      style: TextStyle(color: Colors.grey[800], fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🔷 8. Debug Logs
   Widget _debugLogs() {
     return ExpansionTile(
       title: const Text("Debug Logs",
