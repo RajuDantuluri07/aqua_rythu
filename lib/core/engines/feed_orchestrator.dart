@@ -34,7 +34,7 @@ import 'feed_input_builder.dart';
 import 'feed_intelligence_engine.dart';
 import 'feed_recommendation_engine.dart';
 import 'master_feed_engine.dart';
-import 'smart_feed_engine.dart' show CorrectionResult; // data model only — no engine calls
+import 'models/correction_result.dart';
 import 'smart_feed_engine_v2.dart';
 import 'models/feed_input.dart';
 import '../utils/logger.dart';

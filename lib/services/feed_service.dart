@@ -4,7 +4,7 @@ import '../core/engines/feed_orchestrator.dart';
 import '../core/engines/feed_plan_constants.dart';
 import '../core/engines/feed_plan_generator.dart';
 import '../core/engines/master_feed_engine.dart';
-import '../core/engines/smart_feed_engine.dart' show FeedMode, feedModeForDoc;
+import '../core/enums/feed_mode.dart';
 import '../core/enums/tray_status.dart';
 import '../core/utils/logger.dart';
 import '../repositories/feed_repository.dart';
