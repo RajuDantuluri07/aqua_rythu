@@ -5,7 +5,7 @@ import '../../core/utils/logger.dart';
 
 class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
   final String pondId;
-  final _supabase = Supabase.instance.client;
+  final _supabase = Supabase.instance.client; // used by _loadLogs
 
   GrowthNotifier(this.pondId) : super([]) {
     _loadLogs();
@@ -33,22 +33,10 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
     }
   }
 
-  Future<void> addLog(SamplingLog log) async {
-    // Update UI immediately
+  void addLog(SamplingLog log) {
+    // In-memory only — DB persistence is owned by SamplingService.addSampling()
+    // which also updates ponds.current_abw and ponds.latest_sample_date.
     state = [log, ...state];
-
-    // Persist to Supabase
-    try {
-      await _supabase.from('sampling_logs').insert({
-        'pond_id': pondId,
-        'avg_weight': log.abw,
-        'count': log.totalPieces,
-        'doc': log.doc,
-        'created_at': log.date.toIso8601String(),
-      });
-    } catch (e) {
-      AppLogger.error('Failed to save sampling log', e);
-    }
   }
 
   void clearLogs() {

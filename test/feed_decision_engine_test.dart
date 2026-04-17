@@ -12,7 +12,7 @@ void main() {
       final decision = FeedDecisionEngine.compute(
         baseFeed: baseFeed,
         finalFeed: baseFeed,
-        intelligence: IntelligenceResult(
+        intelligence: const IntelligenceResult(
           expectedFeed: baseFeed,
           status: FeedStatus.onTrack,
         ),
@@ -37,7 +37,7 @@ void main() {
       final decision = FeedDecisionEngine.compute(
         baseFeed: baseFeed,
         finalFeed: 9.0,
-        intelligence: IntelligenceResult(
+        intelligence: const IntelligenceResult(
           expectedFeed: baseFeed,
           actualFeed: 12.0,
           deviation: 2.0,
@@ -65,7 +65,7 @@ void main() {
       final decision = FeedDecisionEngine.compute(
         baseFeed: baseFeed,
         finalFeed: 11.0,
-        intelligence: IntelligenceResult(
+        intelligence: const IntelligenceResult(
           expectedFeed: baseFeed,
           actualFeed: 12.0,
           deviation: 2.0,
@@ -93,7 +93,7 @@ void main() {
       final decision = FeedDecisionEngine.compute(
         baseFeed: baseFeed,
         finalFeed: 0.0,
-        intelligence: IntelligenceResult(
+        intelligence: const IntelligenceResult(
           expectedFeed: baseFeed,
           status: FeedStatus.onTrack,
         ),
@@ -120,7 +120,7 @@ void main() {
       final decision = FeedDecisionEngine.compute(
         baseFeed: baseFeed,
         finalFeed: baseFeed,
-        intelligence: IntelligenceResult(
+        intelligence: const IntelligenceResult(
           expectedFeed: baseFeed,
           status: FeedStatus.onTrack,
         ),

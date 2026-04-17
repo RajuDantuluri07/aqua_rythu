@@ -31,6 +31,7 @@ import 'package:aqua_rythu/core/engines/feed_decision_engine.dart';
 import 'package:aqua_rythu/core/engines/tray_decision_engine.dart';
 import 'package:aqua_rythu/core/engines/pond_value_engine.dart';
 import 'package:aqua_rythu/core/engines/feed_status_engine.dart' hide FeedDecision;
+import 'package:aqua_rythu/core/engines/engine_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
@@ -1792,7 +1793,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
       seedLabel = '${(seedCount / 1000).toStringAsFixed(0)}k';
     }
     final survivalPct = (survivalRate * 100).round();
-    const int pricePerKg = 150; // default price from PondValueEngine
+    final int pricePerKg = FeedEngineConstants.harvestPricePerKg.round();
 
     // Confidence color thresholds
     final Color confidenceColor;

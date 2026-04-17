@@ -207,10 +207,15 @@ class MasterFeedEngine {
     final double maxFeed = adjustedBase * 1.30;
     double final_ = raw.clamp(minFeed, maxFeed);
 
-    // ── Step 5b: Absolute hard cap ────────────────────────────────────────
-    final_ = final_.clamp(kAbsoluteMinFeed, kAbsoluteMaxFeed);
+    // ── Step 5b: Density-proportional hard cap ───────────────────────────
+    // kAbsoluteMaxFeed (50 kg) is defined per 100K shrimp. A 500K-shrimp pond
+    // legitimately needs up to 250 kg/day at late DOC — the fixed 50 kg cap
+    // would silently underfeed by ~47 % at maximum stocking density.
+    final double effectiveMaxFeed =
+        ((safeDensity / 100000.0) * kAbsoluteMaxFeed).clamp(kAbsoluteMaxFeed, 500.0);
+    final_ = final_.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
     if (final_.isNaN || final_.isInfinite) {
-      final_ = adjustedBase.clamp(kAbsoluteMinFeed, kAbsoluteMaxFeed);
+      final_ = adjustedBase.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
     }
 
     final bool clamped = (raw - final_).abs() > 0.001;

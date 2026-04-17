@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/engines/master_feed_engine.dart';
 import '../../core/engines/feed_intelligence_engine.dart';
 import '../../core/engines/feed_orchestrator.dart';
-import '../../core/engines/models/feed_input.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/doc_utils.dart';
 

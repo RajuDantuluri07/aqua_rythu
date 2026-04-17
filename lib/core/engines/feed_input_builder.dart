@@ -120,19 +120,33 @@ class FeedInputBuilder {
 
   static Future<({double dissolvedOxygen, double ammonia, double temperature, double phChange})>
       _latestWaterLog(String pondId) async {
+    const safeDefaults = (
+      dissolvedOxygen: 6.0,
+      ammonia: 0.05,
+      temperature: 28.0,
+      phChange: 0.0,
+    );
     try {
       final rows = await _supabase
           .from('water_logs')
-          .select('dissolved_oxygen, ammonia, temperature, ph')
+          .select('dissolved_oxygen, ammonia, temperature, ph, created_at')
           .eq('pond_id', pondId)
           .order('created_at', ascending: false)
           .limit(1);
 
-      if (rows.isEmpty) {
-        return (dissolvedOxygen: 6.0, ammonia: 0.05, temperature: 28.0, phChange: 0.0);
-      }
+      if (rows.isEmpty) return safeDefaults;
 
       final row = rows.first;
+
+      // Discard readings older than 48 hours. A stale low-DO reading blocks
+      // feeding long after conditions recover; a stale safe reading gives false
+      // confidence when current water is actually critical.
+      final createdAt = DateTime.tryParse(row['created_at'] as String? ?? '');
+      if (createdAt != null) {
+        final ageHours = TimeProvider.now().difference(createdAt).inHours;
+        if (ageHours > 48) return safeDefaults;
+      }
+
       return (
         dissolvedOxygen: (row['dissolved_oxygen'] as num?)?.toDouble() ?? 6.0,
         ammonia: (row['ammonia'] as num?)?.toDouble() ?? 0.05,
@@ -140,7 +154,7 @@ class FeedInputBuilder {
         phChange: 0.0,
       );
     } catch (_) {
-      return (dissolvedOxygen: 6.0, ammonia: 0.05, temperature: 28.0, phChange: 0.0);
+      return safeDefaults;
     }
   }
 
@@ -155,19 +169,33 @@ class FeedInputBuilder {
           .toIso8601String()
           .split('T')[0];
 
+      // Fetch enough rows so ponds with multiple rounds per day (up to 4)
+      // across 3 days are fully covered. LIMIT 3 would give 3 rows from the
+      // same busy day instead of one row per distinct day.
       final rows = await _supabase
           .from('tray_logs')
-          .select('tray_statuses')
+          .select('tray_statuses, date')
           .eq('pond_id', pondId)
           .gte('date', sinceStr)
           .lt('date', todayStr)
           .order('date', ascending: false)
-          .limit(3);
+          .limit(12);
 
-      return rows
-          .map<double>((row) => _statusesToLeftoverPct(
-                List<String>.from(row['tray_statuses'] as List? ?? []),
-              ))
+      if (rows.isEmpty) return const [-1.0];
+
+      // Group all tray readings by calendar date, then average within each day.
+      // This ensures 3 results = 3 distinct days, not 3 rounds from 1 day.
+      final Map<String, List<String>> byDate = {};
+      for (final row in rows) {
+        final date = row['date'] as String;
+        final statuses = List<String>.from(row['tray_statuses'] as List? ?? []);
+        byDate.putIfAbsent(date, () => []).addAll(statuses);
+      }
+
+      final sortedDates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
+      return sortedDates
+          .take(3)
+          .map((date) => _statusesToLeftoverPct(byDate[date]!))
           .toList();
     } catch (_) {
       return const [-1.0];

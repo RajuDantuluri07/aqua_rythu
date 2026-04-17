@@ -225,6 +225,17 @@ class PondService {
 
   Future<void> deletePond(String pondId) async {
     try {
+      // Delete child rows first — FK constraints may not cascade automatically.
+      // Matches the same table set used by clearPondCycleData.
+      await Future.wait([
+        supabase.from('feed_rounds').delete().eq('pond_id', pondId),
+        supabase.from('feed_logs').delete().eq('pond_id', pondId),
+        supabase.from('tray_logs').delete().eq('pond_id', pondId),
+        supabase.from('sampling_logs').delete().eq('pond_id', pondId),
+        supabase.from('water_logs').delete().eq('pond_id', pondId),
+        supabase.from('harvest_logs').delete().eq('pond_id', pondId),
+      ]);
+
       await supabase
           .from('ponds')
           .delete()

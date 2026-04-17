@@ -17,32 +17,30 @@ class DashboardService {
           area,
           num_trays,
           current_abw,
-          stocking_date,
-          feed_rounds (
-            doc,
-            feed_amount
-          )
+          stocking_date
         ''').eq('is_deleted', false);
 
     final ponds = List<Map<String, dynamic>>.from(response);
 
     for (final pond in ponds) {
-      final feedRounds = pond['feed_rounds'] as List?;
-      
-      if (feedRounds != null && feedRounds.isNotEmpty) {
-        // Calculate today's DOC
-        final stockingDate = DateTime.parse(pond['stocking_date'] as String);
-        final todayDoc = calculateDocFromStockingDate(stockingDate);
-        
-        // Calculate today's total feed from rounds
-        final todayTotal = feedRounds
-            .where((r) => r['doc'] == todayDoc)
-            .fold(0.0, (sum, r) => sum + ((r['feed_amount'] as num?)?.toDouble() ?? 0.0));
+      final stockingDate = DateTime.parse(pond['stocking_date'] as String);
+      final todayDoc = calculateDocFromStockingDate(stockingDate);
+      final pondId = pond['id'] as String;
 
-        pond['today_feed'] = todayTotal;
-      } else {
-        pond['today_feed'] = 0;
-      }
+      // Read actual consumed from feed_logs (last row = running cumulative total).
+      // feed_rounds.planned_amount is the engine recommendation, not what was fed —
+      // using planned caused dashboard to diverge from intelligence and HomeBuilder KPIs.
+      final feedRow = await supabase
+          .from('feed_logs')
+          .select('feed_given')
+          .eq('pond_id', pondId)
+          .eq('doc', todayDoc)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      pond['today_feed'] =
+          (feedRow?['feed_given'] as num?)?.toDouble() ?? 0.0;
     }
 
     return ponds;

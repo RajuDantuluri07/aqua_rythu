@@ -176,11 +176,11 @@ class FeedInputValidator {
       throw Exception("Output validation failed: recommendedFeed is Infinite");
     }
     if (recommendedFeed < 0) {
-      throw Exception("Output validation failed: recommendedFeed is negative (${recommendedFeed})");
+      throw Exception("Output validation failed: recommendedFeed is negative ($recommendedFeed)");
     }
     if (recommendedFeed > 10000) {
       throw Exception(
-        "Output validation failed: recommendedFeed (${recommendedFeed} kg) "
+        "Output validation failed: recommendedFeed ($recommendedFeed kg) "
         "exceeds physical delivery limit - Check calculation error",
       );
     }

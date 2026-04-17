@@ -25,6 +25,12 @@ class FeedService {
     int? density,
     String? engineVersion,
   }) async {
+    // Store today's daily total (sum of all rounds passed so far).
+    // _persistFeedLog always passes log.rounds = ALL today's rounds, so total is
+    // the growing running-daily sum. _actualFeedForDoc and _computeLastFcr both
+    // take the LAST row per date as the authoritative day total — this is correct.
+    // NOTE: cumulativeFeed (all-time since stocking) is intentionally NOT stored
+    // here; it lives only in FeedHistoryLog in-memory state.
     final total = rounds.fold(0.0, (sum, r) => sum + r);
     await supabase.from('feed_logs').insert({
       'pond_id': pondId,
@@ -271,7 +277,9 @@ class FeedService {
           for (final row in existing) (row['round'] as int): row['id'] as String
         };
 
-        for (int i = 0; i < 4; i++) {
+        // Parallelize the 4 rounds per DOC — previously sequential (4 awaits),
+        // now a single parallel batch (1 await for 4 concurrent operations).
+        await Future.wait(List.generate(4, (i) async {
           final round = i + 1;
           final qty = paddedRounds[i];
           final existingId = existingIds[round];
@@ -294,7 +302,7 @@ class FeedService {
               'is_manual': true,
             });
           }
-        }
+        }));
       }
 
       AppLogger.info("Feed plans saved for pond $pondId (${feedPlans.length} DOCs × 4 rounds)");

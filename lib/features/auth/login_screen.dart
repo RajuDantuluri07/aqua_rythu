@@ -162,7 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text("By continuing, you agree to ", style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+                    const Text("By continuing, you agree to ", style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
                     TextButton(
                       onPressed: () {},
                       child: const Text("TERMS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),

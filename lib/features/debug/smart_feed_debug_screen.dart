@@ -257,9 +257,9 @@ class SmartFeedDebugScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.amber[200]!),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text("Recommendations:",
                     style: TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13, color: Colors.amber)),
@@ -382,7 +382,7 @@ class SmartFeedDebugScreen extends StatelessWidget {
                   data.growthFactor?.toStringAsFixed(2) ?? "N/A"),
               _logEntry("FINAL_FEED", data.finalFeed.toStringAsFixed(2)),
               _logEntry("CONFIDENCE_SCORE",
-                  (data.confidenceScore * 100).toStringAsFixed(1) + "%"),
+                  "${(data.confidenceScore * 100).toStringAsFixed(1)}%"),
             ],
           ),
         ),

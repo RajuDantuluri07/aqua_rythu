@@ -46,7 +46,7 @@ class HomeBuilder {
 
     // ── Estimated ABW/FCR when no sampling exists ─────────────────────────────
     final bool abwIsEstimated = currentAbw <= 0;
-    final double effectiveAbw = abwIsEstimated ? _estimateAbw(doc) : currentAbw;
+    final double effectiveAbw = abwIsEstimated ? getExpectedABW(doc) : currentAbw;
 
     // Recalculate FCR using effectiveAbw so KPI is never blank
     final bool fcrIsEstimated = pondFcr <= 0 && abwIsEstimated;
@@ -421,16 +421,6 @@ class HomeBuilder {
   // ──────────────────────────────────────────────────────────────────────────
   // ESTIMATION FALLBACKS
   // ──────────────────────────────────────────────────────────────────────────
-
-  /// DOC-based ABW estimate when no real sample exists.
-  static double _estimateAbw(int doc) {
-    if (doc <= 10) return doc * 0.02;
-    if (doc <= 20) return 0.2 + (doc - 10) * 0.13;
-    if (doc <= 30) return 1.5 + (doc - 20) * 0.35;
-    if (doc <= 45) return 5.0 + (doc - 30) * 0.27;
-    if (doc <= 60) return 9.0 + (doc - 45) * 0.2;
-    return 12.0 + (doc - 60) * 0.15;
-  }
 
   /// Rough FCR estimate when no real data. Improves as culture matures.
   static double _estimateFcr(int doc) {

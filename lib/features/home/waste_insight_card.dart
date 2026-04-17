@@ -48,12 +48,13 @@ class WasteInsightCard extends StatelessWidget {
                     color: cfg.textColor,
                   ),
                 ),
-                // Show suggested correction only when non-neutral
+                // Correction is already applied automatically by SmartFeedEngineV2's
+                // tray factor — show confirmation rather than an actionable suggestion.
                 if (data.suggestedFeedFactor < 0.99) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    'Suggested next feed: ×${data.suggestedFeedFactor.toStringAsFixed(2)}',
-                    style: const TextStyle(
+                  const Text(
+                    'Smart engine adjusting tomorrow\'s feed automatically',
+                    style: TextStyle(
                       fontSize: 10,
                       color: Color(0xFF64748B),
                       fontWeight: FontWeight.w500,

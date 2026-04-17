@@ -45,11 +45,11 @@ class FeedTrendCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              _Dot(color: const Color(0xFF16A34A)),
+              const _Dot(color: Color(0xFF16A34A)),
               const SizedBox(width: 4),
               const Text('Actual', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
               const SizedBox(width: 12),
-              _Dot(color: const Color(0xFFCBD5E1)),
+              const _Dot(color: Color(0xFFCBD5E1)),
               const SizedBox(width: 4),
               const Text('Ideal', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
               const Spacer(),

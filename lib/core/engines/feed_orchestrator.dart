@@ -18,6 +18,8 @@
 // UI and providers call FeedService for computation + persistence.
 
 import '../enums/feed_stage.dart';
+import '../enums/tray_status.dart';
+import '../validators/feed_input_validator.dart';
 import 'fcr_engine.dart';
 import 'feed_decision_engine.dart';
 import 'feed_input_builder.dart';
@@ -25,6 +27,7 @@ import 'feed_intelligence_engine.dart';
 import 'feed_recommendation_engine.dart';
 import 'master_feed_engine.dart';
 import 'smart_feed_engine.dart';
+import 'smart_feed_engine_v2.dart';
 import 'models/feed_input.dart';
 import '../utils/logger.dart';
 
@@ -76,6 +79,8 @@ class FeedOrchestrator {
   /// Pure — no DB writes. Use this for testing or when the caller already
   /// has a [FeedInput] (e.g. debug dashboard, FeedService).
   static OrchestratorResult compute(FeedInput input) {
+    FeedInputValidator.validate(input);
+
     // ── Stage 1: Base feed ────────────────────────────────────────────────
     final baseFeed = MasterFeedEngine.compute(
       doc: input.doc,
@@ -91,8 +96,18 @@ class FeedOrchestrator {
     );
 
     // ── Stage 2: Intelligence (expected vs actual) ────────────────────────
+    // Compare yesterday's actual against YESTERDAY's expected base feed, not
+    // today's. Using today's baseFeed creates a systematic underfeeding signal
+    // every day because today's ramp is always higher than yesterday's.
+    final yesterdayBaseFeed = input.doc > 1
+        ? MasterFeedEngine.compute(
+            doc: input.doc - 1,
+            stockingType: input.stockingType,
+            density: input.seedCount,
+          )
+        : baseFeed;
     final intelligence = FeedIntelligenceEngine.compute(
-      expectedFeed: baseFeed,
+      expectedFeed: yesterdayBaseFeed,
       actualFeedYesterday: input.actualFeedYesterday,
     );
 
@@ -102,18 +117,115 @@ class FeedOrchestrator {
         : 1.0;
 
     // ── Stage 3: Smart corrections ────────────────────────────────────────
-    final correction = SmartFeedEngine.apply(
+    // V2 handles: tray appetite, growth/ABW, water quality, DOC-stage factor.
+    // FCR and deviation-enforcement are applied on top by the orchestrator
+    // because V2 is a pure tray/growth/water engine with no history awareness.
+    //
+    // Tray history prep:
+    //   FeedInputBuilder returns recentTrayLeftoverPct newest-first and excludes
+    //   today. V2._resolveLatestLeftover treats the LAST element as most recent,
+    //   so we reverse to oldest-first, then append today's live reading (if any).
+    final historicLeftovers = input.recentTrayLeftoverPct
+        .where((v) => v >= 0)
+        .toList()
+        .reversed
+        .toList(); // now oldest → newest
+
+    if (input.trayStatuses.isNotEmpty) {
+      double sum = 0;
+      for (final s in input.trayStatuses) {
+        switch (s) {
+          case TrayStatus.empty:
+            break;
+          case TrayStatus.partial:
+            sum += 30.0;
+            break;
+          case TrayStatus.full:
+            sum += 70.0;
+            break;
+        }
+      }
+      historicLeftovers.add(sum / input.trayStatuses.length);
+    }
+
+    final v2Result = SmartFeedEngineV2.calculate(
       baseFeed: baseFeed,
-      intelligence: intelligence,
       doc: input.doc,
-      trayStatuses: input.trayStatuses,
-      recentTrayLeftoverPct: input.recentTrayLeftoverPct,
+      recentTrayLeftoverPct: historicLeftovers,
       abw: input.abw,
       sampleAgeDays: input.sampleAgeDays,
-      fcrFactor: fcrFactor,
       dissolvedOxygen: input.dissolvedOxygen,
       ammonia: input.ammonia,
     );
+
+    final intelligenceFactor =
+        SmartFeedEngine.computeIntelligenceFactor(intelligence);
+
+    final CorrectionResult correction;
+    if (v2Result.isCriticalStop) {
+      correction = CorrectionResult(
+        finalFeed: 0.0,
+        trayFactor: 1.0,
+        growthFactor: 1.0,
+        samplingFactor: 1.0,
+        environmentFactor: 0.0,
+        fcrFactor: 1.0,
+        intelligenceFactor: 1.0,
+        combinedFactor: 0.0,
+        reasons: v2Result.reasons,
+        alerts: ['🚨 Critical DO — stop feeding'],
+        isCriticalStop: true,
+      );
+    } else {
+      // Apply FCR then deviation-enforcement on top of V2 final feed.
+      // Guard order: clamp the combined ratio first, then derive finalFeed from it
+      // so correction.finalFeed == baseFeed × correction.combinedFactor always.
+      // Previous code clamped combinedFactor after the fact, so finalFeed could
+      // reach 1.87× baseFeed while combinedFactor reported 1.30 — silent overfeeding.
+      final rawFeedFinal = v2Result.finalFeed * fcrFactor * intelligenceFactor;
+      final combinedFactor = baseFeed > 0
+          ? (rawFeedFinal / baseFeed).clamp(0.70, 1.30)
+          : 1.0;
+      final feedFinal =
+          (baseFeed * combinedFactor).clamp(kAbsoluteMinFeed, baseFeed * 1.30);
+
+      final alerts = <String>[
+        if (v2Result.waterFactor <= 0.0)
+          '🚨 Critical DO — stop feeding'
+        else if (v2Result.waterFactor < 1.0)
+          v2Result.waterFactor <= 0.80
+              ? '⚠️ High water risk — feed reduced'
+              : '⚠️ Water stress — feed reduced',
+      ];
+
+      final extraReasons = <String>[
+        if (fcrFactor != 1.0)
+          'FCR adjustment: ${fcrFactor > 1.0 ? '+' : ''}${((fcrFactor - 1) * 100).toStringAsFixed(0)}%',
+        if (intelligenceFactor != 1.0)
+          'Deviation enforcement: ${intelligenceFactor > 1.0 ? '+' : ''}${((intelligenceFactor - 1) * 100).toStringAsFixed(0)}% (${intelligence.statusLabel})',
+      ];
+
+      correction = CorrectionResult(
+        finalFeed: double.parse(feedFinal.toStringAsFixed(3)),
+        trayFactor: v2Result.trayFactor,
+        growthFactor: v2Result.growthFactor,
+        samplingFactor: 1.0, // V2 bakes sampling decay into growthFactor
+        environmentFactor: v2Result.waterFactor,
+        fcrFactor: fcrFactor,
+        intelligenceFactor: intelligenceFactor,
+        combinedFactor: double.parse(combinedFactor.toStringAsFixed(3)),
+        reasons: [...v2Result.reasons, ...extraReasons],
+        alerts: alerts,
+        isCriticalStop: false,
+      );
+    }
+
+    // ── Output sanity check ───────────────────────────────────────────────
+    // validateOutput was declared but never called — NaN / negative / extreme
+    // values would silently propagate to the farmer UI and feed_rounds.
+    if (!correction.isCriticalStop) {
+      FeedInputValidator.validateOutput(correction.finalFeed, baseFeed);
+    }
 
     // ── Stage 4: Decision ─────────────────────────────────────────────
     final recommendations = FeedDecisionEngine.generateRecommendations(

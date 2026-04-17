@@ -1,20 +1,18 @@
-import '../../models/feed_model.dart';
-
 abstract class FeedRepository {
-  Future<List<FeedEntry>> getFeeds(String pondId);
-  Future<void> addFeed(String pondId, FeedEntry entry);
+  Future<List<Map<String, dynamic>>> getFeeds(String pondId);
+  Future<void> addFeed(String pondId, Map<String, dynamic> entry);
 }
 
 class LocalFeedRepository implements FeedRepository {
-  final Map<String, List<FeedEntry>> _storage = {};
+  final Map<String, List<Map<String, dynamic>>> _storage = {};
 
   @override
-  Future<List<FeedEntry>> getFeeds(String pondId) async {
+  Future<List<Map<String, dynamic>>> getFeeds(String pondId) async {
     return _storage[pondId] ?? [];
   }
 
   @override
-  Future<void> addFeed(String pondId, FeedEntry entry) async {
+  Future<void> addFeed(String pondId, Map<String, dynamic> entry) async {
     _storage.putIfAbsent(pondId, () => []);
     _storage[pondId]!.add(entry);
   }

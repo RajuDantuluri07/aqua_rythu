@@ -41,9 +41,23 @@ const FeedConfig standardFeedConfig = FeedConfig(
   timingsDisplay: ["06:00 AM", "11:00 AM", "04:00 PM", "09:00 PM"],
 );
 
+/// Feed configuration for DOC 1–7: 2 rounds at 50/50 split.
+/// Matches [Pond.feedRoundsForDoc] which returns 2 for DOC ≤ 7.
+/// Rounds 3 and 4 have split 0.0 so [saveFeedPlans] stores 0 kg for them.
+const FeedConfig earlyFeedConfig = FeedConfig(
+  rounds: 2,
+  splits: [0.50, 0.50, 0.00, 0.00],
+  timings24h: ["06:00", "17:00", "", ""],
+  timingsDisplay: ["06:00 AM", "05:00 PM", "", ""],
+);
+
 /// Returns the correct [FeedConfig] for a given DOC.
-/// Always 4 equal rounds from day 1.
-FeedConfig getFeedConfig(int doc) => standardFeedConfig;
+/// DOC 1–7 → 2 rounds (early acclimation period).
+/// DOC 8+  → 4 rounds (standard schedule).
+FeedConfig getFeedConfig(int doc) {
+  if (doc <= 7) return earlyFeedConfig;
+  return standardFeedConfig;
+}
 
 /// Returns the feed type label recommended for the given Day of Culture (DOC).
 ///

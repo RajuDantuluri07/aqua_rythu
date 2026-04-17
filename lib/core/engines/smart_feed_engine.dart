@@ -324,6 +324,11 @@ class SmartFeedEngine {
   /// Overfeeding yesterday → reduce today proportionally.
   /// Underfeeding yesterday → small catch-up bonus.
   /// Bounds: [0.75, 1.25].
+  ///
+  /// Public so FeedOrchestrator can apply it after SmartFeedEngineV2.
+  static double computeIntelligenceFactor(IntelligenceResult intelligence) =>
+      _intelligenceFactor(intelligence);
+
   static double _intelligenceFactor(IntelligenceResult intelligence) {
     if (!intelligence.hasActualData) return 1.0;
 
