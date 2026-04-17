@@ -1,9 +1,8 @@
 /// Feed round configuration keyed by DOC range.
 ///
-/// DOC 1–7   → 2 rounds  (NORMAL)     | splits [0.50, 0.50]             | timings 07:00, 18:00
-/// DOC 8–14  → 4 rounds  (NORMAL)     | splits [0.25, 0.20, 0.30, 0.25] | timings 06:00, 11:00, 16:00, 21:00
-/// DOC 15–30 → 4 rounds  (TRAY_HABIT) | same splits, tray data collected, no adjustment
-/// DOC 31+   → 4 rounds  (SMART)      | biomass-based, tray × smart × safety guardrails
+/// DOC 1–30  → 4 rounds  (NORMAL/TRAY_HABIT) | equal splits [0.25, 0.25, 0.25, 0.25] | timings 06:00, 11:00, 16:00, 21:00
+/// DOC 31+   → 4 rounds  (SMART)              | biomass-based, tray × smart × safety guardrails
+library;
 
 class FeedConfig {
   final int rounds;
@@ -33,25 +32,18 @@ class FeedConfig {
   }
 }
 
-/// DOC 1–7 feed configuration: 4 rows stored, only R1+R2 active (R3=R4=0).
-/// Splits for active rounds; R3/R4 always 0.
-const FeedConfig initialFeedConfig = FeedConfig(
+/// Feed configuration for all DOCs: 4 equal rounds.
+/// 1 kg total → 250 g per round.
+const FeedConfig standardFeedConfig = FeedConfig(
   rounds: 4,
-  splits: [0.50, 0.50, 0.0, 0.0],
-  timings24h: ["07:00", "18:00", "--:--", "--:--"],
-  timingsDisplay: ["07:00 AM", "06:00 PM", "--", "--"],
-);
-
-/// DOC 8+ feed configuration: 4 rounds, weighted split.
-const FeedConfig postWeekFeedConfig = FeedConfig(
-  rounds: 4,
-  splits: [0.25, 0.20, 0.30, 0.25],
+  splits: [0.25, 0.25, 0.25, 0.25],
   timings24h: ["06:00", "11:00", "16:00", "21:00"],
   timingsDisplay: ["06:00 AM", "11:00 AM", "04:00 PM", "09:00 PM"],
 );
 
 /// Returns the correct [FeedConfig] for a given DOC.
-FeedConfig getFeedConfig(int doc) => doc <= 7 ? initialFeedConfig : postWeekFeedConfig;
+/// Always 4 equal rounds from day 1.
+FeedConfig getFeedConfig(int doc) => standardFeedConfig;
 
 /// Returns the feed type label recommended for the given Day of Culture (DOC).
 ///

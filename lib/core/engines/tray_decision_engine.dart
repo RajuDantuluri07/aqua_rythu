@@ -115,8 +115,9 @@ class TrayDecisionEngine {
     required int doc,
     required double baseFeed,
   }) {
-    // ── Safety rule 1: blind feed phase ──────────────────────────────────
-    if (doc <= 30) {
+    // ── Safety rule 1: blind/transitional feed phase (DOC < 30) ─────────────
+    // Tray data is STORED for DOC 15–29 but must NOT change feed amounts.
+    if (doc <= 29) {
       return TrayDecisionResult(
         action: 'MAINTAIN',
         percentage: 0,
@@ -125,7 +126,7 @@ class TrayDecisionEngine {
         roundsUsed: 0,
         reason: doc < 15
             ? 'Following base feed schedule'
-            : 'Following feed schedule until DOC 30',
+            : 'Following blind schedule until DOC 29 (tray data recorded)',
       );
     }
 

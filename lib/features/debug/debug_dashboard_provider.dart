@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/engines/feeding_engine_v1.dart';
+import '../../core/engines/master_feed_engine.dart';
+import '../../core/engines/feed_intelligence_engine.dart';
+import '../../core/engines/feed_orchestrator.dart';
+import '../../core/engines/models/feed_input.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/doc_utils.dart';
 
@@ -20,8 +23,14 @@ class DebugDashboardState {
   // Simulated leftover (set by user via slider — overrides latestLeftover)
   final double? simulatedLeftover;
 
-  // Live engine result
+  // Stage 1: Base feed debug data
   final FeedDebugData? debugData;
+
+  // Stage 2: Intelligence result
+  final IntelligenceResult? intelligence;
+
+  // Stage 3: Full orchestrator result (factors + final feed)
+  final OrchestratorResult? orchestratorResult;
 
   const DebugDashboardState({
     this.isLoading = false,
@@ -33,6 +42,8 @@ class DebugDashboardState {
     this.latestLeftover,
     this.simulatedLeftover,
     this.debugData,
+    this.intelligence,
+    this.orchestratorResult,
   });
 
   /// The leftover used for the current calculation.
@@ -49,6 +60,8 @@ class DebugDashboardState {
     double? simulatedLeftover,
     bool clearSimulated = false,
     FeedDebugData? debugData,
+    IntelligenceResult? intelligence,
+    OrchestratorResult? orchestratorResult,
   }) {
     return DebugDashboardState(
       isLoading: isLoading ?? this.isLoading,
@@ -61,12 +74,13 @@ class DebugDashboardState {
       simulatedLeftover:
           clearSimulated ? null : (simulatedLeftover ?? this.simulatedLeftover),
       debugData: debugData ?? this.debugData,
+      intelligence: intelligence ?? this.intelligence,
+      orchestratorResult: orchestratorResult ?? this.orchestratorResult,
     );
   }
 }
 
-class DebugDashboardNotifier
-    extends StateNotifier<DebugDashboardState> {
+class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
   final _supabase = Supabase.instance.client;
   final String pondId;
 
@@ -90,18 +104,20 @@ class DebugDashboardNotifier
 
       final stockingDate = DateTime.parse(pond['stocking_date'] as String);
       final doc = calculateDocFromStockingDate(stockingDate);
-
-      final stockingType =
-          (pond['stocking_type'] as String?) ?? 'nursery';
+      final stockingType = (pond['stocking_type'] as String?) ?? 'nursery';
       final density = (pond['seed_count'] as int?) ?? 100000;
       final pondName = (pond['name'] as String?) ?? pondId;
 
-      final debugData = FeedingEngineV1.calculateFeedWithDebug(
+      final debugData = MasterFeedEngine.computeWithDebug(
         doc: doc,
         stockingType: stockingType,
         density: density,
         leftoverPercent: leftover,
       );
+
+      // Full pipeline via orchestrator
+      final orchestratorResult = await FeedOrchestrator.computeForPond(pondId);
+      final intelligence = orchestratorResult.intelligence;
 
       state = state.copyWith(
         isLoading: false,
@@ -111,6 +127,8 @@ class DebugDashboardNotifier
         density: density,
         latestLeftover: leftover,
         debugData: debugData,
+        intelligence: intelligence,
+        orchestratorResult: orchestratorResult,
         clearSimulated: true,
       );
     } catch (e) {
@@ -119,43 +137,66 @@ class DebugDashboardNotifier
     }
   }
 
-  /// Re-runs the engine with the current pond context + active leftover.
+  /// Re-runs base engine with the current pond context + active leftover.
   void recalculate() {
-    final debugData = FeedingEngineV1.calculateFeedWithDebug(
+    final debugData = MasterFeedEngine.computeWithDebug(
       doc: state.doc,
       stockingType: state.stockingType,
       density: state.density,
       leftoverPercent: state.activeLeftover,
     );
-    state = state.copyWith(debugData: debugData);
+
+    // Recompute intelligence from the new base feed
+    final intelligence = FeedIntelligenceEngine.compute(
+      expectedFeed: debugData.finalFeed,
+      actualFeedYesterday: state.orchestratorResult?.intelligence.actualFeed,
+    );
+
+    state = state.copyWith(
+      debugData: debugData,
+      intelligence: intelligence,
+    );
   }
 
   /// Simulate what feed would be at a given leftover %.
-  /// Does NOT persist anything to DB.
   void simulateTray(double leftoverPercent) {
-    final debugData = FeedingEngineV1.calculateFeedWithDebug(
+    final debugData = MasterFeedEngine.computeWithDebug(
       doc: state.doc,
       stockingType: state.stockingType,
       density: state.density,
       leftoverPercent: leftoverPercent,
     );
+
+    final intelligence = FeedIntelligenceEngine.compute(
+      expectedFeed: debugData.finalFeed,
+      actualFeedYesterday: state.orchestratorResult?.intelligence.actualFeed,
+    );
+
     state = state.copyWith(
       simulatedLeftover: leftoverPercent,
       debugData: debugData,
+      intelligence: intelligence,
     );
   }
 
   /// Clears simulation and reverts to real tray data.
   void clearSimulation() {
-    final debugData = FeedingEngineV1.calculateFeedWithDebug(
+    final debugData = MasterFeedEngine.computeWithDebug(
       doc: state.doc,
       stockingType: state.stockingType,
       density: state.density,
       leftoverPercent: state.latestLeftover,
     );
+
+    final intelligence = FeedIntelligenceEngine.compute(
+      expectedFeed: debugData.finalFeed,
+      actualFeedYesterday: state.orchestratorResult?.intelligence.actualFeed,
+    );
+
     state = state.copyWith(
       clearSimulated: true,
       debugData: debugData,
+      intelligence: intelligence,
     );
   }
 
@@ -167,7 +208,6 @@ class DebugDashboardNotifier
         .maybeSingle();
   }
 
-  /// Returns the most recent tray leftover % (avg of last 3 days), or null.
   Future<double?> _fetchLatestLeftover() async {
     try {
       final since = DateTime.now()

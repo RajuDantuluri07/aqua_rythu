@@ -96,16 +96,19 @@ class PondService {
       return;
     }
 
+    // Generate ONLY the blind feeding phase (DOC 1–25).
+    // DOC 26–29 (transitional) are added by ensureFutureFeedExists rolling recovery.
+    // DOC ≥ 30 (smart mode) has no pre-generated schedule — amounts are computed live.
     await generateFeedPlan(
       pondId: pondId,
       startDoc: 1,
-      endDoc: 120,
+      endDoc: 25,
       stockingCount: pond['seed_count'] ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
       stockingDate: DateTime.parse(pond['stocking_date']),
     );
 
-    AppLogger.info("Feed schedule generated for pond: $pondId");
+    AppLogger.info("Feed schedule generated for pond: $pondId (DOC 1–25 blind phase)");
   }
 
   // ================================

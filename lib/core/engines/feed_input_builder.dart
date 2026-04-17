@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../enums/tray_status.dart';
 import '../utils/doc_utils.dart';
+import '../utils/time_provider.dart';
 import 'models/feed_input.dart';
 
 class FeedInputBuilder {
@@ -29,6 +30,20 @@ class FeedInputBuilder {
     final trayStatuses = await _latestTrayStatuses(pondId, currentDoc);
     final leftovers = await _last3DaysLeftoverPct(pondId);
 
+    final lastFeedTime = await _latestFeedTime(pondId, currentDoc);
+
+    // Fix #1: compute real values so FeedIntelligenceEngine and FCREngine receive
+    // actual data instead of the null that permanently disabled both correction layers.
+    final actualFeedYesterday = currentDoc > 1
+        ? await _actualFeedForDoc(pondId, currentDoc - 1)
+        : null;
+
+    final lastFcr = await _computeLastFcr(
+      pondId: pondId,
+      seedCount: seedCount,
+      abw: sample.abw,
+    );
+
     return FeedInput(
       seedCount: seedCount,
       doc: currentDoc,
@@ -44,8 +59,9 @@ class FeedInputBuilder {
       trayStatuses: trayStatuses,
       sampleAgeDays: sample.ageDays,
       recentTrayLeftoverPct: leftovers.isEmpty ? const [-1.0] : leftovers,
-      lastFcr: null,
-      actualFeedYesterday: null,
+      lastFcr: lastFcr,
+      actualFeedYesterday: actualFeedYesterday,
+      lastFeedTime: lastFeedTime,
     );
   }
 
@@ -92,9 +108,9 @@ class FeedInputBuilder {
 
     final localSampled = DateTime(parsed.year, parsed.month, parsed.day);
     final localToday = DateTime(
-      DateTime.now().year,
-      DateTime.now().month,
-      DateTime.now().day,
+      TimeProvider.now().year,
+      TimeProvider.now().month,
+      TimeProvider.now().day,
     );
     final ageDays = localToday.difference(localSampled).inDays;
     if (ageDays > 7) return (abw: null, ageDays: ageDays);
@@ -130,7 +146,7 @@ class FeedInputBuilder {
 
   static Future<List<double>> _last3DaysLeftoverPct(String pondId) async {
     try {
-      final today = DateTime.now();
+      final today = TimeProvider.now();
       final todayStr = DateTime(today.year, today.month, today.day)
           .toIso8601String()
           .split('T')[0];
@@ -158,6 +174,24 @@ class FeedInputBuilder {
     }
   }
 
+  static Future<DateTime?> _latestFeedTime(String pondId, int doc) async {
+    try {
+      final row = await _supabase
+          .from('feed_logs')
+          .select('created_at')
+          .eq('pond_id', pondId)
+          .eq('doc', doc)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (row == null) return null;
+      return DateTime.tryParse(row['created_at'] as String? ?? '');
+    } catch (_) {
+      return null;
+    }
+  }
+
   static double _statusesToLeftoverPct(List<String> statuses) {
     if (statuses.isEmpty) return -1.0;
     if (statuses.every((s) => s == 'skipped')) return -1.0;
@@ -171,6 +205,84 @@ class FeedInputBuilder {
     if (empty > majority) return 0.0;
     return 30.0;
   }
+
+  // ── Fix #1: intelligence activation helpers ────────────────────────────────
+
+  /// Returns the total feed given on [doc] (last row = most-complete daily total).
+  /// Returns null when no log exists for that day (first day, missed day, etc.).
+  static Future<double?> _actualFeedForDoc(String pondId, int doc) async {
+    if (doc < 1) return null;
+    try {
+      // feed_logs may contain multiple rows per day (one per logFeeding call),
+      // each carrying a running daily total. The last row is the authoritative sum.
+      final row = await _supabase
+          .from('feed_logs')
+          .select('feed_given')
+          .eq('pond_id', pondId)
+          .eq('doc', doc)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (row == null) return null;
+      final val = (row['feed_given'] as num?)?.toDouble() ?? 0.0;
+      return val > 0 ? val : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Computes cumulative FCR for the current pond cycle.
+  ///
+  /// FCR = total_feed_given / current_biomass_estimate.
+  /// Returns null when there is insufficient data (no ABW or no feed history).
+  /// Used as the [FeedInput.lastFcr] signal for FCREngine correction.
+  static Future<double?> _computeLastFcr({
+    required String pondId,
+    required int seedCount,
+    required double? abw,
+  }) async {
+    if (abw == null || abw <= 0) return null;
+
+    try {
+      // Conservative survival for biomass estimate (feedback signal only, not display).
+      const kSurvivalEstimate = 0.90;
+      final biomassKg = (seedCount * kSurvivalEstimate * abw) / 1000;
+      if (biomassKg <= 0.1) return null;
+
+      // Fetch all feed logs ascending so the last row per date wins.
+      final rows = await _supabase
+          .from('feed_logs')
+          .select('feed_given, created_at')
+          .eq('pond_id', pondId)
+          .order('created_at', ascending: true);
+
+      if (rows.isEmpty) return null;
+
+      // Group by calendar date; take the last (most complete) value per day.
+      // saveFeed inserts a running-total row on each logFeeding call for the same day,
+      // so the final row per date is the authoritative daily total.
+      final Map<String, double> latestByDate = {};
+      for (final row in rows) {
+        final dateKey = (row['created_at'] as String).substring(0, 10);
+        final val = (row['feed_given'] as num?)?.toDouble() ?? 0.0;
+        latestByDate[dateKey] = val; // ascending order → last entry wins
+      }
+
+      final totalFeed =
+          latestByDate.values.fold(0.0, (s, v) => s + v);
+      if (totalFeed <= 0) return null;
+
+      final fcr = totalFeed / biomassKg;
+      // Discard implausible values — likely bad data rather than real FCR.
+      if (fcr < 0.5 || fcr > 5.0) return null;
+      return fcr;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   static int _computeDoc(String stockingDateStr) {
     final stocking = DateTime.parse(stockingDateStr);

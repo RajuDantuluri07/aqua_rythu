@@ -17,7 +17,6 @@ import '../growth/growth_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_timeline_card.dart';
-import '../feed/feed_hero_card.dart';
 import '../feed/smart_feed_provider.dart';
 import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
@@ -28,21 +27,20 @@ import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
 import 'package:aqua_rythu/core/engines/feed_plan_constants.dart';
+import 'package:aqua_rythu/core/engines/feed_decision_engine.dart';
 import 'package:aqua_rythu/core/engines/tray_decision_engine.dart';
 import 'package:aqua_rythu/core/engines/pond_value_engine.dart';
-import 'package:aqua_rythu/core/engines/feed_status_engine.dart';
+import 'package:aqua_rythu/core/engines/feed_status_engine.dart' hide FeedDecision;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
 import 'package:flutter/foundation.dart';
 import '../debug/debug_dashboard_screen.dart';
 import 'package:aqua_rythu/features/home/alert_strip.dart';
+import 'package:aqua_rythu/core/constants/app_constants.dart';
+import 'package:aqua_rythu/features/home/home_view_model.dart';
 import 'package:aqua_rythu/features/home/kpi_row.dart';
-import 'package:aqua_rythu/features/home/growth_status_card.dart';
-import 'package:aqua_rythu/features/home/waste_insight_card.dart';
 import 'package:aqua_rythu/features/home/feed_trend_card.dart';
-import 'package:aqua_rythu/features/home/activity_timeline.dart';
-import 'package:aqua_rythu/features/home/smart_insight_box.dart';
 import 'package:aqua_rythu/features/home/home_builder.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
@@ -58,9 +56,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
   late AnimationController _pulseController;
   bool _showFeedScheduleTip = false;
-  bool _showDoc8FeedBanner = false;
   int _debugTapCount = 0;
   bool _completedRoundsExpanded = false;
+  // T13 — tracks which round just completed to show feedback prompt once
+  int _lastFeedbackRound = -1;
 
   @override
   void initState() {
@@ -87,21 +86,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
   }
 
-  /// Shows the "Feeding increased to 4 rounds" banner once when DOC reaches 8.
-  Future<void> _checkDoc8FeedNotification(String pondId, int doc) async {
-    if (doc < 8) return;
-    final prefs = await SharedPreferences.getInstance();
-    final key = 'doc8_feed_notified_$pondId';
-    final alreadyShown = prefs.getBool(key) ?? false;
-    if (!alreadyShown && mounted) {
-      await prefs.setBool(key, true);
-      setState(() => _showDoc8FeedBanner = true);
-      // Auto-hide after 5 seconds
-      Future.delayed(const Duration(seconds: 5), () {
-        if (mounted) setState(() => _showDoc8FeedBanner = false);
-      });
-    }
-  }
 
   Future<void> _checkFeedScheduleTip() async {
     final prefs = await SharedPreferences.getInstance();
@@ -128,8 +112,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   }
 
   // Round state machine
-  // DOC ≤ 30: next round unlocks once prev feed is marked done
-  // DOC > 30: next round unlocks only AFTER prev feed done AND prev tray logged
+  // DOC < 30: next round unlocks once prev feed is marked done
+  // DOC ≥ 30: next round unlocks only AFTER prev feed done AND prev tray logged
   Map<String, dynamic> _getSimpleRoundState({
     required int doc,
     required int round,
@@ -145,8 +129,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final currentRound = _getCurrentRound(doc, feedDone, trayDone, totalRounds);
     final isCurrent = !isDone && round == currentRound;
     // Tray CTA: feed done but tray not yet logged
-    // DOC 15–30: optional (show button but doesn't block next round)
-    // DOC > 30:  mandatory (blocks next round until logged)
+    // DOC 15–29: optional (show button but doesn't block next round)
+    // DOC ≥ 30:  mandatory (blocks next round until logged)
     final showTrayCTA = isDone && doc >= 15 && !isTrayLogged;
 
     return {
@@ -160,30 +144,29 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
   /// Returns the next round that needs action (feed or tray).
   /// DOC ≤ 30: first round where feed is not done.
-  /// DOC > 30: first round where feed is not done, but only after previous
+  /// DOC ≥ 31: first round where feed is not done, but only after previous
   ///           round's tray is logged.
   int _getCurrentRound(int doc, Map<int, bool> feedDone,
       Map<int, bool> trayDone, int totalRounds) {
     for (int i = 1; i <= totalRounds; i++) {
       if (!(feedDone[i] ?? false)) return i;
-      // DOC > 30: if this round's feed is done but tray not logged,
-      // it still "owns" the current slot — next round stays locked
-      if (doc > 30 && !(trayDone[i] ?? false)) return i;
+      // Fix #4: tray blocks next round only in smart mode (DOC ≥ 31).
+      if (doc >= 31 && !(trayDone[i] ?? false)) return i;
     }
     return totalRounds + 1;
   }
 
   /// A round is locked when the previous round is not fully cleared.
   /// DOC ≤ 30: cleared = feed done.
-  /// DOC > 30: cleared = feed done AND tray logged.
+  /// DOC ≥ 31: cleared = feed done AND tray logged.
   bool _isLocked(int doc, int round, Map<int, bool> feedDone,
       Map<int, bool> trayDone) {
     if (round <= 1) return false;
     final prev = round - 1;
     final prevFeedDone = feedDone[prev] ?? false;
     if (!prevFeedDone) return true;
-    // For DOC > 30, also require previous tray to be logged
-    if (doc > 30 && !(trayDone[prev] ?? false)) return true;
+    // Fix #4: tray mandatory-block only activates in smart mode (DOC ≥ 31).
+    if (doc >= 31 && !(trayDone[prev] ?? false)) return true;
     return false;
   }
 
@@ -350,8 +333,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
     final config = getFeedConfig(doc);
 
     if (roundFeedAmounts.isEmpty) {
-      // No DB data yet — show defaults based on DOC
-      final defaultActive = doc <= 7 ? 2 : 4;
+      // No DB data yet — show 4 rounds by default
+      const defaultActive = 4;
       return List.generate(defaultActive, (i) => {
         'round': i + 1,
         'time': config.timingsDisplay[i],
@@ -722,13 +705,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
     final currentDoc = ref.watch(docProvider(selectedPond));
 
-    // Trigger DOC 8 notification check whenever DOC or selectedPond changes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && selectedPond.isNotEmpty) {
-        _checkDoc8FeedNotification(selectedPond, currentDoc);
-      }
-    });
-
     /// ✅ CURRENT STATS
     final history = ref.watch(feedHistoryProvider)[selectedPond] ?? [];
     final totalFeedToDate = history.isNotEmpty ? history.first.cumulative : 0.0;
@@ -823,12 +799,11 @@ List<SupplementItem> _getPlannedFeedSupplements(
         .where((e) => e.value == 'completed')
         .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
-    // BUG-11 fix: Smart Feed auto-enables at DOC > 30 regardless of the DB flag.
-    // The flag `isSmartFeedEnabled` in the pond record is the farmer's manual
-    // preference. Even if they never toggled it, Smart Mode activates at DOC 31
-    // because the round lock and SmartFeedEngine both trigger on doc > 30 anyway.
-    // Boundary corrected from >= 30 to > 30: DOC 30 is still tray_habit (blind feed).
-    final isSmartFeedEnabled = currentPond.isSmartFeedEnabled || (currentDoc > 30);
+    // Smart Feed auto-enables at DOC ≥ 30 (smart_feeding = doc >= 30).
+    // The DB flag `isSmartFeedEnabled` is the farmer's manual preference; even if
+    // never toggled, Smart Mode activates at DOC 30 because the round lock and
+    // SmartFeedEngine both trigger on doc >= 30.
+    final isSmartFeedEnabled = currentPond.isSmartFeedEnabled || (currentDoc >= 30);
 
     // ── DOC-adaptive mode ────────────────────────────────────────────────────
     final String mode;
@@ -868,8 +843,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
         final empty =
             recentTray.trays.where((t) => t == TrayStatus.empty).length;
         final total = recentTray.trays.length;
-        if (full > total / 2) traySignal = 'full';
-        else if (empty > total / 2) traySignal = 'empty';
+        if (full > total / 2) {
+          traySignal = 'full';
+        } else if (empty > total / 2) traySignal = 'empty';
         else traySignal = 'partial';
       }
     }
@@ -907,7 +883,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
       feedsDoneToday: completedRoundsCount,
     );
 
-    // ── Tray decision (INCREASE / REDUCE / MAINTAIN) ──────────────────────────
+    // Tray decision evaluation for insight display
     final todaySorted = (todayTrayMap.entries.toList()
           ..sort((a, b) => b.key.compareTo(a.key)))
         .map((e) => e.value)
@@ -917,7 +893,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
     for (final log in [...todaySorted, ...trayLogs]) {
       if (seenKeys.add('${log.doc}_${log.round}')) dedupedTrayLogs.add(log);
     }
-    final trayDecision = TrayDecisionEngine.evaluate(
+    TrayDecisionEngine.evaluate(
       allTrayLogs: dedupedTrayLogs,
       doc: currentDoc,
       baseFeed: plannedFeed,
@@ -943,7 +919,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
     );
 
     // ── Savings vs plan for completed rounds ──────────────────────────────────
-    const double _feedCostPerKg = 40.0;
     double? heroSavedToday;
     if (completedRoundsCount >= 1 && consumedFeed > 0) {
       final double baseline = dashboardState.roundFeedStatus.entries
@@ -951,7 +926,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
           .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
       if (baseline > 0) {
         final diff = baseline - consumedFeed;
-        if (diff > 0.001) heroSavedToday = diff * _feedCostPerKg;
+        if (diff > 0.001) heroSavedToday = diff * kFeedCostPerKg;
       }
     }
 
@@ -1061,7 +1036,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                               return AlertDialog(
                                 title: Text(AppLocalizations.of(context).t('delete_pond')),
                                 content: Text(
-                                    "${AppLocalizations.of(context).t('delete_pond_confirm')} '${pond.name}'? ${AppLocalizations.of(context).t('delete_pond_warning')}"),
+                                    "Delete '${pond.name}'? This pond has no feed or harvest records. It will be permanently removed."),
                                 actions: <Widget>[
                                   TextButton(
                                     child: Text(AppLocalizations.of(context).t('cancel')),
@@ -1142,50 +1117,28 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
               const SizedBox(height: 12),
 
-              // ── ALERT STRIP — highest priority status ──────────────────────
+              // ── ALERT STRIP — highest priority status (not shown when all done) ──
               if (!isCompleted) ...[
-                AlertStrip(data: vm.alert),
-                const SizedBox(height: 10),
+                if (vm.alert.type != AlertType.allDone) ...[
+                  AlertStrip(data: vm.alert),
+                  const SizedBox(height: 10),
+                ],
 
                 // ── KPI ROW — Feed Today · ABW · FCR ──────────────────────────
                 KpiRow(data: vm.kpis),
                 const SizedBox(height: 12),
-              ],
 
-              // ── DOC 8 TRANSITION NOTIFICATION (shown once) ───────────────
-              if (_showDoc8FeedBanner) ...[
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFFDBA74)),
+                // ── GAP 3 — Daily Performance Card (end-of-day intelligence) ──
+                if (completedRoundsCount >= (currentDoc <= 7 ? 2 : 4)) ...[
+                  _DailyPerformanceCard(
+                    fcr: pondFcr,
+                    currentAbw: currentAbw,
+                    expectedAbw: vm.growth.expectedAbw,
+                    completedRounds: completedRoundsCount,
+                    totalRounds: currentDoc <= 7 ? 2 : 4,
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline_rounded,
-                          size: 16, color: Color(0xFFEA580C)),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Feeding increased to 4 rounds from today',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF9A3412),
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => setState(() => _showDoc8FeedBanner = false),
-                        child: const Icon(Icons.close_rounded,
-                            size: 16, color: Color(0xFFEA580C)),
-                      ),
-                    ],
-                  ),
-                ),
+                  const SizedBox(height: 12),
+                ],
               ],
 
               const SizedBox(height: 12),
@@ -1226,7 +1179,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       child: CircularProgressIndicator(),
                     ),
                   )
-                else if (dashboardState.roundFeedAmounts.isEmpty && currentDoc <= 30)
+                else if (dashboardState.roundFeedAmounts.isEmpty && currentDoc < 30)
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 40),
@@ -1275,6 +1228,17 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         valueDelta: pondValue.delta,
                         showDoneRoundsOnly: false,
                         nextFeedAt: nextFeedAt,
+                        // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
+                        insight: vm.insight?.message,
+                        completedRounds: completedRoundsCount,
+                        totalRounds: currentDoc <= 7 ? 2 : 4,
+                        feedMode: feedModeFromDoc(currentDoc),
+                        lastFeedbackRound: _lastFeedbackRound,
+                        onFeedbackSubmit: (round, isAccurate) {
+                          setState(() => _lastFeedbackRound = -1);
+                          // TODO: persist FeedFeedback to DB
+                          debugPrint('[FeedFeedback] R$round accurate=$isAccurate doc=$currentDoc pond=$selectedPond');
+                        },
                       ),
 
                       const SizedBox(height: 12),
@@ -1481,6 +1445,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
     required double valueDelta,
     bool showDoneRoundsOnly = false,
     DateTime? nextFeedAt,
+    // T7/T8/T9/T10/T11/T13 — intelligence + safety layer params
+    String? insight,
+    int completedRounds = 0,
+    int totalRounds = 0,
+    double? confidenceScore,
+    FeedMode feedMode = FeedMode.guided,
+    int lastFeedbackRound = -1,
+    void Function(int round, bool isAccurate)? onFeedbackSubmit,
   }) {
     final feedRoundsData = _getFeedRounds(currentDoc, dashboardState.roundFeedAmounts, currentPond);
     final List<Map<String, dynamic>> timelineItems = [];
@@ -1580,8 +1552,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
         final bool isTrayLogged = roundState['isTrayLogged'] as bool;
         // A tray log exists but it was auto-skipped (farmer moved on without logging)
         final bool isTraySkipped = isTrayLogged && (todayTrayMap[round]?.isSkipped ?? false);
-        // DOC 15–30: tray is optional — show the button but don't block progression.
-        // DOC > 30:  tray is mandatory — handled by _isLocked/_getCurrentRound.
+        // DOC 15–29: tray is optional — show the button but don't block progression.
+        // DOC ≥ 30:  tray is mandatory — handled by _isLocked/_getCurrentRound.
         // isPendingTray = tray not yet handled at all (neither logged nor skipped)
         final bool isPendingTray = isDone && currentDoc >= 15 && !isTrayLogged;
 
@@ -1617,10 +1589,17 @@ List<SupplementItem> _getPlannedFeedSupplements(
         final double finalFeedKg = dashboardState.roundFinalFeedAmounts[round] ?? qty;
         final bool isManuallyEdited = dashboardState.roundIsManuallyEdited[round] ?? false;
 
+        // T10 — Safety clamp: cap recommendation to ±20/25% of last feed
+        final double lastKg = round > 1 ? (dashboardState.roundFeedAmounts[round - 1] ?? 0.0) : 0.0;
+        final double safeQty = (lastKg > 0 && qty > 0)
+            ? qty.clamp(lastKg * 0.75, lastKg * 1.2)
+            : qty;
+        final bool isSafetyClamped = lastKg > 0 && (safeQty - qty).abs() > 0.01;
+
         card = FeedTimelineCard(
           round: round,
           time: time,
-          recommendedFeedKg: qty, // TODO: get from engine
+          recommendedFeedKg: safeQty,
           finalFeedKg: finalFeedKg,
           isManuallyEdited: isManuallyEdited,
           state: cardState,
@@ -1629,7 +1608,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
           trayStatuses: thisRoundLog?.isSkipped == true ? null : thisRoundLog?.trays,
           supplements: supplements,
           isSmartFeed: isSmartFeedEnabled,
-          lastFeedKg: round > 1 ? dashboardState.roundFeedAmounts[round - 1] : null,
+          lastFeedKg: lastKg > 0 ? lastKg : null,
           leftoverPercent: thisRoundLog?.leftoverPercent,
           correctionPercent: 0, // TODO: calculate
           // Hero timer SSOT — card owns the live countdown internally.
@@ -1640,13 +1619,15 @@ List<SupplementItem> _getPlannedFeedSupplements(
                   ref.read(pondDashboardProvider.notifier).editRoundAmount(
                         round,
                         newQty,
-                        persistToPlan: currentDoc > 30,
+                        persistToPlan: currentDoc >= 30,
                       );
                 }
               : null,
           // MARK AS FED: always available on the current round, for all DOCs
           onMarkDone: isCurrent
               ? () {
+                  // T13 — show feedback prompt on the done card after this round
+                  setState(() => _lastFeedbackRound = round);
                   final actualQty = finalFeedKg;
                   if (actualQty > 0) {
                     _logFeedSupplementApplication(
@@ -1683,6 +1664,18 @@ List<SupplementItem> _getPlannedFeedSupplements(
           // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
           onLogTray: (isPendingTray || isTraySkipped) ? () => openTray(round, false) : null,
           isNext: isNext,
+          // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
+          insight: isCurrent ? insight : null,
+          completedRounds: completedRounds,
+          totalRounds: totalRounds,
+          confidenceScore: isCurrent ? confidenceScore : null,
+          isSafetyClamped: isCurrent && isSafetyClamped,
+          feedMode: feedMode,
+          showFeedbackPrompt: isDone && round == lastFeedbackRound,
+          onFeedback: isDone ? (bool isAccurate) => onFeedbackSubmit?.call(round, isAccurate) : null,
+          decision: isCurrent ? dashboardState.decision : null,
+          recommendationInstruction: isCurrent ? dashboardState.recommendation?.instruction : null,
+          isCurrent: isCurrent,
         );
 
         // External warning strip removed — FeedTimelineCard now owns the timer
@@ -1944,7 +1937,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
     required double plannedFeed,
     required double consumedFeed,
     required String mode,
-    FeedDecision? feedStatus,
   }) {
     // ── mode-based display strings ──────────────────────────────────────
     final String cardTitle;
@@ -1990,7 +1982,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
     // consumedFeed == baseline → neutral    → show nothing
     final int completedRounds =
         roundFeedStatus.values.where((s) => s == 'completed').length;
-    const double feedCostPerKg = 40.0;
     double? savedToday;
     if (completedRounds >= 1 && consumedFeed > 0) {
       final double baselineFeed = roundFeedStatus.entries
@@ -1999,7 +1990,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
       if (baselineFeed > 0) {
         final double diff = baselineFeed - consumedFeed;
         if (diff > 0.001) {
-          savedToday = diff * feedCostPerKg;
+          savedToday = diff * kFeedCostPerKg;
         }
       }
     }
@@ -2465,7 +2456,7 @@ class _WaterRoundCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Color(0x260D9488),
+                              color: const Color(0x260D9488),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
@@ -2528,7 +2519,7 @@ class _WaterRoundCard extends StatelessWidget {
 
           // Items used
           if (items.isNotEmpty) ...[
-            Divider(height: 1, color: _tealBorder),
+            const Divider(height: 1, color: _tealBorder),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: Column(
@@ -2993,4 +2984,196 @@ class _TankOpButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── GAP 3 — Daily Performance Summary Card ────────────────────────────────────
+/// Shown when all feeding rounds are done. Gives the farmer a "how did I do?"
+/// snapshot across three dimensions: feeding, FCR, and growth.
+class _DailyPerformanceCard extends StatelessWidget {
+  final double fcr;
+  final double currentAbw;
+  final double expectedAbw;
+  final int completedRounds;
+  final int totalRounds;
+
+  const _DailyPerformanceCard({
+    required this.fcr,
+    required this.currentAbw,
+    required this.expectedAbw,
+    required this.completedRounds,
+    required this.totalRounds,
+  });
+
+  static const _green  = Color(0xFF16A34A);
+  static const _amber  = Color(0xFFF59E0B);
+  static const _red    = Color(0xFFEF4444);
+  static const _slate  = Color(0xFF64748B);
+  static const _border = Color(0xFFE2E8F0);
+
+  // T14 — Overall feeding score from adherence
+  static String _feedingScore(double adherence) {
+    if (adherence > 0.9) return 'Good';
+    if (adherence > 0.75) return 'Average';
+    return 'Needs Attention';
+  }
+
+  // T14 — Overall day verdict from all three signals
+  static _DayVerdict _dayVerdict({
+    required double adherence,
+    required double fcr,
+    required double growthRatio,
+  }) {
+    final bool feedGood = adherence > 0.9;
+    final bool fcrGood  = fcr <= 0 || fcr <= 1.4;
+    final bool growthOk = growthRatio <= 0 || growthRatio >= 0.85;
+
+    final int goodCount = (feedGood ? 1 : 0) + (fcrGood ? 1 : 0) + (growthOk ? 1 : 0);
+    if (goodCount == 3) return const _DayVerdict('Great day! Everything on track ✅', _green);
+    if (goodCount == 2) return const _DayVerdict('Good day — minor area to improve', _amber);
+    return const _DayVerdict('Needs attention — check the signals below', _red);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Feeding
+    final adherence = totalRounds > 0 ? completedRounds / totalRounds : 0.0;
+    final String feedScore = _feedingScore(adherence);
+    final String feedLabel;
+    final Color feedColor;
+    if (adherence >= 1.0) { feedLabel = '$feedScore ✅'; feedColor = _green; }
+    else if (adherence >= 0.75) { feedLabel = feedScore; feedColor = _amber; }
+    else { feedLabel = feedScore; feedColor = _red; }
+
+    // FCR
+    final String fcrLabel;
+    final Color fcrColor;
+    if (fcr <= 0)         { fcrLabel = 'No data yet'; fcrColor = _slate; }
+    else if (fcr <= 1.2)  { fcrLabel = 'Excellent'; fcrColor = _green; }
+    else if (fcr <= 1.4)  { fcrLabel = 'Stable'; fcrColor = _green; }
+    else if (fcr <= 1.6)  { fcrLabel = 'Watch it'; fcrColor = _amber; }
+    else                  { fcrLabel = 'Too high'; fcrColor = _red; }
+
+    // Growth
+    final double growthRatio = (currentAbw > 0 && expectedAbw > 0)
+        ? currentAbw / expectedAbw
+        : 0.0;
+    final String growthLabel;
+    final Color growthColor;
+    if (currentAbw <= 0 || expectedAbw <= 0) {
+      growthLabel = 'Do a sampling'; growthColor = _slate;
+    } else {
+      if (growthRatio >= 1.0)       { growthLabel = 'Ahead ✅'; growthColor = _green; }
+      else if (growthRatio >= 0.85) { growthLabel = 'On track'; growthColor = _green; }
+      else                          { growthLabel = 'Slightly slow'; growthColor = _amber; }
+    }
+
+    // T14 — Overall day verdict
+    final verdict = _dayVerdict(
+      adherence: adherence,
+      fcr: fcr,
+      growthRatio: growthRatio,
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'TODAY\'S PERFORMANCE',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: _slate,
+              letterSpacing: 1.0,
+            ),
+          ),
+          // T14 — Overall day score banner
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: verdict.color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: verdict.color.withOpacity(0.25)),
+            ),
+            child: Text(
+              verdict.message,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: verdict.color,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _PerfItem(label: 'Feeding', value: feedLabel, color: feedColor),
+              _PerfDivider(),
+              _PerfItem(label: 'FCR', value: fcrLabel, color: fcrColor),
+              _PerfDivider(),
+              _PerfItem(label: 'Growth', value: growthLabel, color: growthColor),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DayVerdict {
+  final String message;
+  final Color color;
+  const _DayVerdict(this.message, this.color);
+}
+
+class _PerfItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _PerfItem({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF94A3B8),
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PerfDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 1,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 10),
+        color: const Color(0xFFE2E8F0),
+      );
 }

@@ -1,221 +1,354 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/logger.dart';
+// Smart Feed Engine — Correction Layer
+//
+// Responsibilities:
+//   Apply correction factors to the base feed from MasterFeedEngine:
+//     • tray_factor        (shrimp appetite signal from tray observations)
+//     • growth_factor      (ABW vs expected for DOC > 30)
+//     • sampling_factor    (freshness decay on ABW signal)
+//     • environment_factor (DO / ammonia — can stop feeding entirely)
+//     • fcr_factor         (ONLY when sampling data is present)
+//     • intelligence_factor (enforcement from yesterday's deviation)
+//
+// MUST NOT:
+//   - Recompute base feed (that is MasterFeedEngine's job)
+//   - Call FeedInputBuilder or any DB layer
+//   - Duplicate DOC-ramp logic
+//
+// Entry point for runtime corrections: SmartFeedEngine.apply()
+// For the full orchestrated pipeline (compute + persist): use FeedOrchestrator.
+
+import '../constants/expected_abw_table.dart';
 import '../enums/tray_status.dart';
-import 'feed_input_builder.dart';
-import 'feed_plan_generator.dart';
-import 'master_feed_engine.dart';
-import 'models/feed_output.dart';
-import '../../repositories/feed_repository.dart';
+import 'feed_intelligence_engine.dart';
+
+// ── FEED PHASE ────────────────────────────────────────────────────────────────
 
 /// Feed phase for a given DOC.
 ///
-///   NORMAL     (DOC 1–14)  : fixed feed, no tray/smart adjustment
-///   TRAY_HABIT (DOC 15–30) : collect tray data for habit-building, no adjustment
-///   SMART      (DOC > 30)  : full hybrid — tray × smart × sampling × safety guardrails
+///   NORMAL     (DOC 1–14)  : no tray/smart adjustment
+///   TRAY_HABIT (DOC 15–29) : collect tray data; NO feed correction
+///   SMART      (DOC ≥ 30)  : full corrections active; tray MANDATORY
 enum FeedMode { normal, trayHabit, smart }
 
-/// Hybrid Smart Feed Engine v2
-///
-/// Formula (SMART phase only):
-///   finalFeed = baseFeed × computeFinalFeedFactor(tray, smart, abw, doc)
-///
-/// Factor priority (highest → lowest):  TRAY > SMART > SAMPLING
-/// Safety clamp: final factor capped at ±10%, with consecutive-increase and
-/// overfeeding guards.
+/// Returns the [FeedMode] for [doc].
+/// Fix #4: smart_feeding = (doc >= 31)  ← authoritative boundary
+/// DOC 30 is tray-habit (data collected, no corrections) matching the product
+/// rule "DOC 1–30 → blind feeding ONLY, DOC > 30 → smart feeding enabled."
+FeedMode feedModeForDoc(int doc) {
+  if (doc <= 14) return FeedMode.normal;
+  if (doc <= 30) return FeedMode.trayHabit; // transitional; data collected, no adjustment
+  return FeedMode.smart;
+}
+
+// ── CORRECTION RESULT ─────────────────────────────────────────────────────────
+
+class CorrectionResult {
+  /// Final recommended feed after all corrections (kg).
+  final double finalFeed;
+
+  /// Factor breakdown for debug / display.
+  final double trayFactor;
+  final double growthFactor;
+  final double samplingFactor;
+  final double environmentFactor;
+  final double fcrFactor;
+  final double intelligenceFactor;
+
+  /// Combined guarded factor (product of all, clamped to ±10 %).
+  final double combinedFactor;
+
+  /// Human-readable reasons for each non-neutral factor.
+  final List<String> reasons;
+
+  /// Alerts that may require farmer attention.
+  final List<String> alerts;
+
+  /// True when environment factor caused a complete feed stop.
+  final bool isCriticalStop;
+
+  const CorrectionResult({
+    required this.finalFeed,
+    required this.trayFactor,
+    required this.growthFactor,
+    required this.samplingFactor,
+    required this.environmentFactor,
+    required this.fcrFactor,
+    required this.intelligenceFactor,
+    required this.combinedFactor,
+    required this.reasons,
+    required this.alerts,
+    required this.isCriticalStop,
+  });
+}
+
+// ── ENGINE ────────────────────────────────────────────────────────────────────
+
 class SmartFeedEngine {
-  static final _supabase = Supabase.instance.client;
-  static final _feedRepo = FeedRepository();
+  // ── PUBLIC API ────────────────────────────────────────────────────────────
 
-  /// Set true in dev/debug builds to emit verbose factor logs.
-  static bool debugMode = false;
-
-  // ── FEED MODE ─────────────────────────────────────────────────────────────
-
-  static FeedMode getFeedMode(int doc) {
-    if (doc <= 14) return FeedMode.normal;
-    if (doc <= 30) return FeedMode.trayHabit;
-    return FeedMode.smart;
-  }
-
-  // ── PUBLIC ENTRY POINTS ───────────────────────────────────────────────────
-
-  /// Called immediately after a tray log is saved.
-  /// Orchestrates the unified feed calculation and updates planned rounds.
-  static Future<void> applyTrayAdjustment({
-    required String pondId,
+  /// Apply all correction factors to [baseFeed] and return the final
+  /// recommended feed amount with a full factor breakdown.
+  ///
+  /// [baseFeed]        Base expected feed from MasterFeedEngine (kg).
+  /// [intelligence]    Expected vs actual analysis from FeedIntelligenceEngine.
+  /// [doc]             Day of Culture (1-based).
+  /// [trayStatuses]    Latest tray observations (empty list = no data).
+  /// [recentTrayLeftoverPct] Rolling leftover percentages for the last 3 days.
+  /// [abw]             Latest Average Body Weight (g). Null before sampling.
+  /// [sampleAgeDays]   Days since last ABW sample (0 = no sample).
+  /// [fcrFactor]        Pre-computed FCR correction factor from FeedOrchestrator.
+  ///                   1.0 (neutral) when outside the intelligent stage.
+  /// [dissolvedOxygen] Latest DO reading (mg/L). Critical stop < 4.0.
+  /// [ammonia]         Latest ammonia reading (mg/L).
+  static CorrectionResult apply({
+    required double baseFeed,
+    required IntelligenceResult intelligence,
     required int doc,
-    required TrayStatus trayStatus,
-  }) async {
-    final mode = getFeedMode(doc);
-    if (mode == FeedMode.normal) return;
-
-    final input = await FeedInputBuilder.fromDB(pondId);
-    final output = MasterFeedEngine.run(input);
-
-    if (output.finalFactor <= 0.0) return;
-
-    final reasonTag = _reasonTag(output.finalFactor, trayStatus.name, mode);
-
-    await _logDebug(
-      pondId: pondId,
-      doc: doc,
-      mode: mode,
-      output: output,
-      reason: reasonTag,
-      abw: input.abw,
-    );
-
-    if (debugMode) {
-      AppLogger.debug(
-        '[HybridFeed] applyTrayAdjustment pond=$pondId DOC=$doc mode=${mode.name} '
-        'tray=${(output.factors['tray'] ?? 1.0).toStringAsFixed(3)} '
-        'growth=${(output.factors['growth'] ?? 1.0).toStringAsFixed(3)} '
-        'sampling=${(output.factors['sampling'] ?? 1.0).toStringAsFixed(3)} '
-        'environment=${(output.factors['environment'] ?? 1.0).toStringAsFixed(3)} '
-        'final=${output.finalFactor.toStringAsFixed(3)}',
-      );
-    }
-
-    for (int i = 1; i <= 3; i++) {
-      final futureDoc = doc + i;
-      if (futureDoc > 120) break;
-      await _applyFactorFromBase(pondId, futureDoc, output.finalFactor, reasonTag);
-    }
-
-    AppLogger.info(
-      'HybridFeed.applyTrayAdjustment: pond $pondId DOC $doc (${mode.name}) → +1/+2/+3 '
-      'tray=${trayStatus.name} factor=${output.finalFactor.toStringAsFixed(3)}',
-    );
-  }
-
-  /// Called after feed logs and on dashboard load.
-  /// Recalculates the next DOC using the shared MasterFeedEngine.
-  static Future<void> recalculateFeedPlan(String pondId) async {
-    try {
-      final input = await FeedInputBuilder.fromDB(pondId);
-      await ensureFutureFeedExists(pondId, input.doc);
-
-      final output = MasterFeedEngine.run(input);
-      if (output.finalFactor <= 0.0) return;
-
-      final nextDoc = input.doc + 1;
-      final reason = _reasonTag(output.finalFactor, 'RECALC', getFeedMode(input.doc));
-
-      await _logDebug(
-        pondId: pondId,
-        doc: input.doc,
-        mode: getFeedMode(input.doc),
-        output: output,
-        reason: reason,
-        abw: input.abw,
-      );
-
-      await _applyFactorFromBase(pondId, nextDoc, output.finalFactor, reason);
-
-      if (debugMode) {
-        AppLogger.debug(
-          '[HybridFeed] recalculate pond=$pondId DOC=${input.doc} '
-          'tray=${(output.factors['tray'] ?? 1.0).toStringAsFixed(3)} '
-          'growth=${(output.factors['growth'] ?? 1.0).toStringAsFixed(3)} '
-          'sampling=${(output.factors['sampling'] ?? 1.0).toStringAsFixed(3)} '
-          'final=${output.finalFactor.toStringAsFixed(3)}',
-        );
-      }
-
-      AppLogger.info(
-        'HybridFeed.recalculate: pond $pondId DOC=${input.doc} → DOC $nextDoc '
-        'final=${output.finalFactor.toStringAsFixed(3)}',
-      );
-    } catch (e) {
-      AppLogger.error('SmartFeedEngine.recalculateFeedPlan failed for $pondId', e);
-    }
-  }
-
-  /// Legacy no-op — kept for call-site compatibility.
-  static Future<void> checkAndActivateSmartFeed(dynamic pond) async {}
-
-  // ── DB APPLICATION ────────────────────────────────────────────────────────
-
-  static Future<void> _applyFactorFromBase(
-    String pondId,
-    int doc,
-    double factor,
-    String reason,
-  ) async {
-    final rows = await _supabase
-        .from('feed_rounds')
-        .select('id, base_feed, is_manual')
-        .eq('pond_id', pondId)
-        .eq('doc', doc)
-        .eq('status', 'pending');
-
-    for (final row in rows) {
-      if (row['is_manual'] == true) continue;
-
-      final base = (row['base_feed'] as num?)?.toDouble();
-      if (base == null || base <= 0) continue;
-
-      final adjusted = _applySafetyClamp(base, base * factor);
-
-      final succeeded = await _feedRepo.atomicUpdateRound(
-        rowId: row['id'] as String,
-        newPlannedAmount: double.parse(adjusted.toStringAsFixed(3)),
-        adjustmentReason: reason,
-      );
-
-      if (!succeeded) {
-        AppLogger.debug('HybridFeed: race on row ${row['id']} (doc $doc) — skipped');
-      }
-    }
-  }
-
-  /// Hard clamp: adjusted amount never goes below 70% or above 130% of base.
-  static double _applySafetyClamp(double base, double adjusted) {
-    return adjusted.clamp(base * 0.70, base * 1.30);
-  }
-
-  // ── DEBUG LOGGING ─────────────────────────────────────────────────────────
-
-  static Future<void> _logDebug({
-    required String pondId,
-    required int doc,
-    required FeedMode mode,
-    required FeedOutput output,
-    required String reason,
+    required List<TrayStatus> trayStatuses,
+    List<double> recentTrayLeftoverPct = const [],
     double? abw,
-  }) async {
-    try {
-      await _supabase.from('feed_debug_logs').insert({
-        'pond_id': pondId,
-        'doc': doc,
-        'mode': mode.name,
-        'base_feed': output.baseFeed,
-        'tray_factor': output.factors['tray'] ?? 1.0,
-        'growth_factor': output.factors['growth'] ?? 1.0,
-        'sampling_factor': output.factors['sampling'] ?? 1.0,
-        'environment_factor': output.factors['environment'] ?? 1.0,
-        'fcr_factor': output.factors['fcr'] ?? 1.0,
-        'abw': abw,
-        'final_factor': output.finalFactor,
-        'final_feed': output.recommendedFeed,
-        'engine_version': output.engineVersion,
-        'reason': reason,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      // Debug logging must never crash the main flow
-      AppLogger.debug('feed_debug_logs insert failed (non-critical): $e');
+    int sampleAgeDays = 0,
+    double fcrFactor = 1.0,
+    double dissolvedOxygen = 6.0,
+    double ammonia = 0.05,
+  }) {
+    final reasons = <String>[];
+    final alerts = <String>[];
+
+    // ── 1. Environment factor (critical — checked first) ──────────────────
+    final envFactor = _environmentFactor(
+      dissolvedOxygen: dissolvedOxygen,
+      ammonia: ammonia,
+    );
+
+    if (envFactor == 0.0) {
+      alerts.add('🚨 Critical DO — stop feeding');
+      return CorrectionResult(
+        finalFeed: 0.0,
+        trayFactor: 1.0,
+        growthFactor: 1.0,
+        samplingFactor: 1.0,
+        environmentFactor: 0.0,
+        fcrFactor: 1.0,
+        intelligenceFactor: 1.0,
+        combinedFactor: 0.0,
+        reasons: ['Critical: DO below safe threshold — no feeding'],
+        alerts: alerts,
+        isCriticalStop: true,
+      );
+    }
+
+    if (dissolvedOxygen < 5.0) alerts.add('⚠️ Low dissolved oxygen');
+    if (ammonia > 0.1) alerts.add('⚠️ High ammonia levels');
+
+    // ── 2. Tray factor (SMART phase only) ─────────────────────────────────
+    final trayFactor = _trayFactor(
+      doc: doc,
+      trayStatuses: trayStatuses,
+      recentTrayLeftoverPct: recentTrayLeftoverPct,
+    );
+
+    // ── 3. Growth factor (SMART phase only, DOC ≥ 30) ─────────────────────
+    final growthFactor = _growthFactor(abw: abw, doc: doc);
+
+    // ── 4. Sampling decay factor (SMART phase only) ───────────────────────
+    final samplingFactor = _samplingFactor(
+      abw: abw,
+      doc: doc,
+      sampleAgeDays: sampleAgeDays,
+    );
+
+    // ── 5. FCR factor (pre-computed by FeedOrchestrator; 1.0 outside intelligent stage) ──
+
+    // ── 6. Intelligence factor (enforcement from yesterday's deviation) ───
+    final intelligenceFactor = _intelligenceFactor(intelligence);
+
+    // ── 7. Combine and guard ──────────────────────────────────────────────
+    final rawCombined =
+        trayFactor * growthFactor * samplingFactor * envFactor * fcrFactor;
+    // Apply intelligence separately after the ±10 % guard on operational factors
+    final guardedOperational = rawCombined.clamp(0.90, 1.10);
+    final combinedFactor = (guardedOperational * intelligenceFactor).clamp(
+      0.70, // minimum: never reduce more than 30 %
+      1.25, // maximum: never increase more than 25 %
+    );
+
+    // ── 8. Build reasons ──────────────────────────────────────────────────
+    if (trayFactor != 1.0) {
+      reasons.add(
+          'Tray signal: ${(trayFactor * 100).toStringAsFixed(0)} %');
+    }
+    if (growthFactor != 1.0) {
+      reasons.add(
+          'Growth signal: ${(growthFactor * 100).toStringAsFixed(0)} %');
+    }
+    if (samplingFactor != 1.0) {
+      reasons.add(
+          'Sampling confidence: ${(samplingFactor * 100).toStringAsFixed(0)} %');
+    }
+    if (envFactor != 1.0) {
+      reasons.add(
+          'Environment adjustment: ${(envFactor * 100).toStringAsFixed(0)} %');
+    }
+    if (fcrFactor != 1.0) {
+      reasons.add(
+          'FCR adjustment: ${(fcrFactor * 100).toStringAsFixed(0)} %');
+    }
+    if (intelligenceFactor != 1.0) {
+      final sign = intelligenceFactor > 1.0 ? '+' : '';
+      final pct = ((intelligenceFactor - 1.0) * 100).toStringAsFixed(0);
+      reasons.add(
+          'Deviation enforcement: $sign$pct% (${intelligence.statusLabel})');
+    }
+
+    final finalFeed =
+        (baseFeed * combinedFactor).clamp(0.1, 50.0);
+
+    return CorrectionResult(
+      finalFeed: double.parse(finalFeed.toStringAsFixed(3)),
+      trayFactor: trayFactor,
+      growthFactor: growthFactor,
+      samplingFactor: samplingFactor,
+      environmentFactor: envFactor,
+      fcrFactor: fcrFactor,
+      intelligenceFactor: intelligenceFactor,
+      combinedFactor: combinedFactor,
+      reasons: reasons,
+      alerts: alerts,
+      isCriticalStop: false,
+    );
+  }
+
+  // ── PRIVATE FACTOR CALCULATIONS ───────────────────────────────────────────
+
+  /// Tray factor — only active in SMART phase (DOC ≥ 31).
+  static double _trayFactor({
+    required int doc,
+    required List<TrayStatus> trayStatuses,
+    required List<double> recentTrayLeftoverPct,
+  }) {
+    if (doc <= 30) return 1.0; // Fix #4: no tray correction until DOC 31
+
+    if (trayStatuses.isNotEmpty) {
+      return _trayFactorFromStatuses(trayStatuses);
+    }
+
+    final usable = recentTrayLeftoverPct.where((v) => v >= 0).toList();
+    if (usable.isNotEmpty) {
+      final avg = usable.reduce((a, b) => a + b) / usable.length;
+      return _leftoverPctToFactor(avg);
+    }
+
+    return 1.0;
+  }
+
+  static double _trayFactorFromStatuses(List<TrayStatus> statuses) {
+    if (statuses.isEmpty) return 1.0;
+    final leftovers = statuses.map(_leftoverPctForStatus).toList();
+    final avg = leftovers.reduce((a, b) => a + b) / leftovers.length;
+    return _leftoverPctToFactor(avg);
+  }
+
+  static double _leftoverPctToFactor(double pct) {
+    if (pct == 0) return 1.1;
+    if (pct <= 10) return 1.0;
+    if (pct <= 25) return 0.9;
+    return 0.75;
+  }
+
+  static double _leftoverPctForStatus(TrayStatus status) {
+    switch (status) {
+      case TrayStatus.empty:
+        return 0.0;
+      case TrayStatus.partial:
+        return 30.0;
+      case TrayStatus.full:
+        return 70.0;
     }
   }
 
-  // ── HELPERS ───────────────────────────────────────────────────────────────
+  /// Growth factor — only active in SMART phase (DOC ≥ 31).
+  static double _growthFactor({required double? abw, required int doc}) {
+    if (doc <= 30 || abw == null || abw <= 0) return 1.0; // Fix #4
+    final expected = getExpectedABW(doc);
+    if (expected <= 0) return 1.0;
+    final ratio = abw / expected;
+    if (ratio > 1.1) return 1.05;
+    if (ratio < 0.9) return 0.95;
+    return 1.0;
+  }
 
-  static String _reasonTag(double factor, String trayStatus, FeedMode mode) {
-    final pct = ((factor - 1.0) * 100).round();
-    final prefix = mode == FeedMode.trayHabit ? 'TRAY_HABIT' : 'TRAY';
-    if (pct == 0) return '${prefix}_${trayStatus.toUpperCase()} HOLD';
-    return pct > 0
-        ? '${prefix}_${trayStatus.toUpperCase()} +$pct%'
-        : '${prefix}_${trayStatus.toUpperCase()} $pct%';
+  /// Sampling confidence decay — only active in SMART phase (DOC ≥ 31).
+  static double _samplingFactor({
+    required double? abw,
+    required int doc,
+    required int sampleAgeDays,
+  }) {
+    if (doc <= 30 || abw == null || abw <= 0) return 1.0; // Fix #4
+    final expected = getExpectedABW(doc);
+    if (expected < 0.5) return 1.0;
+    final ratio = abw / expected;
+    double rawFactor = 1.0;
+    if (ratio > 1.1) {
+      rawFactor = 1.05;
+    } else if (ratio < 0.9) {
+      rawFactor = 0.95;
+    }
+    final attenuated = 1.0 + (rawFactor - 1.0) * 0.7;
+    final weight = _samplingWeight(sampleAgeDays);
+    final decayed = 1.0 + (attenuated - 1.0) * weight;
+    return decayed.clamp(0.9, 1.1);
+  }
+
+  static double _samplingWeight(int ageDays) {
+    if (ageDays <= 2) return 1.0;
+    if (ageDays <= 5) return 0.7;
+    if (ageDays <= 7) return 0.4;
+    return 0.0;
+  }
+
+  /// Environment factor — critical stop at DO < 4.0.
+  static double _environmentFactor({
+    required double dissolvedOxygen,
+    required double ammonia,
+  }) {
+    if (dissolvedOxygen < 4.0) return 0.0;
+    if (dissolvedOxygen < 5.0) return 0.9;
+    if (ammonia > 0.2) return 0.9;
+    if (ammonia > 0.1) return 0.95;
+    return 1.0;
+  }
+
+  /// Intelligence factor — enforcement based on yesterday's deviation.
+  ///
+  /// Overfeeding yesterday → reduce today proportionally.
+  /// Underfeeding yesterday → small catch-up bonus.
+  /// Bounds: [0.75, 1.25].
+  static double _intelligenceFactor(IntelligenceResult intelligence) {
+    if (!intelligence.hasActualData) return 1.0;
+
+    final deviationPct = intelligence.deviationPercent ?? 0.0;
+
+    // Within ±5 %: no enforcement
+    if (deviationPct.abs() <= 5.0) return 1.0;
+
+    if (deviationPct > 5.0) {
+      // Overfeeding yesterday → proportional reduction
+      // 10 % overage → −2.5 %, 50 % overage → −12.5 %, 100 % → −25 %
+      final factor = 1.0 - (deviationPct / 100.0) * 0.25;
+      return factor.clamp(0.75, 1.0);
+    } else {
+      // Underfeeding yesterday → small catch-up
+      // −10 % under → +1.5 %, −50 % → +7.5 %, −100 % → +15 %
+      final factor = 1.0 + (deviationPct.abs() / 100.0) * 0.15;
+      return factor.clamp(1.0, 1.25);
+    }
+  }
+
+  // ── SAFE DB FACTOR APPLICATION ────────────────────────────────────────────
+
+  /// Hard clamp: adjusted amount never goes below 70 % or above 130 % of base.
+  static double applySafetyClamp(double base, double adjusted) {
+    return adjusted.clamp(base * 0.70, base * 1.30);
   }
 }

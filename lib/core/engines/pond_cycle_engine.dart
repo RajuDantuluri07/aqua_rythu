@@ -1,3 +1,5 @@
+import '../utils/time_provider.dart';
+
 enum PondCycleState {
   waitForTray,
   trayCheck,
@@ -25,7 +27,7 @@ class PondCycleEngine {
     DateTime? lastTrayLoggedTime,
     DateTime? now,
   }) {
-    final current = now ?? DateTime.now();
+    final current = now ?? TimeProvider.now();
 
     if (lastFeedTime == null) {
       return PondCycleState.readyForNextFeed;

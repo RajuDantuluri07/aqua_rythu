@@ -36,7 +36,7 @@ class FeedEngineConstants {
   static const double firstMealFactor = 0.8;
   static const double lastMealFactor = 1.2;
 
-  // Tray multipliers REMOVED — use FeedingEngineV1.trayFactor() instead.
+  // Tray multipliers REMOVED — use MasterFeedEngine.trayFactor() instead.
 
   // ── Feed cost constants ───────────────────────────────────────────────────
 

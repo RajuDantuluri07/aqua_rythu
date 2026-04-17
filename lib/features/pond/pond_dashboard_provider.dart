@@ -10,6 +10,9 @@ import '../tray/tray_provider.dart';
 import '../../services/feed_service.dart';
 import '../../core/engines/feed_plan_generator.dart';
 import '../../core/engines/feed_plan_constants.dart';
+import '../../core/engines/feed_orchestrator.dart';
+import '../../core/engines/feed_recommendation_engine.dart';
+import '../../core/engines/feed_decision_engine.dart';
 
 /// =======================
 /// STATE
@@ -37,6 +40,11 @@ class PondDashboardState {
   final Map<int, double> roundFinalFeedAmounts;
   /// Whether each round was manually edited
   final Map<int, bool> roundIsManuallyEdited;
+  /// Current feed recommendation from the engine
+  final FeedRecommendation? recommendation;
+
+  /// Current feed decision from the engine
+  final FeedDecision? decision;
 
   PondDashboardState({
     required this.selectedPond,
@@ -52,6 +60,8 @@ class PondDashboardState {
     this.trayPersistFailed = false,
     this.roundFinalFeedAmounts = const {},
     this.roundIsManuallyEdited = const {},
+    this.recommendation,
+    this.decision,
   });
 
   PondDashboardState copyWith({
@@ -69,6 +79,8 @@ class PondDashboardState {
     bool? trayPersistFailed,
     Map<int, double>? roundFinalFeedAmounts,
     Map<int, bool>? roundIsManuallyEdited,
+    FeedRecommendation? recommendation,
+    FeedDecision? decision,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -84,6 +96,8 @@ class PondDashboardState {
       trayPersistFailed: trayPersistFailed ?? this.trayPersistFailed,
       roundFinalFeedAmounts: roundFinalFeedAmounts ?? this.roundFinalFeedAmounts,
       roundIsManuallyEdited: roundIsManuallyEdited ?? this.roundIsManuallyEdited,
+      recommendation: recommendation ?? this.recommendation,
+      decision: decision ?? this.decision,
     );
   }
 }
@@ -133,11 +147,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       return;
     }
 
-    // Persist smart feed activation when DOC crosses 31.
-    // The UI already compensates with `|| doc > 30`, but the DB flag must be
-    // kept in sync so any direct reads of pond.isSmartFeedEnabled are correct.
+    // Fix #4: smart mode starts at DOC 31 (DOC 30 is still blind/tray-habit phase).
+    // The DB flag must be kept in sync so engine reads of pond.isSmartFeedEnabled
+    // reflect the correct boundary.
     final currentDoc = ref.read(docProvider(pondId));
-    if (currentDoc > 30 && !pond.isSmartFeedEnabled) {
+    if (currentDoc >= 31 && !pond.isSmartFeedEnabled) {
       PondService().updateSmartFeedStatus(pondId: pondId, isEnabled: true)
           .then((_) {
         // Sync in-memory Pond model so all providers see the correct flag.
@@ -152,34 +166,44 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       stockingDate: pond.stockingDate.toIso8601String(),
     );
 
-    // Auto-recover: regenerate plan if today's rows are missing
+    // Auto-recover: regenerate blind schedule if today's rows are missing.
+    // DOC ≥ 30 → smart mode: no pre-generated schedule is expected; skip recovery.
     bool didAutoRecover = false;
     if (data.isEmpty) {
-      AppLogger.info("Feed missing for pond $pondId → regenerating");
-      try {
-        await generateFeedPlan(
-          pondId: pondId,
-          startDoc: 1,
-          endDoc: 120,
-          stockingCount: pond.seedCount,
-          pondArea: pond.area,
-          stockingDate: pond.stockingDate,
-        );
-        data = await PondService().getTodayFeed(
-          pondId: pondId,
-          stockingDate: pond.stockingDate.toIso8601String(),
-        );
-        if (data.isEmpty) {
-          AppLogger.error("Feed still missing after regeneration for pond $pondId");
+      if (currentDoc >= 31) {
+        // Fix #4: smart mode starts at DOC 31. No pre-generated schedule is expected;
+        // feed amounts are computed live by the orchestrator.
+        AppLogger.info(
+            "Smart mode (DOC $currentDoc): no pre-generated schedule — will compute dynamically");
+      } else {
+        AppLogger.info("Feed missing for pond $pondId (DOC $currentDoc) → regenerating blind schedule");
+        try {
+          await generateFeedPlan(
+            pondId: pondId,
+            startDoc: 1,
+            // Fix #3: clamp to currentDoc so DOC 26–29 ponds get their schedule too.
+            // Previous hardcoded 25 left ponds at DOC 26–29 with no rows after recovery.
+            endDoc: currentDoc.clamp(1, 29),
+            stockingCount: pond.seedCount,
+            pondArea: pond.area,
+            stockingDate: pond.stockingDate,
+          );
+          data = await PondService().getTodayFeed(
+            pondId: pondId,
+            stockingDate: pond.stockingDate.toIso8601String(),
+          );
+          if (data.isEmpty) {
+            AppLogger.error("Feed still missing after regeneration for pond $pondId");
+            state = state.copyWith(isFeedLoading: false);
+            return;
+          }
+          didAutoRecover = true;
+          AppLogger.info("Feed auto-recovered for pond $pondId: ${data.length} rounds");
+        } catch (e) {
+          AppLogger.error("Feed regeneration failed for pond $pondId", e);
           state = state.copyWith(isFeedLoading: false);
           return;
         }
-        didAutoRecover = true;
-        AppLogger.info("Feed auto-recovered for pond $pondId: ${data.length} rounds");
-      } catch (e) {
-        AppLogger.error("Feed regeneration failed for pond $pondId", e);
-        state = state.copyWith(isFeedLoading: false);
-        return;
       }
     }
 
@@ -195,12 +219,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     }
 
     // ── Redistribution guard ─────────────────────────────────────────────────
-    // The feed schedule screen allows editing all 4 round inputs regardless of
-    // DOC. For DOC 1-7 only R1+R2 are active (config splits R3=R4=0). If a
-    // user saved non-zero amounts into R3/R4 for such a DOC, the dashboard
-    // would silently drop those rounds and underfeed. Instead, detect when
-    // inactive rounds carry feed and redistribute the full total across the
-    // active rounds proportionally (using config splits).
+    // All 4 rounds are always active (standardFeedConfig, equal splits).
+    // This guard is a safety net: if the DB somehow has amounts in rounds that
+    // the current config marks inactive, redistribute the total across active
+    // rounds proportionally so no feed is silently dropped.
     {
       final doc = ref.read(docProvider(pond.id));
       final config = getFeedConfig(doc);
@@ -246,6 +268,44 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     AppLogger.debug("Loaded feed from DB: ${feedMap.entries.map((e) => 'R${e.key}:${e.value.toStringAsFixed(2)}kg(${statusMap[e.key]})').join(' | ')}");
 
+    // ── Smart mode (DOC ≥ 31): inject dynamic recommendation for next round ───
+    // No pre-generated rows exist for smart phase. Compute the next feed amount
+    // from the full orchestrator pipeline and inject it for the pending round so
+    // the timeline card displays a concrete recommended quantity.
+    // Fix #4: smart mode begins at DOC 31 (DOC 30 is still blind/tray-habit phase).
+    FeedRecommendation? smartRecommendation;
+    FeedDecision? smartDecision;
+    if (currentDoc >= 31) {
+      try {
+        final result = await FeedOrchestrator.computeForPond(pondId);
+        smartRecommendation = result.recommendation;
+        smartDecision = result.decision;
+        final config = getFeedConfig(currentDoc);
+
+        // Inject amount for the NEXT pending round only.
+        // Completed rounds already have their amounts from DB rows.
+        for (int r = 1; r <= 4; r++) {
+          final alreadyDone = statusMap[r] == 'completed';
+          final isActive = r - 1 < config.splits.length && config.splits[r - 1] > 0;
+          if (!alreadyDone && isActive) {
+            if ((feedMap[r] ?? 0.0) == 0.0) {
+              feedMap[r] = double.parse(
+                (result.finalFeed * config.splits[r - 1]).toStringAsFixed(3),
+              );
+            }
+            statusMap[r] ??= 'pending';
+            break; // only the immediate next round
+          }
+        }
+        AppLogger.info(
+            'Smart feed injected for pond $pondId DOC $currentDoc: '
+            '${result.finalFeed.toStringAsFixed(3)} kg total');
+      } catch (e) {
+        AppLogger.error('Smart feed computation failed for $pondId (DOC $currentDoc)', e);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     final persistedLastFeedTime = await FeedService().fetchLatestFeedTimeForDoc(
       pondId: pondId,
       doc: currentDoc,
@@ -264,6 +324,8 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       feedAutoRecovered: didAutoRecover,
       lastFeedTime: lastFeedTime,
       clearLastFeedTime: lastFeedTime == null,
+      recommendation: smartRecommendation,
+      decision: smartDecision,
     );
 
     // Ensure the rolling 7-day feed window exists ahead of today (fire-and-forget)
@@ -292,9 +354,22 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     // Calculate currentFeed as sum of all loaded round amounts
     final totalFeed = state.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
 
+    // Compute recommendation using the full orchestrator pipeline
+    FeedRecommendation? recommendation;
+    FeedDecision? decision;
+    try {
+      final orchestratorResult = await FeedOrchestrator.computeForPond(pondId);
+      recommendation = orchestratorResult.recommendation;
+      decision = orchestratorResult.decision;
+    } catch (e) {
+      AppLogger.error('Failed to compute feed recommendation for pond $pondId', e);
+    }
+
     state = state.copyWith(
       doc: doc,
       currentFeed: totalFeed,
+      recommendation: recommendation,
+      decision: decision,
     );
   }
 
@@ -422,11 +497,16 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     );
 
     if (qty > 0) {
+      // Fix #5: supply today's total planned feed so FeedHistoryLog.expected is
+      // correct for every pond, not just the currently-selected one.
+      final expectedFeedToday =
+          state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
       await ref.read(feedHistoryProvider.notifier).logFeeding(
             pondId: state.selectedPond,
             doc: state.doc,
             round: round,
             qty: qty,
+            expectedFeed: expectedFeedToday,
           );
     }
 

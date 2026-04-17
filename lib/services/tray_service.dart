@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/enums/tray_status.dart';
-import '../core/engines/smart_feed_engine.dart';
 import '../core/utils/logger.dart';
+import 'feed_service.dart';
 
 class TrayService {
   final _supabase = Supabase.instance.client;
@@ -30,8 +30,8 @@ class TrayService {
         'observations': observations,
       });
 
-      // Trigger smart feed adjustment after tray is persisted
-      await SmartFeedEngine.applyTrayAdjustment(
+      // Trigger feed adjustment via service after tray is persisted
+      await FeedService().applyTrayAdjustment(
         pondId: pondId,
         doc: doc,
         trayStatus: aggregatedStatus,

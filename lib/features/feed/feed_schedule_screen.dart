@@ -156,6 +156,26 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                         child: Column(
                           children: [
                             _buildTableHeader(),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(12, 8, 12, 4),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline_rounded,
+                                      size: 13, color: Color(0xFF94A3B8)),
+                                  SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      'Set unused rounds to 0 — only rounds > 0 will be shown in the timeline',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF94A3B8),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -232,7 +252,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -240,7 +260,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
         borderRadius: AppRadius.rBase,
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF22C55E).withOpacity(0.15),
+            color: const Color(0xFF22C55E).withOpacity(0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -296,6 +316,22 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
           ? const Center(child: CircularProgressIndicator())
           : ElevatedButton.icon(
               onPressed: () async {
+                // Validation: every day must have at least one non-zero round
+                final anyDayEmpty = feedScheduleState.days.any(
+                  (d) => d.rounds.every((r) => r <= 0),
+                );
+                if (anyDayEmpty) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Feed cannot be zero — set at least one round per day'),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                  return;
+                }
                 try {
                   await ref.read(feedScheduleProvider.notifier).saveFeedSchedule(widget.pondId);
                   if (context.mounted) {
@@ -377,6 +413,7 @@ class _FeedRow extends ConsumerStatefulWidget {
 
 class _FeedRowState extends ConsumerState<_FeedRow> {
   late List<TextEditingController> _controllers;
+  bool _showRedistributionHint = false;
 
   @override
   void initState() {
@@ -393,8 +430,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
       for (int i = 0;
           i < _controllers.length && i < widget.day.rounds.length;
           i++) {
-        // 🔒 Prevent overwriting user input while typing unless value changed externally
-        // This avoids cursor jumping or "1." becoming "1.0" immediately
+        // Prevent overwriting user input while typing unless the value
+        // was changed externally (e.g., by redistribution).
         final currentVal = double.tryParse(_controllers[i].text) ?? 0;
         if ((currentVal - widget.day.rounds[i]).abs() > 0.01) {
           _controllers[i].text = widget.day.rounds[i].toStringAsFixed(1);
@@ -404,9 +441,44 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
   }
 
   void _onChanged(int index) {
-    if (!widget.activeRoundIndices.contains(index)) return; // inactive round — ignore
-    final val = double.tryParse(_controllers[index].text) ?? 0;
-    ref.read(feedScheduleProvider.notifier).updateFeed(widget.index, index, val);
+    var val = double.tryParse(_controllers[index].text) ?? 0;
+    // Block negatives
+    if (val < 0) {
+      val = 0;
+      _controllers[index].text = '0.0';
+      _controllers[index].selection =
+          TextSelection.collapsed(offset: _controllers[index].text.length);
+    }
+
+    final error = ref
+        .read(feedScheduleProvider.notifier)
+        .updateFeed(widget.index, index, val);
+
+    if (error != null) {
+      // Over-limit: revert field and show error
+      _controllers[index].text =
+          widget.day.rounds[index].toStringAsFixed(1);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ));
+      }
+      return;
+    }
+
+    // Show redistribution hint when auto-rounds will be updated
+    final willRedistribute =
+        (val == 0 || !widget.day.isRoundManual[index]) &&
+            widget.day.activeRounds > 1;
+    if (willRedistribute && mounted) {
+      setState(() => _showRedistributionHint = true);
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _showRedistributionHint = false);
+      });
+    }
   }
 
   @override
@@ -419,105 +491,163 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
 
   @override
   Widget build(BuildContext context) {
-    // Optimized: widget.day is already the updated object from parent
-    // Total = only active rounds; inactive rounds are always 0 and not shown.
-    final total = widget.day.rounds.asMap().entries
-        .where((e) => widget.activeRoundIndices.contains(e.key))
-        .fold(0.0, (sum, e) => sum + e.value);
+    final total = widget.day.total;
     final isEvenRow = widget.index.isEven;
-    final backgroundColor = widget.isToday 
-        ? const Color(0xFFF0FDF4) // Light green highlight for today
+    final isAnyManual = widget.day.isAnyManual;
+    final backgroundColor = widget.isToday
+        ? const Color(0xFFF0FDF4)
         : (isEvenRow ? Colors.white : const Color(0xFFF8FAFB));
 
-    return Container(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        border: Border(
-          left: widget.isToday 
-              ? const BorderSide(color: Color(0xFF22C55E), width: 4) 
-              : BorderSide.none,
-          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            border: Border(
+              left: widget.isToday
+                  ? const BorderSide(color: Color(0xFF22C55E), width: 4)
+                  : BorderSide.none,
+              bottom: _showRedistributionHint
+                  ? BorderSide.none
+                  : const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          child: Row(
+            children: [
+              // DOC column
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "${widget.day.doc}",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: widget.isToday
+                            ? const Color(0xFF15803D)
+                            : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    if (widget.isToday)
+                      const Text(
+                        "TODAY",
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF22C55E),
+                        ),
+                      ),
+                    // Reset button — visible when any round is manually set
+                    if (isAnyManual)
+                      GestureDetector(
+                        onTap: () => ref
+                            .read(feedScheduleProvider.notifier)
+                            .resetToRecommended(widget.index),
+                        child: const Text(
+                          "↩ Reset",
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFEA580C),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Round input cells — pass per-round manual flag for styling
+              for (int i = 0; i < _controllers.length; i++)
+                _buildInputCell(
+                  _controllers[i],
+                  i,
+                  widget.activeRoundIndices.contains(i),
+                  i < widget.day.isRoundManual.length &&
+                      widget.day.isRoundManual[i],
+                ),
+              // Total column
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      total.toStringAsFixed(1),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: widget.isToday
+                            ? const Color(0xFF15803D)
+                            : Colors.black87,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (isAnyManual)
+                      const Text(
+                        "manual",
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFEA580C),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+        // Redistribution hint — shown briefly after auto-rounds are updated
+        if (_showRedistributionHint)
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFF7ED),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+              ),
+            ),
+            child: const Row(
               children: [
+                Icon(Icons.sync_rounded, size: 11, color: Color(0xFFEA580C)),
+                SizedBox(width: 5),
                 Text(
-                  "${widget.day.doc}",
-                  textAlign: TextAlign.left,
+                  'Feed redistributed to remaining rounds',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: widget.isToday ? const Color(0xFF15803D) : const Color(0xFF1E293B),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFEA580C),
                   ),
                 ),
-                if (widget.isToday)
-                  const Text(
-                    "TODAY",
-                    style: TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF22C55E),
-                    ),
-                  ),
               ],
             ),
           ),
-          // Dynamically build cells based on controllers (rounds)
-          for (int i = 0; i < _controllers.length; i++)
-            _buildInputCell(_controllers[i], i, widget.activeRoundIndices.contains(i)),
-          Expanded(
-            flex: 3, // Corrected flex to 3 to align with "TOTAL (kg)" header column
-            child: Text(
-              total.toStringAsFixed(1),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: widget.isToday ? const Color(0xFF15803D) : Colors.black87,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
-  Widget _buildInputCell(TextEditingController controller, int index, bool isActive) {
-    if (!isActive) {
-      // Inactive round for this DOC — no scheduled time, not editable.
-      return Expanded(
-        flex: 3,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: SizedBox(
-            height: 44,
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Text(
-                '--',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFFCBD5E1),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+  Widget _buildInputCell(
+    TextEditingController controller,
+    int index,
+    bool isActive,
+    bool isManual,
+  ) {
+    final currentVal = double.tryParse(controller.text) ?? 0.0;
+    final isZero = currentVal <= 0;
+
+    // Border priority: focused (green) > manual (orange) > zero (light) > default
+    final enabledBorderColor = isZero
+        ? const Color(0xFFE2E8F0)
+        : isManual
+            ? const Color(0xFFEA580C)
+            : const Color(0xFFCBD5E1);
 
     return Expanded(
       flex: 3,
@@ -530,26 +660,37 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textAlign: TextAlign.center,
             onChanged: (val) => _onChanged(index),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF1E293B),
+              color: isZero
+                  ? const Color(0xFFCBD5E1)
+                  : isManual
+                      ? const Color(0xFFEA580C)
+                      : const Color(0xFF1E293B),
             ),
             decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: isZero
+                  ? const Color(0xFFF8FAFB)
+                  : isManual
+                      ? const Color(0xFFFFF7ED)
+                      : Colors.white,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1),
+                borderSide:
+                    const BorderSide(color: Color(0xFFCBD5E1), width: 1),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1),
+                borderSide: BorderSide(color: enabledBorderColor, width: 1),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF22C55E), width: 2),
+                borderSide:
+                    const BorderSide(color: Color(0xFF22C55E), width: 2),
               ),
             ),
           ),

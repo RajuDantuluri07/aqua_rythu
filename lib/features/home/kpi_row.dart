@@ -28,7 +28,7 @@ class KpiRow extends StatelessWidget {
         )),
         const SizedBox(width: 8),
         Expanded(child: _Tile(
-          label: data.fcrIsEstimated ? 'FCR (EST.)' : 'FCR LIVE',
+          label: data.fcrIsEstimated ? 'FEED EFF. (EST.)' : 'FEED EFFICIENCY',
           value: data.fcr > 0 ? data.fcr.toStringAsFixed(2) : '--',
           sub: _fcrLabel(data.fcr),
           color: _fcrColor(data.fcr),
@@ -39,10 +39,10 @@ class KpiRow extends StatelessWidget {
   }
 
   String _fcrLabel(double v) {
-    if (v <= 0)   return 'No data';
-    if (v <= 1.2) return '✅ Excellent';
-    if (v <= 1.4) return '🟡 Acceptable';
-    return '🔴 Reduce feed';
+    if (v <= 0)   return 'No data yet';
+    if (v <= 1.2) return '✅ On target (≤1.2)';
+    if (v <= 1.4) return '🟡 Watch closely (≤1.4)';
+    return '🔴 Reduce feed (>1.4)';
   }
 
   Color _fcrColor(double v) {

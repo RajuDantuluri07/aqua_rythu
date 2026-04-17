@@ -1,382 +1,567 @@
-/// Smart Feed Engine V2 - Hybrid Intelligent Feeding System
-///
-/// This engine powers the core intelligence of Aqua Rythu:
-/// - Evolves from DOC-based → Biomass-based → FCR-optimized
-/// - Uses sampling data when available
-/// - Applies efficiency corrections
-/// - Returns fully debuggable results
-///
-/// BUSINESS LOGIC:
-/// Stage 1 (DOC 1-30):   Blind feeding (no sampling expected)
-/// Stage 2 (DOC > 30):   Smart feeding (sampling drives decisions)
-/// Stage 3 (Sampling):   Biomass overrides DOC
-/// Stage 4 (FCR):        Efficiency corrections applied
+// Smart Feed Engine V2 — Production-Ready Spec Implementation
+//
+// Formula:
+//   finalFeed = baseFeed × trayFactor × growthFactor × waterFactor × docFactor
+//
+// Rules:
+//   • Applies ONLY for DOC > 30 (blind phase DOC 1–30 is never touched)
+//   • baseFeed always comes from MasterFeedEngine (never recomputed here)
+//   • Each factor is a pure function — no DB, no UI, no side effects
+//   • Safety clamp: finalFeed ∈ [70%, 130%] of baseFeed
+//   • Critical water stop: DO < 3.5 → finalFeed = 0
+//   • Water dominance: if waterFactor < 1.0, tray/growth boosts are suppressed
+//   • Manual override: if isManualOverride, engine is skipped entirely
+//
+// Replaces the per-band operational guard in SmartFeedEngine (bug #6).
+// Fixes: growthFactor -5% (was), -10% (now); waterFactor, tray curve, docFactor.
+//
+// Debug output: SmartFeedV2Result.toDebugMap() — used by debug dashboard.
 
-import 'package:flutter/foundation.dart';
+import 'package:aqua_rythu/core/constants/expected_abw_table.dart';
+import 'package:aqua_rythu/core/utils/logger.dart';
 
-/// Feed mode resolution
-enum FeedMode {
-  doc,      // DOC-only (early stage, no data)
-  biomass,  // Biomass-based (sampling present)
-  smart;    // Hybrid (DOC + biomass + FCR)
+// ═══════════════════════════════════════════════════════════════════════════════
+// OUTPUT MODEL
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  bool get isDoc => this == FeedMode.doc;
-  bool get isBiomass => this == FeedMode.biomass;
-  bool get isSmart => this == FeedMode.smart;
-}
+/// Full result from [SmartFeedEngineV2.calculate].
+/// Every intermediate value is exposed for debug visibility.
+class SmartFeedV2Result {
+  /// Base feed from MasterFeedEngine before any smart correction (kg).
+  final double baseFeed;
 
-/// Complete feed calculation result with full transparency
-class FeedResult {
-  // Core outputs
-  final double finalFeed;
-  final FeedMode mode;
-
-  // Component feeds (for debugging/display)
-  final double? docFeed;
-  final double? biomassFeed;
-  final double? fcrAdjustedFeed;
-
-  // Factor breakdown
-  final double fcrFactor;
+  /// Tray appetite signal.
+  /// Source: averaged latest 3-day leftover %.
   final double trayFactor;
+
+  /// Growth signal.
+  /// Source: ABW vs expected-ABW table, attenuated by sample age.
   final double growthFactor;
-  final double samplingAgeFactor;
 
-  // Debug/audit trail
-  final String debugTrace;
-  final bool hasValidSampling;
-  final bool hasValidFcr;
-  final List<String> warnings;
+  /// Water quality risk signal.
+  /// Source: dissolved oxygen + ammonia readings.
+  final double waterFactor;
 
-  FeedResult({
+  /// DOC-stage conservatism.
+  /// Slightly conservative at DOC 30–45 (acclimation) and DOC >75 (late stage).
+  final double docFactor;
+
+  /// Raw product of all factors before safety clamp.
+  final double rawProduct;
+
+  /// Final recommended feed after safety clamp (kg).
+  final double finalFeed;
+
+  /// True when waterFactor == 0.0 — farmer must stop feeding.
+  final bool isCriticalStop;
+
+  /// True when rawProduct was clamped to [70%, 130%] range.
+  final bool wasClamped;
+
+  /// The leftover % value used for trayFactor (null = no tray data available).
+  final double? trayLeftoverUsed;
+
+  /// ABW used for growthFactor (null = no valid sample).
+  final double? abwUsed;
+
+  /// Expected ABW for this DOC from the lookup table.
+  final double expectedAbw;
+
+  /// Reason string for each non-neutral factor (for debug UI).
+  final List<String> reasons;
+
+  /// The single most important reason — shown as primary label in farmer UI.
+  /// 'Feed optimal' when all signals are neutral.
+  final String primaryReason;
+
+  /// Confidence score 0.0–1.0 based on data availability.
+  ///   1.0 = tray + fresh ABW available
+  ///   0.7 = one signal missing
+  ///   0.4 = both signals missing or stale
+  final double confidence;
+
+  const SmartFeedV2Result({
+    required this.baseFeed,
+    required this.trayFactor,
+    required this.growthFactor,
+    required this.waterFactor,
+    required this.docFactor,
+    required this.rawProduct,
     required this.finalFeed,
-    required this.mode,
-    this.docFeed,
-    this.biomassFeed,
-    this.fcrAdjustedFeed,
-    this.fcrFactor = 1.0,
-    this.trayFactor = 1.0,
-    this.growthFactor = 1.0,
-    this.samplingAgeFactor = 1.0,
-    this.debugTrace = '',
-    this.hasValidSampling = false,
-    this.hasValidFcr = false,
-    this.warnings = const [],
+    required this.isCriticalStop,
+    required this.wasClamped,
+    required this.trayLeftoverUsed,
+    required this.abwUsed,
+    required this.expectedAbw,
+    required this.reasons,
+    required this.primaryReason,
+    required this.confidence,
   });
 
-  @override
-  String toString() =>
-      'FeedResult(mode: ${mode.name}, feed: ${finalFeed.toStringAsFixed(3)}kg, '
-      'docFeed: ${docFeed?.toStringAsFixed(3)}, '
-      'biomassFeed: ${biomassFeed?.toStringAsFixed(3)}, '
-      'fcrAdjusted: ${fcrAdjustedFeed?.toStringAsFixed(3)})';
+  /// Percentage change from baseFeed to finalFeed (+/- %).
+  double get adjustmentPercent =>
+      baseFeed > 0 ? ((finalFeed / baseFeed) - 1.0) * 100.0 : 0.0;
+
+  /// Human-readable confidence tier for UI display.
+  String get confidenceLabel {
+    if (confidence >= 0.8) return 'High';
+    if (confidence >= 0.5) return 'Medium';
+    return 'Low';
+  }
+
+  /// Flat map used by the debug dashboard.
+  Map<String, dynamic> toDebugMap() => {
+        'baseFeed':      _fmt(baseFeed),
+        'trayFactor':    _fmt(trayFactor),
+        'growthFactor':  _fmt(growthFactor),
+        'waterFactor':   _fmt(waterFactor),
+        'docFactor':     _fmt(docFactor),
+        'rawProduct':    _fmt(rawProduct),
+        'finalFeed':     _fmt(finalFeed),
+        'adjustment%':   '${adjustmentPercent.toStringAsFixed(1)}%',
+        'isCriticalStop': isCriticalStop,
+        'wasClamped':    wasClamped,
+        'trayLeftover%': trayLeftoverUsed?.toStringAsFixed(1) ?? 'n/a',
+        'abwUsed':       abwUsed?.toStringAsFixed(2) ?? 'n/a',
+        'expectedAbw':   _fmt(expectedAbw),
+        'primaryReason': primaryReason,
+        'confidence':    '${(confidence * 100).toStringAsFixed(0)}% ($confidenceLabel)',
+        'reasons':       reasons.join(' | '),
+      };
+
+  static String _fmt(double v) => v.toStringAsFixed(3);
 }
 
-/// Main Smart Feed Engine V2
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class SmartFeedEngineV2 {
-  /// Enable debug logging (set in dev builds)
-  static bool debugMode = !kReleaseMode;
+  static const String version = 'v2.1.0';
 
-  // ── MODE RESOLUTION ──────────────────────────────────────────────────────
+  // ── PUBLIC ENTRY POINT ─────────────────────────────────────────────────────
 
-  /// Determines which feed calculation to use based on DOC and data availability
-  static FeedMode resolveFeedMode({
-    required int doc,
-    required bool hasSampling,
-    required bool hasValidSampling,
-  }) {
-    // Sampling is the strongest signal: always override to biomass
-    if (hasValidSampling) {
-      if (debugMode) print('[FeedModeResolver] Sampling valid → FeedMode.biomass');
-      return FeedMode.biomass;
-    }
-
-    // After DOC 30, use smart mode even without sampling
-    if (doc > 30) {
-      if (debugMode) print('[FeedModeResolver] DOC > 30 → FeedMode.smart');
-      return FeedMode.smart;
-    }
-
-    // Default: DOC-only mode
-    if (debugMode) print('[FeedModeResolver] DOC <= 30, no sampling → FeedMode.doc');
-    return FeedMode.doc;
-  }
-
-  // ── DOC-BASED FEED CALCULATION ───────────────────────────────────────────
-
-  /// Calculate feed based on Day of Culture (Blind feeding)
-  /// 
-  /// For early stages where no biomass data exists yet.
-  /// Uses conservative DOC-based ramp.
-  static double calculateDocFeed({
-    required int doc,
-    required int density,
-    required String stockingType,
-  }) {
-    // Base feed ramp (kg per 100K shrimp)
-    final double baseFeed;
-    if (stockingType == 'hatchery') {
-      baseFeed = 2.0 + (doc - 1) * 0.15;
-    } else {
-      baseFeed = 4.0 + (doc - 1) * 0.25;
-    }
-
-    // Density scaling
-    final double scaledFeed = baseFeed * (density / 100000);
-
-    if (debugMode) {
-      print('[DOCFeed] DOC=$doc, type=$stockingType, density=$density');
-      print('  baseFeed=$baseFeed (per 100K)');
-      print('  scaledFeed=${scaledFeed.toStringAsFixed(3)} kg');
-    }
-
-    return scaledFeed;
-  }
-
-  // ── BIOMASS-BASED FEED CALCULATION ───────────────────────────────────────
-
-  /// Calculate feed based on actual biomass (Smart feeding)
-  /// 
-  /// Uses current Average Body Weight (ABW) to determine
-  /// optimal feeding rate based on actual growth.
-  static double calculateBiomassFeed({
-    required double abw, // grams
-    required int seedCount,
-    required double survival, // 0.0-1.0
-    required double feedPercent, // e.g. 0.03 for 3%
-  }) {
-    // Total biomass in kg
-    final double biomassKg = (abw * seedCount * survival) / 1000;
-
-    // Feed = % of biomass
-    final double feed = biomassKg * feedPercent;
-
-    if (debugMode) {
-      print('[BiomassFeed] ABW=$abw g, seedCount=$seedCount, survival=$survival');
-      print('  biomass=${biomassKg.toStringAsFixed(3)} kg');
-      print('  feedPercent=$feedPercent (${(feedPercent * 100).toStringAsFixed(1)}%)');
-      print('  biomassFeed=${feed.toStringAsFixed(3)} kg');
-    }
-
-    return feed;
-  }
-
-  // ── FCR CORRECTION LAYER ─────────────────────────────────────────────────
-
-  /// Apply Feed Conversion Ratio correction to feed recommendation
-  /// 
-  /// Rewards efficient farms (low FCR), penalizes wasteful farms (high FCR).
-  /// Only applies if FCR is fresh (< 10 days old).
-  static double applyFcrCorrection({
+  /// Calculate smart-adjusted feed for [doc] > 30.
+  ///
+  /// Returns [SmartFeedV2Result] with full factor breakdown.
+  /// Caller MUST check [SmartFeedV2Result.isCriticalStop] before using
+  /// [SmartFeedV2Result.finalFeed].
+  ///
+  /// [baseFeed]              Base feed from MasterFeedEngine (kg). Never 0.
+  /// [doc]                   Day of culture (must be > 30; guard is enforced).
+  /// [isManualOverride]      When true, engine is skipped — farmer value is used.
+  /// [recentTrayLeftoverPct] Last 1–3 observations (newest last). Empty = no data.
+  /// [abw]                   Latest ABW (g). Null before first sampling.
+  /// [sampleAgeDays]         Days since last ABW sample. 0 = fresh.
+  /// [dissolvedOxygen]       Latest DO reading (mg/L). Default 6.0 = safe.
+  /// [ammonia]               Latest ammonia reading (mg/L). Default 0.0 = safe.
+  static SmartFeedV2Result calculate({
     required double baseFeed,
-    required double? fcr,
-    required int? fcrAgeDays,
-  }) {
-    // No FCR data
-    if (fcr == null || fcrAgeDays == null) {
-      if (debugMode) print('[FCRCorrection] No FCR data available');
-      return baseFeed;
-    }
-
-    // FCR too old — discard
-    if (fcrAgeDays > 10) {
-      if (debugMode) print('[FCRCorrection] FCR too old ($fcrAgeDays days) → ignored');
-      return baseFeed;
-    }
-
-    // Get FCR factor (rewards/penalties)
-    final double factor = _getFcrFactor(fcr);
-    final double adjusted = baseFeed * factor;
-
-    if (debugMode) {
-      print('[FCRCorrection] FCR=$fcr (age=$fcrAgeDays days)');
-      print('  factor=$factor → ${(factor > 1.0 ? '+' : '')}${((factor - 1) * 100).toStringAsFixed(1)}%');
-      print('  adjusted=${adjusted.toStringAsFixed(3)} kg');
-    }
-
-    return adjusted;
-  }
-
-  /// Map FCR value to adjustment factor
-  static double _getFcrFactor(double fcr) {
-    if (fcr <= 1.0) return 1.15;  // Exceptional: +15%
-    if (fcr <= 1.2) return 1.10;  // Very good: +10%
-    if (fcr <= 1.3) return 1.05;  // Good: +5%
-    if (fcr <= 1.4) return 1.00;  // Acceptable: no change
-    if (fcr <= 1.5) return 0.90;  // Poor: -10%
-    return 0.85;                  // Very poor: -15%
-  }
-
-  // ── MAIN HYBRID CALCULATION ──────────────────────────────────────────────
-
-  /// Calculate final feed recommendation using hybrid logic
-  /// 
-  /// This is the central decision engine. It:
-  /// 1. Determines the appropriate mode (DOC vs Biomass vs Smart)
-  /// 2. Calculates base feed using that mode
-  /// 3. Applies FCR correction if available
-  /// 4. Returns full debugging info
-  static FeedResult calculateSmartFeed({
-    // Core DOC/stocking data
     required int doc,
-    required int density,
-    required String stockingType,
-
-    // Sampling data (optional)
-    required double? abw,
-    required int? seedCount,
-    required double? survivalRate,
-    required int? sampleAgeDays,
-
-    // FCR data (optional)
-    required double? fcr,
-    required int? fcrAgeDays,
-
-    // Feeding rate (for biomass mode)
-    double biomassFeedPercent = 0.03, // 3% of biomass
+    bool isManualOverride = false,
+    List<double> recentTrayLeftoverPct = const [],
+    double? abw,
+    int sampleAgeDays = 0,
+    double dissolvedOxygen = 6.0,
+    double ammonia = 0.0,
   }) {
-    final buffer = StringBuffer();
-    final warnings = <String>[];
+    assert(baseFeed > 0, 'baseFeed must be positive');
 
-    // ─ VALIDATION ─
-    buffer.writeln('🔍 FEED CALCULATION (Smart Feed Engine V2)');
-    buffer.writeln('━' * 60);
-    buffer.writeln('📊 INPUT: DOC=$doc, density=$density, stocking=$stockingType');
-
-    // Check for valid sampling
-    bool hasValidSampling = false;
-    if (abw != null && abw > 0 && sampleAgeDays != null && sampleAgeDays <= 7) {
-      hasValidSampling = true;
-      buffer.writeln('✅ Sampling valid: ABW=${abw.toStringAsFixed(2)}g (age=$sampleAgeDays days)');
-    } else if (abw == null) {
-      buffer.writeln('⚠️  No ABW data');
-    } else if (sampleAgeDays != null && sampleAgeDays > 7) {
-      buffer.writeln('⚠️  Sampling stale: age=$sampleAgeDays days (threshold: 7)');
-      warnings.add('Sampling data older than 7 days — consider updating');
+    // Hard gate: this engine never touches blind-phase DOC ≤ 30
+    if (doc <= 30) {
+      AppLogger.info(
+          '[SmartFeedEngineV2] Called with DOC $doc ≤ 30 — returning baseFeed unchanged');
+      return _passThroughResult(baseFeed, doc);
     }
 
-    // Check for valid FCR
-    bool hasValidFcr = false;
-    double fcrFactor = 1.0;
-    if (fcr != null && fcrAgeDays != null && fcrAgeDays <= 10) {
-      hasValidFcr = true;
-      fcrFactor = _getFcrFactor(fcr);
-      buffer.writeln('✅ FCR valid: FCR=${fcr.toStringAsFixed(2)} factor=$fcrFactor');
-    } else if (fcr == null) {
-      buffer.writeln('⚠️  No FCR data (from prior harvest)');
+    // Issue 6: farmer manually set this round — never override their decision
+    if (isManualOverride) {
+      AppLogger.info(
+          '[SmartFeedEngineV2] Manual override active — skipping smart adjustment');
+      return _manualOverrideResult(baseFeed, doc);
     }
 
-    // ─ MODE RESOLUTION ─
-    buffer.writeln('');
-    final mode = resolveFeedMode(
-      doc: doc,
-      hasSampling: abw != null,
-      hasValidSampling: hasValidSampling,
+    final reasons = <String>[];
+
+    // ── 1. Water factor (evaluated first — critical stop path) ──────────────
+    final waterResult = getWaterFactor(
+      dissolvedOxygen: dissolvedOxygen,
+      ammonia: ammonia,
     );
-    buffer.writeln('🎯 FEED MODE: ${mode.name.toUpperCase()}');
+    final waterFactor = waterResult.factor;
 
-    // ─ FEED CALCULATION ─
-    buffer.writeln('');
-    double finalFeed = 0;
-    double? docFeed;
-    double? biomassFeed;
-    double? fcrAdjustedFeed;
-    double trayFactor = 1.0;
-    double growthFactor = 1.0;
-    double samplingAgeFactor = 1.0;
-
-    if (mode == FeedMode.doc) {
-      // Simple DOC-based mode
-      docFeed = calculateDocFeed(
-        doc: doc,
-        density: density,
-        stockingType: stockingType,
-      );
-      finalFeed = docFeed;
-      buffer.writeln('📌 Using DOC-based ramp');
-      buffer.writeln('  DOC Feed = ${docFeed.toStringAsFixed(3)} kg');
-
-    } else if (mode == FeedMode.biomass) {
-      // Biomass-based mode
-      if (abw == null || seedCount == null) {
-        // Fallback to DOC if biomass data incomplete
-        docFeed = calculateDocFeed(
-          doc: doc,
-          density: density,
-          stockingType: stockingType,
-        );
-        finalFeed = docFeed;
-        buffer.writeln('📌 Biomass mode requested but data incomplete → fallback to DOC');
-        buffer.writeln('  DOC Feed = ${docFeed.toStringAsFixed(3)} kg');
-        warnings.add('Biomass calculation skipped: incomplete data');
-      } else {
-        biomassFeed = calculateBiomassFeed(
-          abw: abw,
-          seedCount: seedCount,
-          survival: survivalRate ?? 0.90,
-          feedPercent: biomassFeedPercent,
-        );
-        finalFeed = biomassFeed;
-        buffer.writeln('📌 Using biomass-based calculation');
-        buffer.writeln('  Biomass Feed = ${biomassFeed.toStringAsFixed(3)} kg');
-      }
-
-    } else {
-      // Smart hybrid mode (DOC + data + FCR)
-      docFeed = calculateDocFeed(
-        doc: doc,
-        density: density,
-        stockingType: stockingType,
-      );
-      buffer.writeln('📌 Using HYBRID smart mode');
-      buffer.writeln('  DOC base = ${docFeed.toStringAsFixed(3)} kg');
-
-      finalFeed = docFeed;
+    if (waterResult.isCriticalStop) {
+      AppLogger.error(
+          '[SmartFeedEngineV2] Critical DO ($dissolvedOxygen mg/L) — feed STOPPED');
+      return _criticalStopResult(baseFeed, doc, waterResult.reason);
     }
 
-    // ─ FCR CORRECTION ─
-    if (hasValidFcr) {
-      buffer.writeln('');
-      buffer.writeln('🔧 Applying FCR correction');
-      fcrAdjustedFeed = applyFcrCorrection(
-        baseFeed: finalFeed,
-        fcr: fcr,
-        fcrAgeDays: fcrAgeDays,
-      );
-      finalFeed = fcrAdjustedFeed;
-      buffer.writeln('  FCR-adjusted = ${fcrAdjustedFeed.toStringAsFixed(3)} kg');
+    if (waterFactor != 1.0) reasons.add(waterResult.reason);
+
+    // ── 2. Tray factor ──────────────────────────────────────────────────────
+    final trayData = _resolveLatestLeftover(recentTrayLeftoverPct);
+    // Issue 2: explicit no-data reason for debug clarity
+    if (trayData == null) reasons.add('No tray data — using baseline');
+
+    // Compute raw tray factor
+    var trayFactor = trayData != null ? getTrayFactor(trayData) : 1.0;
+
+    // Issue 1: water dominance — risky water blocks all positive boosts
+    if (waterFactor < 1.0 && trayFactor > 1.0) trayFactor = 1.0;
+
+    final trayReason = _trayReason(trayData, trayFactor);
+    if (trayFactor != 1.0) reasons.add(trayReason);
+
+    // ── 3. Growth factor ────────────────────────────────────────────────────
+    // Issue 2: explicit no-data reason for debug clarity
+    if (abw == null) reasons.add('No sampling data — growth neutral');
+
+    final expectedAbw = getExpectedABW(doc);
+    final growthResult = getGrowthFactor(
+      abw: abw,
+      doc: doc,
+      sampleAgeDays: sampleAgeDays,
+      expectedAbw: expectedAbw,
+    );
+
+    // Issue 1: water dominance — risky water blocks positive growth boost
+    var growthFactor = growthResult.factor;
+    if (waterFactor < 1.0 && growthFactor > 1.0) growthFactor = 1.0;
+
+    if (growthFactor != 1.0) reasons.add(growthResult.reason);
+
+    // ── 4. DOC factor ───────────────────────────────────────────────────────
+    final docFactor = getDocFactor(doc);
+    if (docFactor != 1.0) {
+      reasons.add('DOC $doc: stage adjustment ×${docFactor.toStringAsFixed(2)}');
     }
 
-    // ─ FINAL VALIDATION ─
-    buffer.writeln('');
-    buffer.writeln('✅ FINAL RESULT');
-    buffer.writeln('━' * 60);
-    buffer.writeln('🥘 RECOMMENDED FEED: ${finalFeed.toStringAsFixed(3)} kg');
-    if (warnings.isNotEmpty) {
-      buffer.writeln('⚠️  WARNINGS:');
-      for (final w in warnings) {
-        buffer.writeln('  - $w');
-      }
+    // ── 5. Combine factors & clamp ──────────────────────────────────────────
+    final rawProduct = trayFactor * growthFactor * waterFactor * docFactor;
+    final clampedProduct = rawProduct.clamp(
+      _kMinFactor, // 0.70 → never below 70% of base
+      _kMaxFactor, // 1.30 → never above 130% of base
+    );
+    final wasClamped = (rawProduct - clampedProduct).abs() > 0.001;
+
+    double finalFeed = baseFeed * clampedProduct;
+    // Issue 3: cap at 2× baseFeed (scales with pond size) instead of fixed 50 kg
+    finalFeed = finalFeed.clamp(0.1, baseFeed * 2.0);
+    finalFeed = double.parse(finalFeed.toStringAsFixed(3));
+
+    if (wasClamped) {
+      reasons.add(
+          'Safety clamp applied (raw ${(rawProduct * 100).toStringAsFixed(0)}% → ${(clampedProduct * 100).toStringAsFixed(0)}%)');
     }
 
-    if (debugMode) {
-      print(buffer.toString());
-    }
+    // ── 6. Confidence score (data availability) ─────────────────────────────
+    double confidence = 1.0;
+    if (abw == null)        confidence -= 0.3; // no growth signal
+    if (trayData == null)   confidence -= 0.3; // no appetite signal
+    if (sampleAgeDays > 5)  confidence -= 0.2; // stale sample attenuates signal
+    confidence = confidence.clamp(0.0, 1.0);
 
-    return FeedResult(
-      finalFeed: finalFeed,
-      mode: mode,
-      docFeed: docFeed,
-      biomassFeed: biomassFeed,
-      fcrAdjustedFeed: fcrAdjustedFeed,
-      fcrFactor: fcrFactor,
+    // ── 7. Primary reason for farmer UI ────────────────────────────────────
+    // Skip "no data" entries (index 0 or 1) as primary — prefer factor reasons.
+    final factorReasons = reasons
+        .where((r) => !r.startsWith('No '))
+        .toList();
+    final primaryReason =
+        factorReasons.isNotEmpty ? factorReasons.first : 'Feed optimal';
+
+    final result = SmartFeedV2Result(
+      baseFeed: baseFeed,
       trayFactor: trayFactor,
       growthFactor: growthFactor,
-      samplingAgeFactor: samplingAgeFactor,
-      debugTrace: buffer.toString(),
-      hasValidSampling: hasValidSampling,
-      hasValidFcr: hasValidFcr,
-      warnings: warnings,
+      waterFactor: waterFactor,
+      docFactor: docFactor,
+      rawProduct: rawProduct,
+      finalFeed: finalFeed,
+      isCriticalStop: false,
+      wasClamped: wasClamped,
+      trayLeftoverUsed: trayData,
+      abwUsed: growthResult.abwUsed,
+      expectedAbw: expectedAbw,
+      reasons: reasons,
+      primaryReason: primaryReason,
+      confidence: confidence,
+    );
+
+    AppLogger.debug(
+        '[SmartFeedEngineV2] DOC=$doc base=${baseFeed.toStringAsFixed(3)} '
+        'final=${finalFeed.toStringAsFixed(3)} '
+        'T=${trayFactor.toStringAsFixed(2)} '
+        'G=${growthFactor.toStringAsFixed(2)} '
+        'W=${waterFactor.toStringAsFixed(2)} '
+        'D=${docFactor.toStringAsFixed(2)} '
+        'confidence=${(confidence * 100).toStringAsFixed(0)}%');
+
+    return result;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FACTOR FUNCTIONS (public — testable individually)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Tray Factor ─────────────────────────────────────────────────────────────
+
+  /// Maps latest tray leftover % → feed factor.
+  ///
+  /// Appetite signal table (spec):
+  ///   0%        → 1.15  (+15%)  shrimp ate everything
+  ///   1–9%      → 1.10  (+10%)  near-clean tray
+  ///   10–20%    → 1.00  (0%)    normal consumption
+  ///   21–50%    → 0.85  (-15%)  moderate leftover
+  ///   > 50%     → 0.70  (-30%)  heavy leftover — aggressive cut
+  ///
+  /// [leftoverPct] must be in [0, 100].
+  static double getTrayFactor(double leftoverPct) {
+    assert(leftoverPct >= 0 && leftoverPct <= 100);
+    if (leftoverPct <= 0)  return 1.15;
+    if (leftoverPct < 10)  return 1.10;
+    if (leftoverPct <= 20) return 1.00;
+    if (leftoverPct <= 50) return 0.85;
+    return 0.70;
+  }
+
+  // ── Growth Factor ────────────────────────────────────────────────────────────
+
+  /// ABW vs expected ABW → growth speed → feed adjustment.
+  ///
+  ///   fast  (ABW > 110% expected) → +5%   (1.05)
+  ///   good  (90–110% expected)    → 0%    (1.00)
+  ///   slow  (ABW < 90% expected)  → -10%  (0.90)   [fix: was -5%]
+  ///
+  /// Sample age attenuation:
+  ///   ≤2 days → full weight
+  ///   ≤5 days → 70% weight
+  ///   ≤7 days → 40% weight
+  ///   >7 days → no signal (return 1.0)
+  static GrowthFactorResult getGrowthFactor({
+    required double? abw,
+    required int doc,
+    required int sampleAgeDays,
+    required double expectedAbw,
+  }) {
+    if (abw == null || abw <= 0 || expectedAbw <= 0) {
+      return const GrowthFactorResult(factor: 1.0, reason: 'No ABW data', abwUsed: null);
+    }
+    if (sampleAgeDays > 7) {
+      return GrowthFactorResult(
+          factor: 1.0,
+          reason: 'ABW sample too old ($sampleAgeDays days)',
+          abwUsed: abw);
+    }
+
+    final ratio = abw / expectedAbw;
+
+    double rawFactor;
+    String status;
+    if (ratio > 1.10) {
+      rawFactor = 1.05;
+      status = 'fast growth (+5%)';
+    } else if (ratio < 0.90) {
+      rawFactor = 0.90; // fixed: was 0.95
+      status = 'slow growth (-10%)';
+    } else {
+      rawFactor = 1.00;
+      status = 'good growth (0%)';
+    }
+
+    // Attenuate by sample age
+    final weight = _samplingWeight(sampleAgeDays);
+    final attenuated = 1.0 + (rawFactor - 1.0) * weight;
+    final factor = attenuated.clamp(0.90, 1.10);
+
+    final reason = 'Growth: $status '
+        '(ABW ${abw.toStringAsFixed(2)}g vs expected ${expectedAbw.toStringAsFixed(2)}g, '
+        '${sampleAgeDays}d old, weight ${(weight * 100).toStringAsFixed(0)}%)';
+
+    return GrowthFactorResult(factor: factor, reason: reason, abwUsed: abw);
+  }
+
+  // ── Water Factor ─────────────────────────────────────────────────────────────
+
+  /// Dissolved oxygen + ammonia → risk signal → feed reduction.
+  ///
+  ///   DO < 3.5             → STOP feeding (critical)
+  ///   DO < 4.5 or NH₃>0.3 → -20%  (0.80)  high risk
+  ///   DO < 5.5 or NH₃>0.1 → -10%  (0.90)  moderate stress
+  ///   otherwise            → 0%   (1.00)  normal
+  ///
+  /// When waterFactor < 1.0, the caller (calculate) additionally caps
+  /// trayFactor and growthFactor at 1.0 — see water dominance rule.
+  static WaterFactorResult getWaterFactor({
+    required double dissolvedOxygen,
+    required double ammonia,
+  }) {
+    // Critical stop — only at genuinely dangerous DO level
+    if (dissolvedOxygen < 3.5) {
+      return WaterFactorResult(
+        factor: 0.0,
+        isCriticalStop: true,
+        reason: 'CRITICAL: DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L < 3.5 — stop feeding',
+      );
+    }
+
+    // High risk: low DO or high ammonia
+    if (dissolvedOxygen < 4.5 || ammonia > 0.3) {
+      final who = dissolvedOxygen < 4.5
+          ? 'DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L'
+          : 'NH₃ ${ammonia.toStringAsFixed(2)} mg/L';
+      return WaterFactorResult(
+        factor: 0.80,
+        isCriticalStop: false,
+        reason: 'High water risk ($who) → -20%',
+      );
+    }
+
+    // Moderate stress
+    if (dissolvedOxygen < 5.5 || ammonia > 0.1) {
+      final who = dissolvedOxygen < 5.5
+          ? 'DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L'
+          : 'NH₃ ${ammonia.toStringAsFixed(2)} mg/L';
+      return WaterFactorResult(
+        factor: 0.90,
+        isCriticalStop: false,
+        reason: 'Moderate water stress ($who) → -10%',
+      );
+    }
+
+    return const WaterFactorResult(
+        factor: 1.0, isCriticalStop: false, reason: 'Water quality normal');
+  }
+
+  // ── DOC Factor ───────────────────────────────────────────────────────────────
+
+  /// DOC-based stage conservatism.
+  ///
+  ///   DOC 31–45  → 0.95  acclimation period — conservative
+  ///   DOC 46–75  → 1.00  optimal feeding window — normal
+  ///   DOC > 75   → 0.95  late stage, slower metabolism — conservative
+  static double getDocFactor(int doc) {
+    assert(doc > 30, 'getDocFactor should only be called for DOC > 30');
+    if (doc <= 45) return 0.95;
+    if (doc <= 75) return 1.00;
+    return 0.95;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static const double _kMinFactor = 0.70;
+  static const double _kMaxFactor = 1.30;
+
+  /// Use the most recent leftover reading. Average the last 3 if fresh data
+  /// exists; fall back to the last single value.
+  static double? _resolveLatestLeftover(List<double> history) {
+    final usable = history.where((v) => v >= 0 && v <= 100).toList();
+    if (usable.isEmpty) return null;
+    // Weighted: latest reading has 50% weight, prior readings share 50%
+    if (usable.length == 1) return usable.last;
+    final last = usable.last;
+    final prior = usable.sublist(0, usable.length - 1);
+    final priorAvg = prior.reduce((a, b) => a + b) / prior.length;
+    return (last * 0.5 + priorAvg * 0.5).clamp(0.0, 100.0);
+  }
+
+  static String _trayReason(double? leftoverPct, double factor) {
+    if (leftoverPct == null) return 'No tray data';
+    final pctStr = leftoverPct.toStringAsFixed(1);
+    final adj = factor >= 1.0
+        ? '+${((factor - 1) * 100).toStringAsFixed(0)}%'
+        : '${((factor - 1) * 100).toStringAsFixed(0)}%';
+    return 'Tray ${pctStr}% leftover → $adj';
+  }
+
+  static double _samplingWeight(int ageDays) {
+    if (ageDays <= 2) return 1.0;
+    if (ageDays <= 5) return 0.7;
+    if (ageDays <= 7) return 0.4;
+    return 0.0;
+  }
+
+  static SmartFeedV2Result _passThroughResult(double baseFeed, int doc) {
+    return SmartFeedV2Result(
+      baseFeed: baseFeed,
+      trayFactor: 1.0,
+      growthFactor: 1.0,
+      waterFactor: 1.0,
+      docFactor: 1.0,
+      rawProduct: 1.0,
+      finalFeed: baseFeed,
+      isCriticalStop: false,
+      wasClamped: false,
+      trayLeftoverUsed: null,
+      abwUsed: null,
+      expectedAbw: getExpectedABW(doc),
+      reasons: const ['DOC ≤ 30 — blind phase, no adjustment'],
+      primaryReason: 'DOC ≤ 30 — blind phase, no adjustment',
+      confidence: 1.0,
     );
   }
+
+  static SmartFeedV2Result _manualOverrideResult(double baseFeed, int doc) {
+    return SmartFeedV2Result(
+      baseFeed: baseFeed,
+      trayFactor: 1.0,
+      growthFactor: 1.0,
+      waterFactor: 1.0,
+      docFactor: 1.0,
+      rawProduct: 1.0,
+      finalFeed: baseFeed,
+      isCriticalStop: false,
+      wasClamped: false,
+      trayLeftoverUsed: null,
+      abwUsed: null,
+      expectedAbw: getExpectedABW(doc),
+      reasons: const ['Manual override — farmer value used as-is'],
+      primaryReason: 'Manual override — farmer value used as-is',
+      confidence: 1.0,
+    );
+  }
+
+  static SmartFeedV2Result _criticalStopResult(
+      double baseFeed, int doc, String reason) {
+    return SmartFeedV2Result(
+      baseFeed: baseFeed,
+      trayFactor: 1.0,
+      growthFactor: 1.0,
+      waterFactor: 0.0,
+      docFactor: 1.0,
+      rawProduct: 0.0,
+      finalFeed: 0.0,
+      isCriticalStop: true,
+      wasClamped: false,
+      trayLeftoverUsed: null,
+      abwUsed: null,
+      expectedAbw: getExpectedABW(doc),
+      reasons: [reason],
+      primaryReason: reason,
+      confidence: 1.0, // water reading is confident — it IS dangerous
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VALUE OBJECTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class GrowthFactorResult {
+  final double factor;
+  final String reason;
+  final double? abwUsed;
+  const GrowthFactorResult(
+      {required this.factor, required this.reason, required this.abwUsed});
+}
+
+class WaterFactorResult {
+  final double factor;
+  final bool isCriticalStop;
+  final String reason;
+  const WaterFactorResult(
+      {required this.factor,
+      required this.isCriticalStop,
+      required this.reason});
 }

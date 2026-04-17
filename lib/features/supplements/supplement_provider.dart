@@ -153,12 +153,10 @@ class Supplement {
   bool isActiveOnDate(DateTime targetDate) {
     final day = DateTime(targetDate.year, targetDate.month, targetDate.day);
     if (type == SupplementType.feedMix) {
-      if (startDate != null && endDate != null) {
-        final start = DateTime(startDate!.year, startDate!.month, startDate!.day);
-        final end = DateTime(endDate!.year, endDate!.month, endDate!.day);
-        return !day.isBefore(start) && !day.isAfter(end);
-      }
-      return true;
+      if (startDate == null || endDate == null) return false;
+      final start = DateTime(startDate!.year, startDate!.month, startDate!.day);
+      final end = DateTime(endDate!.year, endDate!.month, endDate!.day);
+      return !day.isBefore(start) && !day.isAfter(end);
     }
 
     if (date == null) {
@@ -184,7 +182,10 @@ class Supplement {
       return waterTime;
     }
     if (type == SupplementType.waterMix && feedingTimes.isNotEmpty) {
-      return feedingTimes.first;
+      final first = feedingTimes.first;
+      if (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(first)) {
+        return first;
+      }
     }
     return null;
   }
@@ -278,19 +279,37 @@ class Supplement {
       startDate:
           json['startDate'] != null ? DateTime.tryParse(json['startDate']) : null,
       endDate: json['endDate'] != null ? DateTime.tryParse(json['endDate']) : null,
-      type: json['type'] != null
-          ? SupplementType.values.byName(json['type'])
-          : SupplementType.feedMix,
-      goal: json['goal'] != null
-          ? SupplementGoal.values.byName(json['goal'])
-          : null,
+      type: () {
+        try {
+          return json['type'] != null
+              ? SupplementType.values.byName(json['type'] as String)
+              : SupplementType.feedMix;
+        } catch (_) {
+          return SupplementType.feedMix;
+        }
+      }(),
+      goal: () {
+        try {
+          return json['goal'] != null
+              ? SupplementGoal.values.byName(json['goal'] as String)
+              : null;
+        } catch (_) {
+          return null;
+        }
+      }(),
       pondIds: List<String>.from(json['pondIds'] ?? []),
       feedQty: (json['feedQty'] as num?)?.toDouble() ?? 0.0,
       feedingTimes: List<String>.from(json['feedingTimes'] ?? []),
       frequencyDays: json['frequencyDays'],
-      preferredTime: json['preferredTime'] != null
-          ? WaterMixTime.values.byName(json['preferredTime'])
-          : null,
+      preferredTime: () {
+        try {
+          return json['preferredTime'] != null
+              ? WaterMixTime.values.byName(json['preferredTime'] as String)
+              : null;
+        } catch (_) {
+          return null;
+        }
+      }(),
       date: json['date'] != null ? DateTime.tryParse(json['date']) : null,
       waterTime: json['waterTime'] ??
           (((json['feedingTimes'] as List?) != null &&
@@ -370,9 +389,15 @@ class SupplementLog {
           .toList(),
       supplementName: json['supplementName'],
       scheduledTime: json['scheduledTime'],
-      supplementType: json['supplementType'] != null
-          ? SupplementType.values.byName(json['supplementType'])
-          : null,
+      supplementType: () {
+        try {
+          return json['supplementType'] != null
+              ? SupplementType.values.byName(json['supplementType'] as String)
+              : null;
+        } catch (_) {
+          return null;
+        }
+      }(),
       feedRound: json['feedRound'],
       inputValue: (json['inputValue'] as num?)?.toDouble(),
       inputUnit: json['inputUnit'],

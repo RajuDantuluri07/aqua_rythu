@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:aqua_rythu/services/farm_service.dart';
 import 'package:aqua_rythu/services/pond_service.dart';
-import 'package:aqua_rythu/core/engines/smart_feed_engine.dart';
+import 'package:aqua_rythu/services/feed_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/utils/doc_utils.dart';
@@ -379,8 +379,8 @@ class FarmNotifier extends StateNotifier<FarmState> {
   /// 🔄 SMART FEED TRIGGER: Trigger recalculation when DOC increments
   void triggerSmartFeedRecalculationOnDocChange(String pondId) {
     // Fire-and-forget Smart Feed recalculation
-    SmartFeedEngine.recalculateFeedPlan(pondId).catchError((e) {
-      AppLogger.error('Smart Feed recalculation trigger failed', e);
+    FeedService().recalculateFeedPlan(pondId).catchError((e) {
+      AppLogger.error('Feed recalculation trigger failed', e);
     });
   }}
 

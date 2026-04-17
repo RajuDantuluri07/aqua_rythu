@@ -22,6 +22,7 @@ class FeedInput {
 
   final double? lastFcr;
   final double? actualFeedYesterday;
+  final DateTime? lastFeedTime;
 
   FeedInput({
     required this.seedCount,
@@ -40,5 +41,6 @@ class FeedInput {
     this.recentTrayLeftoverPct = const [],
     this.lastFcr,
     this.actualFeedYesterday,
+    this.lastFeedTime,
   });
 }

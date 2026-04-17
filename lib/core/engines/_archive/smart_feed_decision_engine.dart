@@ -84,16 +84,15 @@ class SmartFeedDecisionEngine {
       biomassFeed = _calculateBiomassFeed(
         abw: input.abw!,
         seedCount: input.seedCount,
-        survival: _estimateSurvival(input.doc),
+        survival: 0.9,
         feedPercent: 0.03,
       );
       trace.add("Biomass Feed = ${biomassFeed.toStringAsFixed(2)}");
     }
 
     // Step 5: Select Base Feed
-    final double baseFeed = (source == FeedSource.biomass && biomassFeed != null) 
-        ? biomassFeed 
-        : docFeed;
+    final double baseFeed =
+        source == FeedSource.doc ? docFeed : biomassFeed!;
 
     // Step 6: Apply FCR Correction
     double finalFeed = baseFeed;
@@ -164,13 +163,6 @@ class SmartFeedDecisionEngine {
       decisionTrace: trace,
       engineVersion: "v2.3",
     );
-  }
-
-  /// Dynamic survival estimate: starts at 95%, drops to 70% by DOC 120.
-  static double _estimateSurvival(int doc) {
-    if (doc <= 1) return 0.95;
-    final drop = (doc - 1) * 0.002; // 0.2% drop per day
-    return (0.95 - drop).clamp(0.60, 0.95);
   }
 
   // ── BIOMASS VALIDATION ──────────────────────────────────────────────────────

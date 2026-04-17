@@ -7,8 +7,10 @@ class AppLogger {
     }
   }
 
-  static void info(String message) {
-    if (kDebugMode) debugPrint('INFO: $message');
+  static void info(String message, [Object? payload]) {
+    if (!kDebugMode) return;
+    debugPrint('INFO: $message');
+    if (payload != null) debugPrint('PAYLOAD: $payload');
   }
 
   static void error(String message, [Object? error, StackTrace? stackTrace]) {

@@ -1,13 +1,13 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_constants.dart';
-import 'feeding_engine_v1.dart';
+import 'master_feed_engine.dart';
 import '../utils/logger.dart';
 
 final supabase = Supabase.instance.client;
 
 /// Generates a feeding schedule for a range of DOCs (1–120).
 ///
-/// Uses [FeedingEngineV1.calculateFeed] as the single source of truth.
+/// Uses [MasterFeedEngine.compute] as the single source of truth.
 /// No biomass, no 235 normalization, no FCR.
 /// Tray factor defaults to 1.0 during plan generation (no leftover data yet).
 Future<void> generateFeedPlan({
@@ -42,7 +42,7 @@ Future<void> generateFeedPlan({
   for (int doc = startDoc; doc <= clampedEnd; doc++) {
     if (existingDocs.contains(doc)) continue;
 
-    final totalFeed = FeedingEngineV1.calculateFeed(
+    final totalFeed = MasterFeedEngine.compute(
       doc: doc,
       stockingType: stockingType,
       density: stockingCount,
@@ -86,11 +86,15 @@ Future<void> generateFeedPlan({
 // ── ROLLING RECOVERY ─────────────────────────────────────────────────────────
 
 /// Checks if tomorrow's feed rows exist. If not, generates the next 7 DOCs.
+/// Only generates blind-phase schedule (DOC 1–29). DOC ≥ 30 is smart mode —
+/// feed is computed dynamically on demand, never pre-generated here.
 /// Call this on dashboard load and after tray/feed events.
 Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
   try {
     final tomorrow = currentDoc + 1;
-    if (tomorrow > 120) return;
+    // Never pre-generate beyond the blind/tray-habit phase.
+    // Fix #4: DOC ≥ 31 → smart feeding; amounts are computed live, not stored.
+    if (tomorrow > 30) return;
 
     final existing = await supabase
         .from('feed_rounds')
@@ -112,7 +116,8 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
       return;
     }
 
-    final lookAheadEnd = (currentDoc + 7).clamp(tomorrow, 120);
+    // Fix #4: cap look-ahead at DOC 30 (end of tray-habit/blind phase).
+    final lookAheadEnd = (currentDoc + 7).clamp(tomorrow, 30);
 
     await generateFeedPlan(
       pondId: pondId,

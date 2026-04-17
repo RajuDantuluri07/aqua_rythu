@@ -60,7 +60,7 @@ class HomeBuilder {
       waste:      _buildWaste(trayLogs),
       trend:      _buildTrend(feedHistory),
       activities: _buildActivities(feedHistory, trayLogs, growthLogs, expectedAbw),
-      insight:    _buildInsight(doc, effectiveFcr, currentAbw, expectedAbw, _rollingWaste(trayLogs), streak),
+      insight:    _buildInsight(doc, effectiveFcr, currentAbw, expectedAbw, _rollingWaste(trayLogs), streak, consumedFeed, plannedFeed),
     );
   }
 
@@ -79,7 +79,7 @@ class HomeBuilder {
     double expectedAbw,
   ) {
     final now = DateTime.now();
-    final int gap = doc > 30 ? _smartGapMinutes : _blindGapMinutes;
+    final int gap = doc >= 30 ? _smartGapMinutes : _blindGapMinutes;
 
     // 1. ALL DONE
     if (feedsDone >= maxFeeds) {
@@ -115,8 +115,8 @@ class HomeBuilder {
       }
     }
 
-    // 4. TRAY PENDING — DOC > 30 and last completed round has no tray
-    final bool hasPendingTray = doc > 30 &&
+    // 4. TRAY PENDING — DOC ≥ 30 and last completed round has no tray
+    final bool hasPendingTray = doc >= 30 &&
         roundFeedStatus.entries.any(
           (e) => e.value == 'completed' && !(trayDone[e.key] ?? false),
         );
@@ -259,8 +259,9 @@ class HomeBuilder {
       insight = '';
     } else {
       final diff = ((avgA - avgI) / avgI * 100).round();
-      if (diff > 8)  insight = 'Feeding ${diff}% above ideal';
-      else if (diff < -8) insight = 'Feeding ${diff.abs()}% below ideal';
+      if (diff > 8) {
+        insight = 'Feeding $diff% above ideal';
+      } else if (diff < -8) insight = 'Feeding ${diff.abs()}% below ideal';
       else insight = 'Feed aligned with growth ✅';
     }
     return FeedTrendData(actual: actual, ideal: ideal, insight: insight, hasData: true);
@@ -364,45 +365,54 @@ class HomeBuilder {
     double expectedAbw,
     double wastePercent,
     int streak,
+    double consumedFeed,
+    double plannedFeed,
   ) {
-    // 1. Feed correction opportunity (FCR too high)
+    // 1. Feed correction opportunity (FCR too high) — show concrete overfeeding %
     if (fcr > 1.4) {
+      final overpct = ((fcr - 1.4) / 1.4 * 100).round();
+      final feedCtx = consumedFeed > 0 && plannedFeed > 0
+          ? ' (${consumedFeed.toStringAsFixed(1)} kg consumed vs ${plannedFeed.toStringAsFixed(1)} kg planned)'
+          : '';
       return InsightData(
-        'FCR is ${fcr.toStringAsFixed(2)} — reduce feed by 5–10% to cut losses and improve profitability',
+        'Overfeeding by ~$overpct%$feedCtx — reduce feed 5–10% to improve FCR',
       );
     }
 
-    // 2. Growth issue (only real samples, not estimates)
+    // 2. Growth issue — show actual vs expected with numbers
     if (currentAbw > 0 && expectedAbw > 0 && currentAbw / expectedAbw < 0.85) {
+      final gap = (expectedAbw - currentAbw).toStringAsFixed(1);
       return InsightData(
-        'Growth is below ideal at DOC $doc — check water quality and aeration. Consistent feeding helps.',
+        'Growth slow: ${currentAbw.toStringAsFixed(1)} g vs ${expectedAbw.toStringAsFixed(1)} g ideal (−$gap g at DOC $doc) — check water & aeration',
       );
     }
 
-    // 3. FCR warning (elevated but not critical)
+    // 3. FCR warning — show exact number vs target
     if (fcr > 1.2 && fcr <= 1.4) {
       return InsightData(
-        'FCR is ${fcr.toStringAsFixed(2)} — acceptable, but tighten tray checks to keep it below 1.2',
+        'FCR ${fcr.toStringAsFixed(2)} vs target 1.2 — tighten tray checks to bring it down',
       );
     }
 
-    // 4. High waste
+    // 4. High waste — show % with consequence
     if (wastePercent > 20) {
       return InsightData(
-        'Tray shows ${wastePercent.round()}% leftover on average — reduce next feed by 8% to cut waste',
+        '${wastePercent.round()}% tray leftover on average — reduce next feed by 8% to cut FCR',
       );
     }
 
-    // 5. Positive reinforcement (FCR excellent)
+    // 5. Positive reinforcement — show exact FCR and what it means
     if (fcr > 0 && fcr <= 1.2) {
       return InsightData(
-        'FCR is ${fcr.toStringAsFixed(2)} ✅ — excellent. Keep the current schedule for optimal harvest.',
+        'FCR ${fcr.toStringAsFixed(2)} ✅ — on target. Keep this schedule for a strong harvest.',
       );
     }
 
     // 6. Streak praise
     if (streak >= 5) {
-      return InsightData('$streak-day feeding streak 🔥 — consistency is your best tool for a good FCR');
+      return InsightData(
+        '$streak-day feeding streak — consistent timing is your best FCR tool',
+      );
     }
 
     return null; // not enough data

@@ -1,5 +1,6 @@
 // Validates whether a feed action is safe before the farmer marks a round done.
 import 'engine_constants.dart';
+import '../utils/time_provider.dart';
 //
 // Philosophy: Guide, don't restrict.
 //   ALLOW   → go ahead, all good
@@ -61,7 +62,7 @@ class FeedStatusEngine {
     required bool hasTrayForLastRound,
   }) {
     final int maxRounds = doc <= 7 ? 2 : 4;
-    final now = DateTime.now();
+    final now = TimeProvider.now();
 
     // Compute unified minutesUntilNext up-front so every return can carry it.
     final int? minsUntilNext = minutesUntilNextFeed(
@@ -73,7 +74,7 @@ class FeedStatusEngine {
 
     // ── 1. BLOCK — daily max reached (highest priority) ──────────────────────
     if (feedsCompletedToday >= maxRounds) {
-      final result = const FeedDecision(
+      const result = FeedDecision(
         status: FeedStatusCode.block,
         message: 'All rounds completed today. Come back tomorrow.',
       );
@@ -91,7 +92,7 @@ class FeedStatusEngine {
       return result;
     }
 
-    final int minGap = doc > 30 ? smartMinGapMinutes : blindMinGapMinutes;
+    final int minGap = doc >= 30 ? smartMinGapMinutes : blindMinGapMinutes;
     final int gapElapsed = now.difference(lastFeedTime).inMinutes;
 
     // ── 2. GAP warning (higher priority than tray, P3-07) ────────────────────
@@ -108,8 +109,8 @@ class FeedStatusEngine {
       return result;
     }
 
-    // ── 3. TRAY warning — only after 90 min, only DOC > 30 (P3-02) ──────────
-    if (doc > 30 && feedsCompletedToday > 0 && !hasTrayForLastRound &&
+    // ── 3. TRAY warning — only after 90 min, only DOC ≥ 30 (P3-02) ──────────
+    if (doc >= 30 && feedsCompletedToday > 0 && !hasTrayForLastRound &&
         gapElapsed >= trayCheckDelayMinutes) {
       final result = FeedDecision(
         status: FeedStatusCode.warning,
@@ -185,7 +186,7 @@ class FeedStatusEngine {
 
     final DateTime nextScheduled =
         DateTime(now.year, now.month, now.day, schedule[feedsDoneToday]);
-    final int minGap = doc > 30 ? smartMinGapMinutes : blindMinGapMinutes;
+    final int minGap = doc >= 30 ? smartMinGapMinutes : blindMinGapMinutes;
     final DateTime gapClears = lastFeedTime != null
         ? lastFeedTime.add(Duration(minutes: minGap))
         : now;
@@ -196,7 +197,7 @@ class FeedStatusEngine {
   // ── Utility: suggested feeds already done based on current time ───────────
   // Used in AddPondScreen to pre-fill the "feeds done today" chip.
   static int suggestedFeedsDoneNow(int doc) {
-    final int hour = DateTime.now().hour;
+    final int hour = TimeProvider.now().hour;
     if (doc <= 7) {
       if (hour < 8) return 0;
       if (hour < 19) return 1;
@@ -210,26 +211,23 @@ class FeedStatusEngine {
     }
   }
 
-  // ── BUG-10: Smart Mode transition pre-warning (DOC 28–30) ─────────────────
-  /// Returns a non-null warning string on DOC 28, 29, and 30 to prepare the
-  /// farmer for Smart Mode activation on DOC 31.
+  // ── Smart Mode transition pre-warning (DOC 27–29) ────────────────────────
+  /// Returns a non-null warning string on DOC 27, 28, and 29 to prepare the
+  /// farmer for Smart Mode activation at DOC 30 (smart_feeding = doc >= 30).
   ///
-  /// Previously, Smart Mode activated silently at DOC 31 and immediately started
-  /// blocking rounds for farmers who hadn't built a tray habit. This gives 3 days
-  /// of progressive, escalating education so the transition is never a surprise.
-  ///
+  /// Gives 3 days of progressive education so the transition is never a surprise.
   /// Returns null on all other DOCs (caller should skip showing any banner).
   static String? smartModeTransitionWarning(int doc) {
     switch (doc) {
-      case 28:
-        return '⏳ Smart Feed activates in 3 days (DOC 31). '
+      case 27:
+        return '⏳ Smart Feed activates in 3 days (DOC 30). '
             'Start logging trays after each round now to avoid interruptions.';
+      case 28:
+        return '⚠️ Smart Feed activates in 2 days (DOC 30). '
+            'Tray logging will be required for every round.';
       case 29:
-        return '⚠️ Smart Feed activates tomorrow (DOC 30 end). '
-            'Tray logging will be required for every round. Log tonight\'s tray!';
-      case 30:
-        return '🚀 Smart Feed activates tonight. From DOC 31, each round needs a '
-            'tray check before the next round unlocks. You\'re almost there!';
+        return '🚀 Smart Feed activates tomorrow (DOC 30). Each round will need a '
+            'tray check before the next round unlocks. Log tonight\'s tray!';
       default:
         return null;
     }
@@ -250,7 +248,7 @@ class FeedStatusEngine {
     if (feedsDone >= maxFeeds) {
       return '✅ All feeds done today';
     }
-    if (hasPendingTray && doc > 30) {
+    if (hasPendingTray && doc >= 30) {
       return '👉 Log tray for last feed';
     }
     if (minutesUntilNext != null && minutesUntilNext > 0) {

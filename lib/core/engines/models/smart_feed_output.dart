@@ -1,4 +1,5 @@
 import '../../../models/feed_result.dart';
+import '../../utils/time_provider.dart';
 
 /// Advanced output from SmartFeedEngine with decision intelligence
 /// 
@@ -88,7 +89,7 @@ class SmartFeedOutput {
     this.decisionTrace = const [],
     this.engineVersion = "v2.1",
     DateTime? calculatedAt,
-  }) : calculatedAt = calculatedAt ?? DateTime.now();
+  }) : calculatedAt = calculatedAt ?? TimeProvider.now();
 
   /// Calculate adjustment from DOC feed
   double get feedAdjustment => finalFeed - docFeed;

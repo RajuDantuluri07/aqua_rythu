@@ -1,8 +1,26 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/engines/feed_decision_engine.dart';
 import '../../core/enums/tray_status.dart';
 
 enum FeedRoundState { done, current, upcoming }
+
+// T11 — Mode gates features by DOC range
+enum FeedMode { starter, guided, smart }
+
+FeedMode feedModeFromDoc(int doc) {
+  if (doc <= 7) return FeedMode.starter;
+  if (doc <= 30) return FeedMode.guided; // Fix #4: smart_feeding = (doc >= 31)
+  return FeedMode.smart;
+}
+
+String feedModeLabel(FeedMode mode) {
+  switch (mode) {
+    case FeedMode.starter: return 'Starter Mode — follow basic feeding';
+    case FeedMode.guided:  return 'Guided Mode — improving accuracy';
+    case FeedMode.smart:   return 'Smart Mode — AI optimized feeding';
+  }
+}
 
 class FeedTimelineCard extends StatefulWidget {
   final int round;
@@ -35,6 +53,39 @@ class FeedTimelineCard extends StatefulWidget {
   /// Null = no timer (done/upcoming cards, or no further rounds today).
   final DateTime? nextFeedAt;
 
+  /// T7 — One-line AI insight shown below the feed quantity.
+  final String? insight;
+
+  /// T8 — Feeding progress: rounds completed vs total planned today.
+  final int completedRounds;
+  final int totalRounds;
+
+  /// T9 — AI confidence score (0.0–1.0). Shows "AI X%" badge when provided.
+  final double? confidenceScore;
+
+  /// T10 — True when safety clamp was applied to the recommendation.
+  final bool isSafetyClamped;
+
+  /// T11 — DOC-derived feeding mode (Starter / Guided / Smart).
+  final FeedMode feedMode;
+
+  /// T13 — Show thumbs up/down feedback prompt on done card.
+  final bool showFeedbackPrompt;
+
+  /// T13 — Called when farmer rates the recommendation accuracy.
+  final void Function(bool isAccurate)? onFeedback;
+
+  /// Decision output from FeedDecisionEngine — action, delta, reason.
+  /// When provided, replaces the manual % comparison logic in the reason line.
+  final FeedDecision? decision;
+
+  /// Feed recommendation instruction from FeedRecommendationEngine.
+  /// Shows actionable next-feed guidance to the farmer.
+  final String? recommendationInstruction;
+
+  /// Whether this is the current round that should be worked on now.
+  final bool isCurrent;
+
   const FeedTimelineCard({
     super.key,
     required this.round,
@@ -57,6 +108,17 @@ class FeedTimelineCard extends StatefulWidget {
     this.isNext = false,
     this.isSmartFeed = false,
     this.nextFeedAt,
+    this.insight,
+    this.completedRounds = 0,
+    this.totalRounds = 0,
+    this.confidenceScore,
+    this.isSafetyClamped = false,
+    this.feedMode = FeedMode.guided,
+    this.showFeedbackPrompt = false,
+    this.onFeedback,
+    this.decision,
+    this.recommendationInstruction,
+    this.isCurrent = false,
   });
 
   @override
@@ -65,6 +127,9 @@ class FeedTimelineCard extends StatefulWidget {
 
 class _FeedTimelineCardState extends State<FeedTimelineCard> {
   bool _isSubmitting = false;
+
+  // T13 — Feedback state for done card
+  bool _feedbackGiven = false;
 
   // ── Live countdown timer ──────────────────────────────────────────────────
   Timer? _timer;
@@ -152,12 +217,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDone     = widget.state == FeedRoundState.done;
-    final isCurrent  = widget.state == FeedRoundState.current;
-    final isAdjusted = widget.recommendedFeedKg != widget.finalFeedKg;
+    final isDone    = widget.state == FeedRoundState.done;
+    final isCurrent = widget.state == FeedRoundState.current;
 
     if (isDone)    return _smartDoneCard();
-    if (isCurrent) return _smartCurrentCard(isAdjusted);
+    if (isCurrent) return _smartCurrentCard();
     return _upcomingCard();
   }
 
@@ -240,8 +304,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                         if (widget.onEdit != null)
                           GestureDetector(
                             onTap: () => _showEditDialog(context),
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 6),
+                            child: const Padding(
+                              padding: EdgeInsets.only(right: 6),
                               child: Icon(Icons.edit_rounded, size: 14, color: _slate400),
                             ),
                           ),
@@ -279,7 +343,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
           // ── Tray results: 4 columns ──────────────────────────────────
           if (hasTray) ...[
-            Divider(height: 1, color: _greenBorder),
+            const Divider(height: 1, color: _greenBorder),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
               child: Row(
@@ -322,7 +386,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
           // ── Supplements used ──────────────────────────────────────────
           if (hasSupplements) ...[
-            Divider(height: 1, color: _greenBorder),
+            const Divider(height: 1, color: _greenBorder),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: Column(
@@ -383,7 +447,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
           // ── Tray skipped banner ──────────────────────────────────────
           if (widget.isTraySkipped) ...[
-            Divider(height: 1, color: _greenBorder),
+            const Divider(height: 1, color: _greenBorder),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: _traySkippedBanner(),
@@ -392,10 +456,30 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
           // ── Log tray button (pending, not yet skipped) ───────────────
           if (widget.isPendingTray && widget.onLogTray != null) ...[
-            Divider(height: 1, color: _greenBorder),
+            const Divider(height: 1, color: _greenBorder),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: _logTrayButton(),
+            ),
+          ],
+
+          // T13 — Feedback prompt on the done card
+          if (widget.showFeedbackPrompt && !_feedbackGiven) ...[
+            const Divider(height: 1, color: _greenBorder),
+            _feedbackRow(),
+          ],
+          if (widget.showFeedbackPrompt && _feedbackGiven) ...[
+            const Divider(height: 1, color: _greenBorder),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 8, 14, 10),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline_rounded, size: 14, color: _green),
+                  SizedBox(width: 6),
+                  Text('Thanks! This helps improve recommendations.',
+                      style: TextStyle(fontSize: 11, color: _green, fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
           ],
         ],
@@ -407,9 +491,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   // SMART FEED — CURRENT CARD (3 states: too early / window / overdue)
   // ═══════════════════════════════════════════════════════════════════
 
-  Widget _smartCurrentCard(bool isAdjusted) {
-    final Color borderColor = _greenLight;
-    final hasTray = widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
+  Widget _smartCurrentCard() {
+    const Color borderColor = _greenLight;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -426,7 +509,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            // Header: ROUND label + ACTIVE badge + urgency
             Row(
               children: [
                 Text(
@@ -454,8 +537,30 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                     ),
                   ),
                 ),
+                if (widget.nextFeedAt != null) ...[
+                  const SizedBox(width: 6),
+                  _urgencyBadge(),
+                ],
               ],
             ),
+            // Mode label (subtle)
+            const SizedBox(height: 3),
+            Text(
+              feedModeLabel(widget.feedMode),
+              style: const TextStyle(fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
+            ),
+            // Feeding progress
+            if (widget.totalRounds > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${(widget.completedRounds / widget.totalRounds * 100).round()}% feeding completed today',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: _slate500,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Recommended Feed
@@ -489,85 +594,24 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   ),
               ],
             ),
-
-            // You will feed (only if manually edited)
-            if (widget.isManuallyEdited) ...[
-              const SizedBox(height: 8),
-              Text(
-                "You will feed: ${widget.finalFeedKg.toStringAsFixed(1)} kg",
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: _ink,
-                ),
-              ),
-            ],
-
-            // Based on tray feedback
-            if (widget.leftoverPercent != null) ...[
-              const SizedBox(height: 8),
-              Row(
+            // Safety clamp indicator
+            if (widget.isSafetyClamped) ...[
+              const SizedBox(height: 4),
+              const Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, size: 16, color: _amber),
-                  const SizedBox(width: 4),
+                  Icon(Icons.shield_outlined, size: 12, color: _amber),
+                  SizedBox(width: 4),
                   Text(
-                    "Based on tray feedback (${widget.leftoverPercent!.toStringAsFixed(0)}% leftover)",
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: _slate500,
-                    ),
+                    'Adjusted for safety',
+                    style: TextStyle(fontSize: 10, color: _amber, fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
             ],
 
-            // Last Feed
-            if (widget.lastFeedKg != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                "Last Feed: ${widget.lastFeedKg!.toStringAsFixed(1)} kg",
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: _slate500,
-                ),
-              ),
-            ],
-
-            // Tray Feedback
-            if (hasTray) ...[
-              const SizedBox(height: 12),
-              const Text(
-                "Tray Feedback:",
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _ink,
-                ),
-              ),
-              const SizedBox(height: 4),
-              ..._buildTrayFeedback(),
-            ],
-
-            // AI Adjustment
-            if (widget.correctionPercent != null && widget.correctionPercent != 0) ...[
-              const SizedBox(height: 12),
-              Text(
-                "AI Adjustment: ${widget.correctionPercent! > 0 ? '+' : ''}${widget.correctionPercent!.toStringAsFixed(0)}% (${(widget.recommendedFeedKg * widget.correctionPercent! / 100).toStringAsFixed(1)} kg)",
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _blue,
-                ),
-              ),
-            ],
-
-            // Override warning
-            if (isAdjusted) ...[
-              const SizedBox(height: 12),
-              _overrideWarning(),
-            ],
+            // Simple status message — one line, action-focused
+            const SizedBox(height: 10),
+            _simpleStatusLine(),
 
             // Confirm Feed Button
             const SizedBox(height: 16),
@@ -577,9 +621,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 onPressed: widget.onMarkDone,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _green,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
                 child: const Text(
@@ -595,6 +639,50 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
           ],
         ),
       ),
+    );
+  }
+
+  // ── Simple status line — replaces analytics/FCR block ────────────────────
+  // Shows one clear farming signal. No numbers, no comparisons, no trends.
+  Widget _simpleStatusLine() {
+    final String message;
+    final Color color;
+    final IconData icon;
+
+    final bool highLeftover =
+        widget.leftoverPercent != null && widget.leftoverPercent! > 15;
+    final bool bigReduction =
+        widget.correctionPercent != null && widget.correctionPercent! < -5;
+    final bool smallReduction =
+        widget.correctionPercent != null && widget.correctionPercent! < -2;
+
+    if (highLeftover || bigReduction) {
+      message = 'Reduce feed slightly';
+      color = _amber;
+      icon = Icons.trending_down_rounded;
+    } else if (widget.isPendingTray || smallReduction) {
+      message = 'Check tray before next feed';
+      color = _amber;
+      icon = Icons.checklist_rounded;
+    } else {
+      message = 'Shrimp eating well';
+      color = _green;
+      icon = Icons.check_circle_outline_rounded;
+    }
+
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 6),
+        Text(
+          message,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 
@@ -673,6 +761,224 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             style: const TextStyle(
               fontSize: 13,
               color: _slate500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── T6 — Urgency badge ────────────────────────────────────────────────────
+  Widget _urgencyBadge() {
+    final mins = _timeRemaining.inMinutes;
+    final Color color;
+    final String label;
+    if (_isOverdue) {
+      color = _red; label = 'Feed Now';
+    } else if (mins <= 30) {
+      color = _red; label = 'Due Soon';
+    } else if (mins <= 60) {
+      color = _amber; label = 'Upcoming';
+    } else {
+      color = _green; label = 'Safe';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── T12 — Priority signal builder ────────────────────────────────────────
+  // Picks the right body signals based on context severity.
+  // Rules (max 2 visible signals):
+  //   Critical (overdue or >20% correction) → insight only (urgency in header)
+  //   Major issue (>20% leftover or >10% correction) → insight + impact only
+  //   Normal / Starter mode → reason + impact (T4 style, no insight)
+  //   Guided/Smart normal → reason + impact + insight (if available)
+  List<Widget> _buildBodySignals() {
+    final bool isCritical = _isOverdue ||
+        (widget.correctionPercent != null && widget.correctionPercent!.abs() > 20);
+    final bool hasMajorIssue = (widget.leftoverPercent != null && widget.leftoverPercent! > 20) ||
+        (widget.correctionPercent != null && widget.correctionPercent!.abs() > 10);
+
+    // T11 gate: AI insight only for Guided (limited) and Smart modes
+    final bool insightAllowed = widget.insight != null &&
+        widget.feedMode != FeedMode.starter;
+
+    if (isCritical && insightAllowed) {
+      // Critical: show insight only — urgency badge already in header covers the 2nd signal
+      return [_insightLine(widget.insight!)];
+    }
+
+    if (hasMajorIssue && insightAllowed) {
+      // Major issue: insight replaces reason, impact stays
+      return [_insightLine(widget.insight!)];
+    }
+
+    // Normal: reason + impact (always shown, including Starter mode)
+    final reasonWidget = _feedReasonLine();
+    if (!insightAllowed || widget.insight == null) {
+      return [reasonWidget];
+    }
+
+    // Guided/Smart normal: reason + impact + insight (3 pieces of info but
+    // reason+impact count as 1 signal since they're visually paired)
+    return [
+      reasonWidget,
+      const SizedBox(height: 10),
+      _insightLine(widget.insight!),
+    ];
+  }
+
+  // ── T13 — Feedback row (thumbs up / down) ────────────────────────────────
+  Widget _feedbackRow() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      child: Row(
+        children: [
+          const Text(
+            'Was this recommendation accurate?',
+            style: TextStyle(fontSize: 11, color: _slate500, fontWeight: FontWeight.w600),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () {
+              setState(() => _feedbackGiven = true);
+              widget.onFeedback?.call(true);
+            },
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _green.withOpacity(0.3)),
+              ),
+              child: const Icon(Icons.thumb_up_rounded, size: 16, color: _green),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {
+              setState(() => _feedbackGiven = true);
+              widget.onFeedback?.call(false);
+            },
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _red.withOpacity(0.3)),
+              ),
+              child: const Icon(Icons.thumb_down_rounded, size: 16, color: _red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── T4 — Feed reasoning line ──────────────────────────────────────────────
+  // T4 + GAP 2 — reason WHY this feed + consequence WHAT it means
+  Widget _feedReasonLine() {
+    final String reason;
+    final String impact;
+    final Color impactColor;
+
+    if (widget.adjustmentReason != null && widget.adjustmentReason!.isNotEmpty) {
+      reason = widget.adjustmentReason!;
+      impact = 'Check tray result after feeding';
+      impactColor = _slate400;
+    } else if (widget.correctionPercent != null && widget.correctionPercent! < -2) {
+      final pct = widget.correctionPercent!.abs().round();
+      reason = 'Reduced by $pct% — tray showed leftover';
+      impact = 'Will help bring FCR down';
+      impactColor = _green;
+    } else if (widget.correctionPercent != null && widget.correctionPercent! > 2) {
+      final pct = widget.correctionPercent!.round();
+      reason = 'Increased by $pct% — shrimp eating well';
+      impact = 'Good for growth this week';
+      impactColor = _green;
+    } else if (widget.leftoverPercent != null && widget.leftoverPercent! > 15) {
+      reason = 'Maintained — some tray leftover seen';
+      impact = 'Watch tray closely next round';
+      impactColor = _amber;
+    } else {
+      reason = 'Maintained — shrimp are eating well';
+      impact = 'Growth on track';
+      impactColor = _green;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.info_outline_rounded, size: 13, color: _slate400),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                reason,
+                style: const TextStyle(fontSize: 11, color: _slate500, fontStyle: FontStyle.italic),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 17),
+          child: Text(
+            '→ $impact',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: impactColor),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── T7 — AI Insight block ─────────────────────────────────────────────────
+  Widget _insightLine(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_rounded, size: 14, color: _blue),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _blue,
+              ),
             ),
           ),
         ],
@@ -886,7 +1192,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: _slate300,
+                    color: _slate500,
                   ),
                 ),
                 const Text(
@@ -1071,7 +1377,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 ),
                 SizedBox(width: 4),
                 Text(
-                  "· neutral factor applied",
+                  "— next round unchanged",
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,

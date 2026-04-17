@@ -2,17 +2,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/pond_repository.dart';
 import '../repositories/feed_repository.dart';
 import '../repositories/tray_repository.dart';
-import '../core/engines/smart_feed_engine.dart';
+import 'feed_service.dart';
 
 class FarmService {
   final pondRepo = PondRepository();
   final feedRepo = FeedRepository();
   final trayRepo = TrayRepository();
 
-  /// Daily orchestration: recalculate feed for the next DOC based on
-  /// current tray readings and FCR. Delegates all logic to SmartFeedEngine.
+  /// Daily orchestration: recalculate feed for the next DOC.
   Future<void> runDailyCycle(String pondId) async {
-    await SmartFeedEngine.recalculateFeedPlan(pondId);
+    await FeedService().recalculateFeedPlan(pondId);
   }
 
 

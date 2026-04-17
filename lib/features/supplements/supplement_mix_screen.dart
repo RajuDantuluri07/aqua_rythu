@@ -66,10 +66,8 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
         ) ??
         false;
 
-    if (!shouldStop || !mounted) {
-      return;
-    }
-
+    if (!shouldStop) return;
+    if (!mounted) return;
     ref.read(supplementProvider.notifier).deleteSupplement(plan.id);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -81,8 +79,20 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final plans = _pondPlans();
-    final logs = _pondLogs();
+    final plans = ref
+        .watch(supplementProvider)
+        .where((plan) => plan.appliesToPond(widget.pondId))
+        .toList()
+      ..sort((a, b) {
+        final aDate = a.type == SupplementType.feedMix ? a.startDate : a.date;
+        final bDate = b.type == SupplementType.feedMix ? b.startDate : b.date;
+        return (bDate ?? DateTime(2000)).compareTo(aDate ?? DateTime(2000));
+      });
+    final logs = ref
+        .watch(supplementLogProvider)
+        .where((log) => log.pondId == widget.pondId)
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final today = DateTime.now();
     final todayPlans = plans.where((plan) => plan.isActiveOnDate(today)).toList();
     final activePlans = todayPlans.where((plan) => !plan.isPaused).toList();
@@ -163,26 +173,6 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     );
   }
 
-  List<Supplement> _pondPlans() {
-    return ref
-        .watch(supplementProvider)
-        .where((plan) => plan.appliesToPond(widget.pondId))
-        .toList()
-      ..sort((a, b) {
-        final aDate = a.type == SupplementType.feedMix ? a.startDate : a.date;
-        final bDate = b.type == SupplementType.feedMix ? b.startDate : b.date;
-        return (bDate ?? DateTime(2000)).compareTo(aDate ?? DateTime(2000));
-      });
-  }
-
-  List<SupplementLog> _pondLogs() {
-    return ref
-        .watch(supplementLogProvider)
-        .where((log) => log.pondId == widget.pondId)
-        .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-  }
-
   Widget _sectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12, left: 4),
@@ -258,7 +248,7 @@ class _PlanCard extends StatelessWidget {
     final accent = isFeed ? Colors.indigo : Colors.teal;
     final subtitle = isFeed
         ? "${_dateRange(plan.startDate, plan.endDate)} • ${plan.feedingTimes.join(', ')}"
-        : "${_singleDate(plan.date)} • ${_formatTime(plan.effectiveWaterTime ?? '')} • ${_repeatText(plan.frequencyDays)}";
+        : "${_singleDate(plan.date)} • ${plan.effectiveWaterTime != null ? _formatTime(plan.effectiveWaterTime!) : 'No time set'} • ${_repeatText(plan.frequencyDays)}";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -368,6 +358,14 @@ class _PlanCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
+          if (plan.items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                "No items",
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+              ),
+            ),
           ...plan.items.map((item) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
@@ -446,6 +444,8 @@ class _ApplicationLedger extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayed = logs.take(20).toList();
+    final hasMore = logs.length > 20;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -455,7 +455,24 @@ class _ApplicationLedger extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...logs.take(20).map((log) => _ApplicationLogRow(log: log)),
+          ...displayed.asMap().entries.map(
+                (e) => _ApplicationLogRow(
+                  log: e.value,
+                  isLast: !hasMore && e.key == displayed.length - 1,
+                ),
+              ),
+          if (hasMore)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              child: Text(
+                "Showing 20 of ${logs.length} entries",
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -464,8 +481,9 @@ class _ApplicationLedger extends StatelessWidget {
 
 class _ApplicationLogRow extends StatelessWidget {
   final SupplementLog log;
+  final bool isLast;
 
-  const _ApplicationLogRow({required this.log});
+  const _ApplicationLogRow({required this.log, this.isLast = false});
 
   @override
   Widget build(BuildContext context) {
@@ -493,9 +511,11 @@ class _ApplicationLogRow extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
+      decoration: isLast
+          ? null
+          : const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.border)),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

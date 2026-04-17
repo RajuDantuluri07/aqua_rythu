@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/enums/tray_status.dart';
 import '../../services/feed_service.dart';
-import '../../core/engines/smart_feed_engine.dart';
 import '../../core/utils/logger.dart';
 import '../pond/pond_dashboard_provider.dart';
 
@@ -41,8 +40,8 @@ class FeedHistoryNotifier
   /// 🔄 SMART FEED TRIGGER: Trigger recalculation after tray update
   void _triggerSmartFeedRecalculation(String pondId) {
     // Fire-and-forget Smart Feed recalculation
-    SmartFeedEngine.recalculateFeedPlan(pondId).catchError((e) {
-      AppLogger.error('Smart Feed recalculation trigger failed', e);
+    _feedService.recalculateFeedPlan(pondId).catchError((e) {
+      AppLogger.error('Feed recalculation trigger failed', e);
     });
   }
 
@@ -51,16 +50,23 @@ class FeedHistoryNotifier
     if (dashboardState.selectedPond == pondId) {
       return dashboardState.roundFeedAmounts.values.fold(0.0, (sum, val) => sum + val);
     }
+    // Fix #5: returns 0 for non-selected ponds — callers should supply expectedFeed
+    // directly to avoid this broken path.
     return 0.0;
   }
 
   /// 🍽 LOG REAL-TIME FEEDING
+  ///
+  /// [expectedFeed] — total planned feed for the day (all rounds combined).
+  /// Fix #5: pass this from the caller so the expected value is correct for every
+  /// pond, not just the currently selected one (which was the previous broken path).
   Future<void> logFeeding({
     required String pondId,
     required int doc,
     required int round,
     required double qty,
     double? smartFeedQty,
+    double expectedFeed = 0.0,
   }) async {
     if (qty <= 0) {
       return;
@@ -68,7 +74,11 @@ class FeedHistoryNotifier
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final expected = _expectedFeedForDoc(pondId, doc);
+    // Fix #5: prefer caller-supplied expected; only fall back to state lookup
+    // for the currently-selected pond (still correct for that case).
+    final expected = expectedFeed > 0
+        ? expectedFeed
+        : _expectedFeedForDoc(pondId, doc);
 
     final List<FeedHistoryLog> pondLogs =
     List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
@@ -251,10 +261,11 @@ class FeedHistoryNotifier
 
         for (final entry in latestByDate.entries) {
           final feedGiven = (entry.value['feed_given'] as num?)?.toDouble() ?? 0.0;
+          final doc = (entry.value['doc'] as int?) ?? 0;
           cumulative += feedGiven;
           logs.add(FeedHistoryLog(
             date: DateTime.parse(entry.key),
-            doc: 0, // doc not stored in feed_logs; not needed for dashboard totals
+            doc: doc, 
             rounds: [feedGiven], // single value representing day total
             trayStatuses: [],
             expected: 0.0,
