@@ -41,11 +41,7 @@ class FeedEngineConstants {
   // ── Feed cost constants ───────────────────────────────────────────────────
 
   /// Approximate cost of shrimp feed per kg (₹).
-  /// Used for ₹-framed warnings (e.g. "Feeding early wastes ₹X").
-  /// Typical commercial pellet range: ₹60–90/kg. Conservative midpoint used.
-  /// BUG-13 fix: was hardcoded as ₹20/kg in FeedStatusEngine.estimateFeedLoss,
-  /// which under-stated the loss 3–4x. Centralised here for easy tuning.
-  /// TODO V2: make this configurable per-farm (user-entered purchase price).
+  /// SSOT is app_constants.dart kFeedCostPerKg — this value must stay in sync.
   static const double feedCostPerKg = 70.0;
 
   /// Default market price per kg of harvested L. vannamei (₹).

@@ -1,6 +1,10 @@
 // Feed Orchestrator — Pure Computation Entry Point
 //
-// Pipeline:
+// 🚫 DO NOT ADD BUSINESS LOGIC HERE
+// This layer only orchestrates engine calls.
+// All feed corrections live in SmartFeedEngineV2.
+//
+// Pipeline (FINAL — do not insert extra multipliers):
 //   INPUTS (FeedInput from DB)
 //     ↓
 //   MasterFeedEngine        → base expected feed (DOC ramp, density scaling)
@@ -9,7 +13,11 @@
 //     ↓
 //   FeedIntelligenceEngine  → expected vs actual, deviation, status
 //     ↓
-//   SmartFeedEngine         → apply corrections (tray, growth, environment, FCR)
+//   SmartFeedEngineV2       → apply ALL corrections (tray, growth, water, DOC)
+//     ↓
+//   FCREngine               → single FCR multiplier (intelligent stage only)
+//     ↓
+//   combinedFactor.clamp(0.70, 1.30)  → ONLY clamp in this layer
 //     ↓
 //   OrchestratorResult (returned to caller — NO DB writes here)
 //
@@ -26,7 +34,7 @@ import 'feed_input_builder.dart';
 import 'feed_intelligence_engine.dart';
 import 'feed_recommendation_engine.dart';
 import 'master_feed_engine.dart';
-import 'smart_feed_engine.dart';
+import 'smart_feed_engine.dart' show CorrectionResult; // data model only — no engine calls
 import 'smart_feed_engine_v2.dart';
 import 'models/feed_input.dart';
 import '../utils/logger.dart';
@@ -44,7 +52,7 @@ class OrchestratorResult {
   /// Stage 2: Intelligence analysis (expected vs actual).
   final IntelligenceResult intelligence;
 
-  /// Stage 3: Correction factors from SmartFeedEngine.
+  /// Stage 3: Correction factors from SmartFeedEngineV2.
   final CorrectionResult correction;
 
   /// Stage 4: Decision — single action + reason + recommendations.
@@ -116,10 +124,9 @@ class FeedOrchestrator {
         ? FCREngine.correction(input.lastFcr)
         : 1.0;
 
-    // ── Stage 3: Smart corrections ────────────────────────────────────────
+    // ── Stage 3: Smart corrections (SmartFeedEngineV2 — single source) ──────
     // V2 handles: tray appetite, growth/ABW, water quality, DOC-stage factor.
-    // FCR and deviation-enforcement are applied on top by the orchestrator
-    // because V2 is a pure tray/growth/water engine with no history awareness.
+    // FCR is applied on top (intelligent stage only). Nothing else touches feed.
     //
     // Tray history prep:
     //   FeedInputBuilder returns recentTrayLeftoverPct newest-first and excludes
@@ -158,9 +165,9 @@ class FeedOrchestrator {
       ammonia: input.ammonia,
     );
 
-    final intelligenceFactor =
-        SmartFeedEngine.computeIntelligenceFactor(intelligence);
-
+    // ── TICKET 1/3/4: Final feed pipeline — V2 is the ONLY correction source.
+    // MasterFeedEngine → SmartFeedEngineV2 → FCR → clamp(0.70, 1.30) → FINAL.
+    // No intelligenceFactor. Single clamp here; V2 has its own internal clamp.
     final CorrectionResult correction;
     if (v2Result.isCriticalStop) {
       correction = CorrectionResult(
@@ -177,17 +184,12 @@ class FeedOrchestrator {
         isCriticalStop: true,
       );
     } else {
-      // Apply FCR then deviation-enforcement on top of V2 final feed.
-      // Guard order: clamp the combined ratio first, then derive finalFeed from it
-      // so correction.finalFeed == baseFeed × correction.combinedFactor always.
-      // Previous code clamped combinedFactor after the fact, so finalFeed could
-      // reach 1.87× baseFeed while combinedFactor reported 1.30 — silent overfeeding.
-      final rawFeedFinal = v2Result.finalFeed * fcrFactor * intelligenceFactor;
+      // V2 finalFeed × FCR → ratio-clamp → final. One clamp, no extra multipliers.
+      final rawFeedFinal = v2Result.finalFeed * fcrFactor;
       final combinedFactor = baseFeed > 0
           ? (rawFeedFinal / baseFeed).clamp(0.70, 1.30)
           : 1.0;
-      final feedFinal =
-          (baseFeed * combinedFactor).clamp(kAbsoluteMinFeed, baseFeed * 1.30);
+      final feedFinal = baseFeed * combinedFactor;
 
       final alerts = <String>[
         if (v2Result.waterFactor <= 0.0)
@@ -201,8 +203,6 @@ class FeedOrchestrator {
       final extraReasons = <String>[
         if (fcrFactor != 1.0)
           'FCR adjustment: ${fcrFactor > 1.0 ? '+' : ''}${((fcrFactor - 1) * 100).toStringAsFixed(0)}%',
-        if (intelligenceFactor != 1.0)
-          'Deviation enforcement: ${intelligenceFactor > 1.0 ? '+' : ''}${((intelligenceFactor - 1) * 100).toStringAsFixed(0)}% (${intelligence.statusLabel})',
       ];
 
       correction = CorrectionResult(
@@ -212,7 +212,7 @@ class FeedOrchestrator {
         samplingFactor: 1.0, // V2 bakes sampling decay into growthFactor
         environmentFactor: v2Result.waterFactor,
         fcrFactor: fcrFactor,
-        intelligenceFactor: intelligenceFactor,
+        intelligenceFactor: 1.0, // removed — no deviation enforcement outside V2
         combinedFactor: double.parse(combinedFactor.toStringAsFixed(3)),
         reasons: [...v2Result.reasons, ...extraReasons],
         alerts: alerts,

@@ -9,6 +9,7 @@ import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:aqua_rythu/features/growth/growth_provider.dart';
 import 'package:aqua_rythu/features/growth/sampling_log.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
+import 'package:aqua_rythu/core/utils/shrimp_metrics.dart';
 
 // ── Design constants (matches pond dashboard light theme) ─────────────────────
 const _bgDark      = Color(0xFFF5F7FA);
@@ -46,13 +47,8 @@ class DashboardScreen extends ConsumerWidget {
           ? growthLogs.first.abw
           : (pond.currentAbw ?? 0.0);
 
-      // survival estimate
-      double survival = 1.0;
-      if (doc > 60) {
-        survival = 0.90;
-      } else if (doc > 30) survival = 0.95;
-
-      final double biomass = (pond.seedCount * survival * abw) / 1000;
+      final double survival = estimateSurvival(doc);
+      final double biomass = calcBiomassKg(pond.seedCount, abw, survival);
       final double totalFeed = logs.isNotEmpty ? logs.first.cumulative : 0.0;
       final double fcr   = biomass > 0.1 ? totalFeed / biomass : 0.0;
 
@@ -534,11 +530,8 @@ class DashboardScreen extends ConsumerWidget {
         feedLogs.take(7).toList().reversed.toList(); // oldest → newest
     for (final log in last7) {
       final double abw = _abwAtDoc(growthLogs, log.doc) ?? 0;
-      double survival = 1.0;
-      if (log.doc > 60) {
-        survival = 0.90;
-      } else if (log.doc > 30) survival = 0.95;
-      final double biomass = (seedCount * survival * abw) / 1000;
+      final double survival = estimateSurvival(log.doc);
+      final double biomass = calcBiomassKg(seedCount, abw, survival);
       final double fcr = biomass > 0.1 ? log.cumulative / biomass : 0;
       if (fcr > 0) result.add(_FCRPoint(date: log.date, fcr: fcr));
     }

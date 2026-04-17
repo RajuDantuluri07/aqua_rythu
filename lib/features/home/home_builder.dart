@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:aqua_rythu/core/constants/expected_abw_table.dart';
+import 'package:aqua_rythu/core/engines/insight_engine.dart';
 import 'package:aqua_rythu/core/enums/tray_status.dart';
 import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:aqua_rythu/features/growth/sampling_log.dart';
@@ -48,19 +49,47 @@ class HomeBuilder {
     final bool abwIsEstimated = currentAbw <= 0;
     final double effectiveAbw = abwIsEstimated ? getExpectedABW(doc) : currentAbw;
 
-    // Recalculate FCR using effectiveAbw so KPI is never blank
     final bool fcrIsEstimated = pondFcr <= 0 && abwIsEstimated;
     final double effectiveFcr = pondFcr > 0 ? pondFcr : _estimateFcr(doc);
 
+    final double wastePercent = _rollingWaste(trayLogs);
+
+    // ── Insight Engine ────────────────────────────────────────────────────────
+    final int healthScore = InsightEngine.computeHealthScore(
+      fcr: effectiveFcr,
+      currentAbw: currentAbw,
+      expectedAbw: expectedAbw,
+      wastePercent: wastePercent,
+      streak: streak,
+    );
+
+    final bool hasSamplingData = growthLogs.isNotEmpty;
+    final DateTime? lastSampleDate = hasSamplingData ? growthLogs.first.date : null;
+
+    final insights = InsightEngine.generate(
+      doc: doc,
+      fcr: effectiveFcr,
+      currentAbw: currentAbw,
+      expectedAbw: expectedAbw,
+      wastePercent: wastePercent,
+      streak: streak,
+      healthScore: healthScore,
+      hasSamplingData: hasSamplingData,
+      lastSampleDate: lastSampleDate,
+      consumedFeed: consumedFeed,
+      plannedFeed: plannedFeed,
+    );
+
     return HomeViewModel(
-      isEmpty:    noData,
-      alert:      _buildAlert(doc, feedsDone, maxFeeds, lastFeedTime, trayDone, roundFeedStatus, effectiveAbw, expectedAbw),
-      kpis:       _buildKpis(doc, consumedFeed, plannedFeed, effectiveAbw, abwIsEstimated, effectiveFcr, fcrIsEstimated),
-      growth:     _buildGrowth(doc, currentAbw, expectedAbw),
-      waste:      _buildWaste(trayLogs),
-      trend:      _buildTrend(feedHistory),
-      activities: _buildActivities(feedHistory, trayLogs, growthLogs, expectedAbw),
-      insight:    _buildInsight(doc, effectiveFcr, currentAbw, expectedAbw, _rollingWaste(trayLogs), streak, consumedFeed, plannedFeed),
+      isEmpty:     noData,
+      alert:       _buildAlert(doc, feedsDone, maxFeeds, lastFeedTime, trayDone, roundFeedStatus, effectiveAbw, expectedAbw),
+      kpis:        _buildKpis(doc, consumedFeed, plannedFeed, effectiveAbw, abwIsEstimated, effectiveFcr, fcrIsEstimated),
+      growth:      _buildGrowth(doc, currentAbw, expectedAbw),
+      waste:       _buildWaste(trayLogs),
+      trend:       _buildTrend(feedHistory),
+      activities:  _buildActivities(feedHistory, trayLogs, growthLogs, expectedAbw),
+      insights:    insights,
+      healthScore: healthScore,
     );
   }
 
@@ -261,8 +290,11 @@ class HomeBuilder {
       final diff = ((avgA - avgI) / avgI * 100).round();
       if (diff > 8) {
         insight = 'Feeding $diff% above ideal';
-      } else if (diff < -8) insight = 'Feeding ${diff.abs()}% below ideal';
-      else insight = 'Feed aligned with growth ✅';
+      } else if (diff < -8) {
+        insight = 'Feeding ${diff.abs()}% below ideal';
+      } else {
+        insight = 'Feed aligned with growth ✅';
+      }
     }
     return FeedTrendData(actual: actual, ideal: ideal, insight: insight, hasData: true);
   }
@@ -352,70 +384,6 @@ class HomeBuilder {
     if (ratio < 0.85) return '⚠️ growth slow';
     if (ratio > 1.20) return '✅ ahead of curve';
     return null;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // SMART INSIGHT (priority-ordered, one message)
-  // ──────────────────────────────────────────────────────────────────────────
-
-  static InsightData? _buildInsight(
-    int doc,
-    double fcr,
-    double currentAbw,
-    double expectedAbw,
-    double wastePercent,
-    int streak,
-    double consumedFeed,
-    double plannedFeed,
-  ) {
-    // 1. Feed correction opportunity (FCR too high) — show concrete overfeeding %
-    if (fcr > 1.4) {
-      final overpct = ((fcr - 1.4) / 1.4 * 100).round();
-      final feedCtx = consumedFeed > 0 && plannedFeed > 0
-          ? ' (${consumedFeed.toStringAsFixed(1)} kg consumed vs ${plannedFeed.toStringAsFixed(1)} kg planned)'
-          : '';
-      return InsightData(
-        'Overfeeding by ~$overpct%$feedCtx — reduce feed 5–10% to improve FCR',
-      );
-    }
-
-    // 2. Growth issue — show actual vs expected with numbers
-    if (currentAbw > 0 && expectedAbw > 0 && currentAbw / expectedAbw < 0.85) {
-      final gap = (expectedAbw - currentAbw).toStringAsFixed(1);
-      return InsightData(
-        'Growth slow: ${currentAbw.toStringAsFixed(1)} g vs ${expectedAbw.toStringAsFixed(1)} g ideal (−$gap g at DOC $doc) — check water & aeration',
-      );
-    }
-
-    // 3. FCR warning — show exact number vs target
-    if (fcr > 1.2 && fcr <= 1.4) {
-      return InsightData(
-        'FCR ${fcr.toStringAsFixed(2)} vs target 1.2 — tighten tray checks to bring it down',
-      );
-    }
-
-    // 4. High waste — show % with consequence
-    if (wastePercent > 20) {
-      return InsightData(
-        '${wastePercent.round()}% tray leftover on average — reduce next feed by 8% to cut FCR',
-      );
-    }
-
-    // 5. Positive reinforcement — show exact FCR and what it means
-    if (fcr > 0 && fcr <= 1.2) {
-      return InsightData(
-        'FCR ${fcr.toStringAsFixed(2)} ✅ — on target. Keep this schedule for a strong harvest.',
-      );
-    }
-
-    // 6. Streak praise
-    if (streak >= 5) {
-      return InsightData(
-        '$streak-day feeding streak — consistent timing is your best FCR tool',
-      );
-    }
-
-    return null; // not enough data
   }
 
   // ──────────────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@
 // Recommendation logic ported from:
 //   _archive/smart_feed_decision_engine.dart → generateRecommendations()
 //
-// Call site: FeedOrchestrator.compute() — after SmartFeedEngine.
+// Call site: FeedOrchestrator.compute() — after SmartFeedEngineV2.
 // Result lives in OrchestratorResult.decision.
 
 import '../enums/feed_stage.dart';
@@ -248,7 +248,7 @@ class FeedDecisionEngine {
   /// archived engine — adapted to accept [CorrectionResult]-style factors
   /// directly rather than the old FeedInput.
   ///
-  /// [trayFactor]       Tray correction factor from SmartFeedEngine.
+  /// [trayFactor]       Tray correction factor from SmartFeedEngineV2.
   /// [growthFactor]     Growth correction factor.
   /// [fcrFactor]        FCR correction factor.
   /// [confidenceScore]  Derived from feed stage (blind=0.4, transitional=0.65, intelligent=0.85).

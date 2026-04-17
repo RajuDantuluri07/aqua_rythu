@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/shrimp_metrics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'growth_provider.dart';
@@ -42,8 +43,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
   }
 
   double _calculateBiomass(int seedCount, double survival) {
-    if (_avgWeight == 0) return 0;
-    return (seedCount * survival * _avgWeight) / 1000;
+    return calcBiomassKg(seedCount, _avgWeight, survival);
   }
 
   String? _warningMessage;
@@ -179,10 +179,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     }
     final seedCount = pond?.seedCount ?? 100000;
 
-    // Simple survival model
-    double survival = 1.0;
-    if (doc > 30) survival = 0.95;
-    if (doc > 60) survival = 0.90;
+    final double survival = estimateSurvival(doc);
 
     final currentAbw = logs.isNotEmpty ? logs.first.averageBodyWeight : 0.0;
     const targetAbw = 5.0; // Target ABW at this DOC (can be improved)

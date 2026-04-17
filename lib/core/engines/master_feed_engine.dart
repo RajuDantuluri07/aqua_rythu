@@ -12,7 +12,7 @@
 //   - Use FCR
 //   - Use biomass
 //
-// All factor adjustments are applied downstream by SmartFeedEngine.
+// All factor adjustments are applied downstream by SmartFeedEngineV2.
 // The single orchestration path is FeedOrchestrator.
 
 // Fix: import must appear before declarations (Dart directive order rule)
@@ -109,7 +109,7 @@ class MasterFeedEngine {
   // ── TRAY ACTIVATION ───────────────────────────────────────────────────────
 
   /// Tray adjustment activates at DOC 15 for hatchery, DOC 3 for nursery.
-  /// Only used during plan generation — runtime corrections use SmartFeedEngine.
+  /// Only used during plan generation — runtime corrections use SmartFeedEngineV2.
   static bool isTrayActive(String stockingType, int doc) {
     if (stockingType == 'hatchery') return doc >= 15;
     return doc >= 3;

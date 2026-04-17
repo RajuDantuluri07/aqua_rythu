@@ -1,4 +1,5 @@
 import '../constants/expected_abw_table.dart';
+import '../utils/shrimp_metrics.dart';
 import 'engine_constants.dart';
 
 /// Pure Dart — no Flutter dependencies.
@@ -59,8 +60,7 @@ class PondValueEngine {
     final double effectiveAbwG =
         avgWeightG > 0 ? avgWeightG : getExpectedABW(doc);
 
-    // Biomass = stockCount × ABW_g / 1000 → kg; adjusted by survival
-    final double biomassKg = (stockCount * effectiveAbwG * survivalRate) / 1000;
+    final double biomassKg = calcBiomassKg(stockCount, effectiveAbwG, survivalRate);
     final double baseValue = biomassKg * _defaultPricePerKg;
 
     // Behavioural adjustments

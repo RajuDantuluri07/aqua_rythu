@@ -1,4 +1,4 @@
-// Smart Feed Engine V2 — Production-Ready Spec Implementation
+// Smart Feed Engine V2 — 🔒 SINGLE SOURCE OF TRUTH for feed corrections
 //
 // Formula:
 //   finalFeed = baseFeed × trayFactor × growthFactor × waterFactor × docFactor
@@ -8,6 +8,7 @@
 //   • baseFeed always comes from MasterFeedEngine (never recomputed here)
 //   • Each factor is a pure function — no DB, no UI, no side effects
 //   • Safety clamp: finalFeed ∈ [70%, 130%] of baseFeed
+//   • DO NOT add corrections outside this file — all feed factors live here
 //   • Critical water stop: DO < 3.5 → finalFeed = 0
 //   • Water dominance: if waterFactor < 1.0, tray/growth boosts are suppressed
 //   • Manual override: if isManualOverride, engine is skipped entirely

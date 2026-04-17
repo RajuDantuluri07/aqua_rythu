@@ -572,7 +572,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       trayResults: newMap,
     );
 
-    // Persist tray log to DB + trigger SmartFeedEngine.
+    // Persist tray log to DB + trigger FeedService.applyTrayAdjustment.
     // On success: reload trayProvider from DB so it's backed by persisted state.
     // On failure: set trayPersistFailed so the screen can show a retry banner.
     // The round is already unlocked in the current session because TrayLogScreen
@@ -591,12 +591,12 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           {},
       aggregatedStatus: finalStatus,
     ).then((_) async {
-      // CRITICAL: After tray is logged, SmartFeedEngine updates feed_rounds
+      // CRITICAL: After tray is logged, FeedService.applyTrayAdjustment updates feed_rounds
       // with new factor adjustments. Reload feed amounts to display new suggestion.
       // Without this, feed_rounds table is updated but UI shows stale data.
       ref.invalidate(trayProvider(pondId));
       
-      // 🔥 FIX: Reload feed data so next feed suggestion shows SmartFeedEngine's adjustment
+      // 🔥 FIX: Reload feed data so next feed suggestion shows SmartFeedEngineV2's adjustment
       await loadTodayFeed(pondId);
       
       // Update currentFeed in state after reload

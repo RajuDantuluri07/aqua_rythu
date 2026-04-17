@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:aqua_rythu/core/engines/insight_engine.dart';
+export 'package:aqua_rythu/core/engines/insight_engine.dart' show Insight, InsightSeverity;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ALERT
@@ -153,16 +155,6 @@ class ActivityItem {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// INSIGHT
-// ══════════════════════════════════════════════════════════════════════════════
-
-class InsightData {
-  final String message;
-
-  const InsightData(this.message);
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 // HOME VIEW MODEL
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -175,7 +167,12 @@ class HomeViewModel {
   final WasteData waste;
   final FeedTrendData trend;
   final List<ActivityItem> activities;
-  final InsightData? insight;
+
+  /// Top insights from InsightEngine, sorted by severity. Empty = no data yet.
+  final List<Insight> insights;
+
+  /// Farm health score 0–100 from InsightEngine.computeHealthScore().
+  final int healthScore;
 
   /// True when the pond has no feed/tray/growth data at all.
   final bool isEmpty;
@@ -187,7 +184,8 @@ class HomeViewModel {
     required this.waste,
     required this.trend,
     required this.activities,
+    required this.insights,
+    required this.healthScore,
     required this.isEmpty,
-    this.insight,
   });
 }
