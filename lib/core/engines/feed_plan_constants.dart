@@ -1,7 +1,5 @@
-/// Feed round configuration keyed by DOC range.
-///
-/// DOC 1–30  → 4 rounds  (NORMAL/TRAY_HABIT) | equal splits [0.25, 0.25, 0.25, 0.25] | timings 06:00, 11:00, 16:00, 21:00
-/// DOC 31+   → 4 rounds  (SMART)              | biomass-based, tray × smart × safety guardrails
+/// Feed round configuration — all DOCs use 4 equal rounds.
+/// Farmer controls active rounds in the feed schedule screen.
 library;
 
 class FeedConfig {
@@ -41,21 +39,8 @@ const FeedConfig standardFeedConfig = FeedConfig(
   timingsDisplay: ["06:00 AM", "11:00 AM", "04:00 PM", "09:00 PM"],
 );
 
-/// Feed configuration for DOC 1–7: 2 rounds at 50/50 split.
-/// Matches [Pond.feedRoundsForDoc] which returns 2 for DOC ≤ 7.
-/// Rounds 3 and 4 have split 0.0 so [saveFeedPlans] stores 0 kg for them.
-const FeedConfig earlyFeedConfig = FeedConfig(
-  rounds: 2,
-  splits: [0.50, 0.50, 0.00, 0.00],
-  timings24h: ["06:00", "17:00", "", ""],
-  timingsDisplay: ["06:00 AM", "05:00 PM", "", ""],
-);
-
-/// Returns the correct [FeedConfig] for a given DOC.
-/// DOC 1–7 → 2 rounds (early acclimation period).
-/// DOC 8+  → 4 rounds (standard schedule).
+/// Returns 4-round config for all DOCs — farmer controls active rounds in feed schedule screen.
 FeedConfig getFeedConfig(int doc) {
-  if (doc <= 7) return earlyFeedConfig;
   return standardFeedConfig;
 }
 
