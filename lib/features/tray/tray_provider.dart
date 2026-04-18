@@ -11,6 +11,12 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
   }
 
   Future<void> _loadFromDb() async {
+    // ✅ Guard: Skip if pondId is empty (prevents invalid UUID errors)
+    if (pondId.isEmpty) {
+      state = [];
+      return;
+    }
+    
     try {
       final rows = await TrayService().fetchTrayLogs(pondId);
       state = rows.map((row) => TrayLog.fromSupabase(row)).toList();

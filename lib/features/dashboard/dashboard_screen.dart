@@ -65,6 +65,14 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 🧪 DEBUG: Temporarily test with simple UI
+    const _testDebugMode = false; // Set to true to test with simple widget
+    if (_testDebugMode) {
+      return Scaffold(
+        body: Center(child: Text("HOME OK - Layout test passed ✅")),
+      );
+    }
+
     final farmState   = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
     final feedHistory = ref.watch(feedHistoryProvider);

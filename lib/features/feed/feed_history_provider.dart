@@ -68,6 +68,11 @@ class FeedHistoryNotifier
     double? smartFeedQty,
     double expectedFeed = 0.0,
   }) async {
+    // ✅ Guard: Skip if pondId is empty (prevents invalid UUID errors)
+    if (pondId.isEmpty) {
+      return;
+    }
+
     if (qty <= 0) {
       return;
     }
@@ -194,6 +199,11 @@ class FeedHistoryNotifier
     required int round,
     required TrayStatus status,
   }) {
+    // ✅ Guard: Skip if pondId is empty (prevents invalid UUID errors)
+    if (pondId.isEmpty) {
+      return;
+    }
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -243,6 +253,11 @@ class FeedHistoryNotifier
     final newState = Map<String, List<FeedHistoryLog>>.from(state);
 
     for (final pondId in pondIds) {
+      // ✅ Guard: Skip if pondId is empty (prevents invalid UUID errors)
+      if (pondId.isEmpty) {
+        continue;
+      }
+
       try {
         final rows = await _feedService.fetchFeedLogs(pondId);
         if (rows.isEmpty) continue;

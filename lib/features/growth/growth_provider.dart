@@ -12,6 +12,12 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
   }
 
   Future<void> _loadLogs() async {
+    // ✅ Guard: Skip if pondId is empty (prevents invalid UUID errors)
+    if (pondId.isEmpty) {
+      state = [];
+      return;
+    }
+
     try {
       final data = await _supabase
           .from('sampling_logs')

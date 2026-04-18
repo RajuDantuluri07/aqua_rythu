@@ -80,6 +80,11 @@ class TrayService {
 
   /// Retrieves all tray logs for a specific pond, ordered by date and round.
   Future<List<Map<String, dynamic>>> fetchTrayLogs(String pondId) async {
+    // ✅ Guard: Return empty list if pondId is empty (prevents invalid UUID errors)
+    if (pondId.isEmpty) {
+      return [];
+    }
+
     return await _supabase
         .from('tray_logs')
         .select()

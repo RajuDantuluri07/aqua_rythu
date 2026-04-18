@@ -441,6 +441,11 @@ final oneWeekAgoProvider = Provider<DateTime>((ref) {
 });
 
 final docProvider = Provider.family<int, String>((ref, pondId) {
+  // ✅ Guard: Return 1 if pondId is empty (prevents errors in cascading watches)
+  if (pondId.isEmpty) {
+    return 1;
+  }
+
   final farmState = ref.watch(farmProvider);
   final now = ref.watch(currentDateProvider);
 
