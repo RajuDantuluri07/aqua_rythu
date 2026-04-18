@@ -1,5 +1,9 @@
-// Feed Intelligence Engine
+// Feed Intelligence Engine — DISABLED FOR V1 LAUNCH
 //
+// 🚫 THIS ENGINE IS NOT USED IN V1
+// Intelligence factor logic removed from MasterFeedEngine for simplification.
+//
+// Legacy comment (kept for reference):
 // Computes the gap between expected and actual feed consumption.
 // Pure function — no DB calls, no biomass, no FCR.
 //
@@ -12,6 +16,8 @@
 //   - Deviation      (actual − expected)
 //   - Deviation %    ((deviation / expected) × 100)
 //   - Status         (OnTrack / Overfeeding / Underfeeding)
+//
+// This file is kept for backward compatibility only.
 
 // ── THRESHOLD ────────────────────────────────────────────────────────────────
 

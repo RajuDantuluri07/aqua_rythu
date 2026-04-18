@@ -3,6 +3,10 @@ import '../../utils/time_provider.dart';
 import 'feed_decision_engine.dart';
 import 'package:intl/intl.dart';
 
+// 🚫 DISABLED FOR V1 LAUNCH
+// Recommendation engine no longer computes complex timing.
+// MasterFeedEngine now creates simple recommendations directly.
+
 class FeedRecommendation {
   final double nextFeedKg;
   final DateTime nextFeedTime;

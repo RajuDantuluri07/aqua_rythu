@@ -1,5 +1,9 @@
-// Smart Feed Engine V2 — Production-Ready Spec Implementation
+// Smart Feed Engine V2 — DISABLED FOR V1 LAUNCH
 //
+// 🚫 THIS ENGINE IS NOT USED IN V1
+// All feed corrections are handled by MasterFeedEngine with simple tray factor only.
+//
+// Legacy comment (kept for reference):
 // Formula:
 //   correctedFeed = baseFeed × trayFactor × growthFactor × waterFactor × docFactor
 //
@@ -12,10 +16,8 @@
 //   • Water dominance: if waterFactor < 1.0, tray/growth boosts are suppressed
 //   • Manual override: if isManualOverride, engine is skipped entirely
 //
-// Replaces the per-band operational guard in SmartFeedEngine (bug #6).
-// Fixes: growthFactor -5% (was), -10% (now); waterFactor, tray curve, docFactor.
-//
-// Debug output: SmartFeedV2Result.toDebugMap() — used by debug dashboard.
+// This file is kept for backward compatibility only.
+// Do not call SmartFeedEngineV2.calculate() — use MasterFeedEngine.orchestrate() instead.
 
 import 'package:aqua_rythu/core/constants/expected_abw_table.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';

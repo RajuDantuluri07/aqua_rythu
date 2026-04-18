@@ -422,7 +422,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
+            onPressed: () {
+              ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
+              Navigator.pop(dialogCtx);
+            },
             child: const Text('Skip'),
           ),
           ElevatedButton(
@@ -430,6 +433,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
               final val = double.tryParse(ctrl.text.trim());
               if (val != null && val > 0) {
                 ref.read(pondDashboardProvider.notifier).updateAnchorFeed(val);
+                ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
                 Navigator.pop(dialogCtx);
               }
             },

@@ -25,8 +25,8 @@ const _amberLight  = Color(0xFFFFFBEB);
 
 class _PondRow {
   final String id, name, status;
-  final int doc;
-  final double abw, fcr, biomass, todayFeed, yesterdayFeed;
+  final int doc, seedCount;
+  final double abw, fcr, biomass, todayFeed, yesterdayFeed, area;
   final bool fcrTrendUp, feedTrendUp, hasAbwData;
 
   const _PondRow({
@@ -42,6 +42,8 @@ class _PondRow {
     required this.fcrTrendUp,
     required this.feedTrendUp,
     required this.hasAbwData,
+    required this.area,
+    required this.seedCount,
   });
 }
 
@@ -167,6 +169,8 @@ class DashboardScreen extends ConsumerWidget {
         fcrTrendUp:    fcrTrendUp,
         feedTrendUp:   todayFeed >= yesterdayFeed,
         hasAbwData:    hasAbwData,
+        area:          pond.area,
+        seedCount:     pond.seedCount,
       );
     }).toList();
 
@@ -200,9 +204,8 @@ class DashboardScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Header(
-                farmState:            farmState,
-                currentFarm:          currentFarm,
-                needsAttentionCount:  needsAttentionCount,
+                farmState:   farmState,
+                currentFarm: currentFarm,
                 onSelectFarm: (id) => ref.read(farmProvider.notifier).selectFarm(id),
                 onAddFarm:    ()   => Navigator.pushNamed(context, AppRoutes.addFarm),
               ),
@@ -276,7 +279,7 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 12),
                     ...rows.map((r) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: _PondCard(
                         row: r,
                         onTap: () => Navigator.pushNamed(
@@ -341,10 +344,10 @@ class DashboardScreen extends ConsumerWidget {
       }
     }
 
-    // No sampling in 10+ days
+    // No sampling in 10+ days (only for tanks with DOC > 5, since new tanks don't need early samples)
     for (final pond in ponds) {
       final row = rows.where((r) => r.id == pond.id).firstOrNull;
-      if (row == null || row.doc < 1) continue;
+      if (row == null || row.doc < 6) continue;  // Skip tanks DOC <= 5 (too young to sample)
       final lastSample = pond.latestSampleDate;
       final daysSince  = lastSample == null ? 999 : today.difference(lastSample).inDays;
       if (daysSince >= 10) {
@@ -449,9 +452,8 @@ class DashboardScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Header(
-              farmState:           farmState,
-              currentFarm:         currentFarm,
-              needsAttentionCount: 0,
+              farmState:   farmState,
+              currentFarm: currentFarm,
               onSelectFarm: (id) => ref.read(farmProvider.notifier).selectFarm(id),
               onAddFarm:    ()   => Navigator.pushNamed(context, AppRoutes.addFarm),
             ),
@@ -512,14 +514,12 @@ class DashboardScreen extends ConsumerWidget {
 class _Header extends StatelessWidget {
   final FarmState farmState;
   final dynamic currentFarm;
-  final int needsAttentionCount;
   final void Function(String) onSelectFarm;
   final VoidCallback onAddFarm;
 
   const _Header({
     required this.farmState,
     required this.currentFarm,
-    required this.needsAttentionCount,
     required this.onSelectFarm,
     required this.onAddFarm,
   });
@@ -624,53 +624,9 @@ class _Header extends StatelessWidget {
                           size: 18, color: _textSub),
                     ],
                   ),
-                  if (needsAttentionCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7, height: 7,
-                            decoration: const BoxDecoration(
-                              color: _red, shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$needsAttentionCount POND${needsAttentionCount > 1 ? 'S' : ''} NEED ATTENTION',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: _red,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),
-          ),
-
-          // Bell
-          GestureDetector(
-            onTap: () {},
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.notifications_none_rounded, size: 24, color: _textSub),
-            ),
-          ),
-
-          // Profile avatar
-          Container(
-            width: 36, height: 36,
-            decoration: const BoxDecoration(
-              color: Color(0xFF4A7BBE),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.person_rounded, size: 20, color: _white),
           ),
         ],
       ),
@@ -973,31 +929,34 @@ class _PondCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 16),
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 12),
         decoration: BoxDecoration(
           color: _white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Row 1: name + badge + menu ───────────────────────────────
+            // ── Header: Name + Status Badge ──────────────────────────────
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
                     row.name,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
                       color: _textPrimary,
-                      letterSpacing: -0.3,
+                      letterSpacing: -0.1,
                     ),
                     overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
+                const SizedBox(width: 8),
                 // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1062,6 +1021,91 @@ class _PondCard extends StatelessWidget {
               ],
             ),
 
+            // ── Pond Info: Area + Stocking (compact) ────────────────────
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFAFAFA),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  // Area
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.landscape_rounded, size: 12, color: _green),
+                        const SizedBox(width: 4),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Size',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: _textSub,
+                                height: 1,
+                              ),
+                            ),
+                            Text(
+                              '${row.area.toStringAsFixed(1)} ac',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
+                                height: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Divider
+                  Container(width: 1, height: 28, color: _border),
+                  // Stocking
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.school_rounded, size: 12, color: _green),
+                        const SizedBox(width: 4),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Stock',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: _textSub,
+                                height: 1,
+                              ),
+                            ),
+                            Text(
+                              '${row.seedCount}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
+                                height: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // ── "Needs Attention" chip if Critical ───────────────────────
             if (row.status == 'Critical') ...[
               const SizedBox(height: 6),
@@ -1088,9 +1132,9 @@ class _PondCard extends StatelessWidget {
               ),
             ],
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             const Divider(color: _border, height: 1),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
             // ── Stats row: DOC | FEED (D) | FCR ──────────────────────────
             Row(

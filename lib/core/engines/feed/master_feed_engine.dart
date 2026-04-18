@@ -31,12 +31,12 @@ import '../../enums/stocking_type.dart';
 import '../../validators/feed_input_validator.dart';
 import '../../utils/logger.dart';
 import '../../utils/feed_config_constants.dart';
-import '../growth/fcr_engine.dart';
-import 'feed_decision_engine.dart';
+// import '../growth/fcr_engine.dart'; // ❌ DISABLED FOR V1
+import 'feed_decision_engine.dart'; // Used for FeedDecision result
 import 'feed_input_builder.dart';
-import 'feed_intelligence_engine.dart';
-import 'feed_recommendation_engine.dart';
-import 'smart_feed_engine_v2.dart';
+import 'feed_intelligence_engine.dart'; // Used for IntelligenceResult
+import 'feed_recommendation_engine.dart'; // Used for FeedRecommendation result
+// import 'smart_feed_engine_v2.dart'; // ❌ DISABLED FOR V1 LAUNCH
 import '../../models/feed_input.dart';
 import '../../models/correction_result.dart';
 import '../../models/feed_debug_info.dart';
@@ -219,15 +219,21 @@ class MasterFeedEngine {
   }
 
   // ── FULL PIPELINE ORCHESTRATION ───────────────────────────────────────────
+  // V1 SIMPLIFIED: Single deterministic flow
+  // Step 1: Base Feed (DOC ramp + density scaling)
+  // Step 2: Tray Factor (simple appetite signal)
+  // Step 3: Apply Factor
+  // Step 4: Safety Clamp (±30% from base)
+  // Step 5: Return result
 
-  /// Run the full feed pipeline from a pre-built [FeedInput].
+  /// Run the simplified feed pipeline from a pre-built [FeedInput].
   ///
   /// Pure — no DB writes. Use [orchestrateForPond] when the caller only has
   /// a pondId and needs DB state fetched first.
   static OrchestratorResult orchestrate(FeedInput input) {
     FeedInputValidator.validate(input);
 
-    // ── Critical DO safety — enforced for ALL DOC ─────────────────────────
+    // ── STEP 0: Critical DO safety — enforced for ALL DOC ─────────────────
     if (input.dissolvedOxygen < 3.5) {
       AppLogger.error(
         '[MasterFeedEngine] Critical DO (${input.dissolvedOxygen} mg/L) '
@@ -240,10 +246,7 @@ class MasterFeedEngine {
       );
     }
 
-    // ── Stage 1: Base feed ────────────────────────────────────────────────
-    // computeWithDebug is called once to capture Stage 1 intermediate values
-    // for FeedDebugInfo (baseFeedPer100k, adjustedFeed, min/max, clamp flags).
-    // anchorFeed overrides the DOC-ramp output but we still compute for debug.
+    // ── STEP 1: Base Feed (keep existing compute logic) ───────────────────
     final stage1Debug = computeWithDebug(
       doc: input.doc,
       stockingType: input.stockingType,
@@ -253,288 +256,101 @@ class MasterFeedEngine {
         ? input.anchorFeed!
         : stage1Debug.finalFeed;
 
-    // ── Stage 1b: Resolve feed stage ──────────────────────────────────────
-    final hasSampling = input.abw != null;
+    // ── STEP 2: Tray Factor (simple & deterministic) ───────────────────────
+    final trayFactor = _simpleTrayFactor(input.trayStatuses);
+
+    // ── STEP 3: Apply factor ──────────────────────────────────────────────
+    double feed = baseFeed * trayFactor;
+
+    // ── STEP 4: Safety Clamp (prevent spikes — ±30% from baseFeed) ────────
+    final minFeed = baseFeed * FeedEngineConstants.minFeedFactor; // 0.7
+    final maxFeed = baseFeed * FeedEngineConstants.maxFeedFactor; // 1.3
+    feed = feed.clamp(minFeed, maxFeed);
+
+    final bool wasClamped = (baseFeed * trayFactor - feed).abs() > 0.001;
+    final clampReason = wasClamped
+        ? (baseFeed * trayFactor) > maxFeed
+            ? 'Feed increase capped at +30%'
+            : 'Feed reduction capped at -30%'
+        : null;
+
+    final finalFeed = double.parse(feed.toStringAsFixed(3));
+
+    // ── STEP 5: Build minimal result objects for backward compatibility ────
     final feedStage = FeedStageResolver.resolve(
       doc: input.doc,
-      hasSampling: hasSampling,
+      hasSampling: input.abw != null,
     );
 
-    // ── Stage 2: Intelligence (expected vs actual) ────────────────────────
-    // Compare yesterday's actual against YESTERDAY's expected base feed, not
-    // today's. Using today's baseFeed creates a systematic underfeeding signal
-    // every day because today's ramp is always higher than yesterday's.
-    final yesterdayBaseFeed = input.doc > 1
-        ? compute(
-            doc: input.doc - 1,
-            stockingType: input.stockingType,
-            density: input.seedCount,
-          )
-        : baseFeed;
-    final intelligence = FeedIntelligenceEngine.compute(
-      expectedFeed: yesterdayBaseFeed,
-      actualFeedYesterday: input.actualFeedYesterday,
+    // Minimal intelligence result
+    const intelligence = IntelligenceResult(
+      expectedFeed: 0.0,
+      status: FeedStatus.onTrack,
     );
 
-    // ── Stage 2b: FCR factor (intelligent stage only) ─────────────────────
-    final fcrFactor = feedStage == FeedStage.intelligent
-        ? FCREngine.correction(input.lastFcr)
-        : 1.0;
-
-    // ── Stage 3: Smart corrections ────────────────────────────────────────
-    // Tray history prep: FeedInputBuilder returns recentTrayLeftoverPct
-    // newest-first and excludes today. V2._resolveLatestLeftover treats the
-    // LAST element as most recent, so reverse to oldest-first, then append
-    // today's live reading (if any).
-    final historicLeftovers = input.recentTrayLeftoverPct
-        .where((v) => v >= 0)
-        .toList()
-        .reversed
-        .toList(); // now oldest → newest
-
-    if (input.trayStatuses.isNotEmpty) {
-      double sum = 0;
-      for (final s in input.trayStatuses) {
-        switch (s) {
-          case TrayStatus.empty:
-            break;
-          case TrayStatus.partial:
-            sum += 30.0;
-            break;
-          case TrayStatus.full:
-            sum += 70.0;
-            break;
-        }
-      }
-      historicLeftovers.add(sum / input.trayStatuses.length);
-    }
-
-    // DOC ≤ 30 = blind phase: skip smart corrections entirely.
-    // SmartFeedEngineV2 is only ever called for DOC > 30 (asserted inside).
-    final v2Result = input.doc > kSmartModeMinDoc
-        ? SmartFeedEngineV2.calculate(
-            baseFeed: baseFeed,
-            doc: input.doc,
-            recentTrayLeftoverPct: historicLeftovers,
-            abw: input.abw,
-            sampleAgeDays: input.sampleAgeDays,
-            dissolvedOxygen: input.dissolvedOxygen,
-            ammonia: input.ammonia,
-          )
-        : SmartFeedEngineV2.blindPhaseResult(baseFeed, input.doc);
-
-    AppLogger.debug('SMART_FEED_V2: ${v2Result.toDebugMap()}');
-
-    final intelligenceFactor = _intelligenceFactor(intelligence);
-
-    final CorrectionResult correction;
-    final bool smartApplied = input.doc > kSmartModeMinDoc;
-    double rawCombinedFactorSnap = 0.0;
-
-    if (v2Result.isCriticalStop) {
-      correction = CorrectionResult(
-        finalFeed: 0.0,
-        trayFactor: 1.0,
-        growthFactor: 1.0,
-        samplingFactor: 1.0,
-        environmentFactor: 0.0,
-        fcrFactor: 1.0,
-        intelligenceFactor: 1.0,
-        v2Factor: 0.0,
-        combinedFactor: 0.0,
-        reasons: v2Result.reasons,
-        alerts: ['🚨 Critical DO — stop feeding'],
-        isCriticalStop: true,
-        isSmartApplied: smartApplied,
-        factorBreakdown: const {
-          'tray': 1.0,
-          'growth': 1.0,
-          'environment': 0.0,
-          'fcr': 1.0,
-          'intelligence': 1.0,
-        },
-        factorExplanations: const {
-          'environment': 'CRITICAL — stop feeding (dissolved oxygen too low)',
-        },
-      );
-    } else {
-      // V2 factor = correctedFeed / baseFeed (the V2-only combined correction,
-      // AFTER the V2 safety clamp).
-      final v2Factor = baseFeed > 0 ? v2Result.correctedFeed / baseFeed : 1.0;
-
-      // ── TASK 3: Breakdown integrity check ─────────────────────────────────
-      // The product of individual V2 factors must equal rawProduct
-      // (the pre-clamp V2 result). This catches any mismatch between what we
-      // expose in factorBreakdown and what the engine actually computed.
-      if (baseFeed > 0) {
-        final breakdownV2Product = v2Result.trayFactor *
-            v2Result.growthFactor *
-            v2Result.waterFactor *
-            v2Result.docFactor;
-        assert(
-          (breakdownV2Product - v2Result.rawProduct).abs() < 0.01,
-          'Breakdown integrity: tray×growth×water×doc=$breakdownV2Product '
-          '≠ rawProduct=$v2Result.rawProduct',
-        );
-      }
-
-      // Apply FCR then deviation-enforcement on top of V2 corrected feed.
-      // Guard: clamp the combined ratio first so finalFeed == baseFeed × combinedFactor always.
-      final rawFeedFinal = v2Result.correctedFeed * fcrFactor * intelligenceFactor;
-      final rawCombinedFactor =
-          baseFeed > 0 ? rawFeedFinal / baseFeed : 1.0;
-      final combinedFactor = rawCombinedFactor.clamp(FeedEngineConstants.minFeedFactor, FeedEngineConstants.maxFeedFactor);
-
-      rawCombinedFactorSnap = rawCombinedFactor;
-      final stackingImpact = rawCombinedFactor - combinedFactor;
-      if (stackingImpact.abs() > 0.2) {
-        AppLogger.warn('HIGH_STACKING', {
-          'raw': rawCombinedFactor,
-          'clamped': combinedFactor,
-          'impact': stackingImpact,
-        });
-      }
-      final feedFinal = baseFeed * combinedFactor;
-
-      // ── TASK 2: Factor consistency assertion ──────────────────────────────
-      // combinedFactor must be the clamped product of v2Factor × fcr × intelligence.
-      assert(
-        (combinedFactor -
-                (v2Factor * fcrFactor * intelligenceFactor).clamp(FeedEngineConstants.minFeedFactor, FeedEngineConstants.maxFeedFactor))
-                .abs() <
-            0.01,
-        'Factor mismatch: combinedFactor=$combinedFactor ≠ '
-        'clamp(v2=$v2Factor × fcr=$fcrFactor × intel=$intelligenceFactor, ${FeedEngineConstants.minFeedFactor}, ${FeedEngineConstants.maxFeedFactor})',
-      );
-
-      // ── TASK 6: Clamp visibility ──────────────────────────────────────────
-      final wasCombinedClamped = (rawCombinedFactor - combinedFactor).abs() > 0.001;
-      final clampReason = wasCombinedClamped
-          ? rawCombinedFactor > 1.30
-              ? 'Feed increase capped at +30%'
-              : 'Feed reduction capped at -30%'
-          : null;
-
-      final alerts = <String>[
-        if (v2Result.waterFactor <= 0.0)
-          '🚨 Critical DO — stop feeding'
-        else if (v2Result.waterFactor < 1.0)
-          v2Result.waterFactor <= 0.80
-              ? '⚠️ High water risk — feed reduced'
-              : '⚠️ Water stress — feed reduced',
-      ];
-
-      final extraReasons = <String>[
-        if (fcrFactor != 1.0)
-          'FCR adjustment: ${fcrFactor > 1.0 ? '+' : ''}${((fcrFactor - 1) * 100).toStringAsFixed(0)}%',
-        if (intelligenceFactor != 1.0)
-          'Deviation enforcement: ${intelligenceFactor > 1.0 ? '+' : ''}${((intelligenceFactor - 1) * 100).toStringAsFixed(0)}% (${intelligence.statusLabel})',
-      ];
-
-      correction = CorrectionResult(
-        finalFeed: double.parse(feedFinal.toStringAsFixed(3)),
-        trayFactor: v2Result.trayFactor,
-        growthFactor: v2Result.growthFactor,
-        samplingFactor: 1.0,
-        environmentFactor: v2Result.waterFactor,
-        fcrFactor: fcrFactor,
-        intelligenceFactor: intelligenceFactor,
-        v2Factor: double.parse(v2Factor.toStringAsFixed(3)),
-        combinedFactor: double.parse(combinedFactor.toStringAsFixed(3)),
-        reasons: [...v2Result.reasons, ...extraReasons],
-        alerts: alerts,
-        isCriticalStop: false,
-        isSmartApplied: smartApplied,
-        // Includes docFactor so product equals rawProduct/baseFeed (TASK 3).
-        factorBreakdown: {
-          'tray': v2Result.trayFactor,
-          'growth': v2Result.growthFactor,
-          'environment': v2Result.waterFactor,
-          'doc': v2Result.docFactor,
-          'fcr': fcrFactor,
-          'intelligence': intelligenceFactor,
-        },
-        factorExplanations: _buildFactorExplanations(
-          trayFactor: v2Result.trayFactor,
-          growthFactor: v2Result.growthFactor,
-          waterFactor: v2Result.waterFactor,
-          fcrFactor: fcrFactor,
-          intelligenceFactor: intelligenceFactor,
-          intelligenceLabel: intelligence.statusLabel,
-        ),
-        wasCombinedClamped: wasCombinedClamped,
-        clampReason: clampReason,
-      );
-    }
-
-    // ── Output sanity check ───────────────────────────────────────────────
-    if (!correction.isCriticalStop) {
-      FeedInputValidator.validateOutput(correction.finalFeed, baseFeed);
-    }
-
-    // ── Stage 4: Decision ─────────────────────────────────────────────────
-    final recommendations = FeedDecisionEngine.generateRecommendations(
-      trayFactor: correction.trayFactor,
-      growthFactor: correction.growthFactor,
-      fcrFactor: correction.fcrFactor,
-      confidenceScore: FeedDecisionEngine.confidenceForStage(feedStage),
-      alerts: correction.alerts,
-      isCriticalStop: correction.isCriticalStop,
+    // Minimal correction result (all factors = 1.0 except tray)
+    final correction = CorrectionResult(
+      finalFeed: finalFeed,
+      trayFactor: trayFactor,
+      growthFactor: 1.0, // ❌ DISABLED
+      samplingFactor: 1.0,
+      environmentFactor: 1.0, // ❌ DISABLED (DO already checked)
+      fcrFactor: 1.0, // ❌ DISABLED
+      intelligenceFactor: 1.0, // ❌ DISABLED
+      v2Factor: trayFactor, // Only tray factor in V1
+      combinedFactor: trayFactor,
+      reasons: trayFactor != 1.0 ? ['Tray appetite adjustment: ${_factorToPercent(trayFactor)}'] : [],
+      alerts: const [],
+      isCriticalStop: false,
+      isSmartApplied: false,
+      factorBreakdown: {'tray': trayFactor},
+      factorExplanations: trayFactor != 1.0
+          ? {
+              'tray': trayFactor >= 1.10
+                  ? 'Clean tray — good appetite'
+                  : trayFactor >= 1.05
+                      ? 'Light leftover — acceptable'
+                      : trayFactor <= 0.70
+                          ? 'High leftover — reduce feeding'
+                          : 'Moderate leftover — stable',
+            }
+          : {},
+      wasCombinedClamped: wasClamped,
+      clampReason: clampReason,
     );
 
-    final decisionTrace = [
-      'Base (DOC ramp): ${baseFeed.toStringAsFixed(3)} kg',
-      'Feed stage: ${feedStage.name}',
-      'Intelligence: ${intelligence.statusLabel}',
-      ...correction.reasons,
-      if (correction.isCriticalStop) '⚠ CRITICAL STOP',
-      '= Final: ${correction.finalFeed.toStringAsFixed(3)} kg',
-    ];
-
-    final decision = FeedDecisionEngine.compute(
-      baseFeed: baseFeed,
-      finalFeed: correction.finalFeed,
-      intelligence: intelligence,
-      stage: feedStage,
-      trayFactor: correction.trayFactor,
-      growthFactor: correction.growthFactor,
-      environmentFactor: correction.environmentFactor,
-      fcrFactor: correction.fcrFactor,
-      intelligenceStatus: intelligence.status,
-      hasActualData: intelligence.hasActualData,
-      confidenceScore: FeedDecisionEngine.confidenceForStage(feedStage),
-      alerts: correction.alerts,
-      existingRecommendations: recommendations,
-      decisionTrace: decisionTrace,
-      isCriticalStop: correction.isCriticalStop,
+    // Minimal decision
+    final decision = FeedDecision(
+      action: finalFeed > 0 ? 'Maintain Feeding' : 'Stop Feeding',
+      deltaKg: finalFeed - baseFeed,
+      reason: 'V1 simplified flow — tray adjustment only',
+      recommendations: const [],
+      decisionTrace: [
+        'Base (DOC ramp): ${baseFeed.toStringAsFixed(3)} kg',
+        'Tray factor: ${trayFactor.toStringAsFixed(3)}',
+        '= Final: ${finalFeed.toStringAsFixed(3)} kg',
+      ],
     );
 
-    // ── Stage 5: Recommendation ───────────────────────────────────────────
-    final recommendation = FeedRecommendationEngine.compute(
-      finalFeedPerDay: correction.finalFeed,
-      decision: decision,
-      lastFeedTime: input.lastFeedTime,
-      doc: input.doc,
-      minGapMinutes: input.doc > kSmartModeMinDoc ? 180 : 150,
+    // Minimal recommendation
+    final recommendation = FeedRecommendation(
+      nextFeedKg: finalFeed / 5, // Rough 5 feeds per day
+      nextFeedTime: DateTime.now().add(const Duration(hours: 4)),
+      instruction: 'Feed ${(finalFeed / 5).toStringAsFixed(1)} kg',
     );
 
     AppLogger.info(
-      'FEED_PIPELINE',
+      'FEED_PIPELINE_V1_SIMPLIFIED',
       {
-        'stage': feedStage.name,
+        'doc': input.doc,
         'baseFeed': baseFeed,
-        'finalFeed': correction.finalFeed,
-        'trayFactor': correction.trayFactor,
-        'growthFactor': correction.growthFactor,
-        'envFactor': correction.environmentFactor,
-        'fcrFactor': correction.fcrFactor,
-        'intelligence': intelligence.statusLabel,
-        'decision': decision.action,
-        'nextFeedKg': recommendation.nextFeedKg,
-        'nextFeedTime': recommendation.nextFeedTime.toIso8601String(),
+        'trayFactor': trayFactor,
+        'finalFeed': finalFeed,
+        'isClamped': wasClamped,
       },
     );
 
+    // ── STEP 5: Return result ─────────────────────────────────────────────
     return OrchestratorResult(
       baseFeed: baseFeed,
       feedStage: feedStage,
@@ -552,18 +368,18 @@ class MasterFeedEngine {
         isBaseFeedClamped: stage1Debug.isClamped,
         wasInputClamped: stage1Debug.wasInputClamped,
         baseFeed: baseFeed,
-        trayFactor: correction.trayFactor,
-        smartFactor: correction.v2Factor,
-        combinedFactor: correction.combinedFactor,
-        rawCombinedFactor: rawCombinedFactorSnap,
-        fcr: correction.fcrFactor,
-        finalFeed: correction.finalFeed,
-        isSmartApplied: correction.isSmartApplied,
-        wasClamped: correction.wasCombinedClamped,
-        clampReason: correction.clampReason,
+        trayFactor: trayFactor,
+        smartFactor: trayFactor,
+        combinedFactor: trayFactor,
+        rawCombinedFactor: baseFeed * trayFactor,
+        fcr: 1.0,
+        finalFeed: finalFeed,
+        isSmartApplied: false,
+        wasClamped: wasClamped,
+        clampReason: clampReason,
         hasSampling: input.abw != null,
         feedStage: feedStage.name,
-        v2Debug: input.doc > kSmartModeMinDoc ? v2Result.toDebugMap() : null,
+        v2Debug: null, // ❌ DISABLED
       ),
     );
   }
@@ -579,6 +395,55 @@ class MasterFeedEngine {
 
   // ── PRIVATE HELPERS ───────────────────────────────────────────────────────
 
+  /// Simple tray factor based on tray status.
+  ///
+  /// ✅ DETERMINISTIC:
+  /// - full > empty → reduce feeding (shrimp not eating) → 0.85
+  /// - empty > full → increase feeding (clean trays, good appetite) → 1.1
+  /// - balanced or no data → 1.0
+  ///
+  /// ❌ DISABLED FEATURES:
+  /// - Tray history analysis
+  /// - ABW-based growth signal
+  /// - Water quality factors
+  /// - DOC-based conservatism
+  static double _simpleTrayFactor(List<TrayStatus>? trays) {
+    if (trays == null || trays.isEmpty) {
+      return 1.0; // Default — no tray data
+    }
+
+    int full = 0;
+    int empty = 0;
+
+    for (final status in trays) {
+      switch (status) {
+        case TrayStatus.full:
+          full++;
+          break;
+        case TrayStatus.empty:
+          empty++;
+          break;
+        case TrayStatus.partial:
+          // Neutral — don't count
+          break;
+      }
+    }
+
+    if (full > empty) {
+      return 0.85; // More full trays — reduce feeding
+    } else if (empty > full) {
+      return 1.1; // More empty trays — increase feeding
+    } else {
+      return 1.0; // Balanced — no adjustment
+    }
+  }
+
+  /// Convert factor to human-readable percentage change.
+  /// Used for UI display.
+
+  /// ❌ DISABLED FOR V1 LAUNCH
+  /// Intelligence factor calculation — no longer used
+  /// Replaced by simple tray-only logic
   static double _intelligenceFactor(IntelligenceResult intel) {
     if (!intel.hasActualData) return 1.0;
 
@@ -600,6 +465,13 @@ class MasterFeedEngine {
     return factor.clamp(FeedEngineConstants.minFeedFactor, FeedEngineConstants.maxFeedFactor);
   }
 
+  /// ❌ DISABLED FOR V1 LAUNCH
+  /// Old multi-factor explanation builder — no longer used
+  /// Replaced by simple tray-only logic
+
+  /// ❌ DISABLED FOR V1 LAUNCH
+  /// Old multi-factor explanation builder — no longer used
+  /// Replaced by simple tray-only logic
   static String _factorToPercent(double factor) {
     final pct = ((factor - 1.0) * 100).round();
     if (pct > 0) return '+$pct%';
@@ -607,6 +479,9 @@ class MasterFeedEngine {
     return '0%';
   }
 
+  /// ❌ DISABLED FOR V1 LAUNCH
+  /// Old multi-factor explanation builder — no longer used
+  /// Replaced by simple tray-only logic
   static Map<String, String> _buildFactorExplanations({
     required double trayFactor,
     required double growthFactor,

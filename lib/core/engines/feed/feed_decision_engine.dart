@@ -1,5 +1,9 @@
-// Feed Decision Engine
+// Feed Decision Engine — DISABLED FOR V1 LAUNCH
 //
+// 🚫 THIS ENGINE IS NOT ACTIVELY USED IN V1
+// Decision logic simplified — now returns static "Maintain Feeding" from MasterFeedEngine.
+//
+// Legacy comment (kept for reference):
 // Converts raw feed numbers into a single, human-readable decision:
 //   action     → Increase / Reduce / Maintain / Stop Feeding
 //   deltaKg    → +0.5 / -1.2 etc.
@@ -10,8 +14,8 @@
 // Recommendation logic ported from:
 //   _archive/smart_feed_decision_engine.dart → generateRecommendations()
 //
-// Call site: MasterFeedEngine.orchestrate() — after SmartFeedEngineV2.
-// Result lives in OrchestratorResult.decision.
+// This file is kept for backward compatibility only.
+// MasterFeedEngine.orchestrate() creates FeedDecision directly.
 
 import '../../enums/feed_stage.dart';
 import 'feed_intelligence_engine.dart';
