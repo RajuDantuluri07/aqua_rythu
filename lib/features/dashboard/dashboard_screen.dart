@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -10,194 +9,296 @@ import 'package:aqua_rythu/features/growth/growth_provider.dart';
 import 'package:aqua_rythu/features/growth/sampling_log.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
 
-// ── Design constants (matches pond dashboard light theme) ─────────────────────
-const _bgDark      = Color(0xFFF5F7FA);
-const _cardDark    = Colors.white;
-const _borderDark  = Color(0xFFE2E8F0);
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const _bg          = Color(0xFFF5F7FA);
+const _white       = Colors.white;
+const _border      = Color(0xFFE2E8F0);
 const _textPrimary = Color(0xFF1E293B);
 const _textSub     = Color(0xFF64748B);
-const _accentGreen = Color(0xFF16A34A);
+const _green       = Color(0xFF16A34A);
 const _red         = Color(0xFFEF4444);
 const _amber       = Color(0xFFF59E0B);
+const _redLight    = Color(0xFFFEF2F2);
+const _amberLight  = Color(0xFFFFFBEB);
+
+// ── Data models ───────────────────────────────────────────────────────────────
+
+class _PondRow {
+  final String id, name, status;
+  final int doc;
+  final double abw, fcr, biomass, todayFeed, yesterdayFeed;
+  final bool fcrTrendUp, feedTrendUp, hasAbwData;
+
+  const _PondRow({
+    required this.id,
+    required this.name,
+    required this.doc,
+    required this.abw,
+    required this.fcr,
+    required this.biomass,
+    required this.todayFeed,
+    required this.yesterdayFeed,
+    required this.status,
+    required this.fcrTrendUp,
+    required this.feedTrendUp,
+    required this.hasAbwData,
+  });
+}
+
+class _Insight {
+  final String title, subtitle, ctaLabel, pondId;
+  final bool isCritical;
+
+  const _Insight({
+    required this.title,
+    required this.subtitle,
+    required this.ctaLabel,
+    required this.pondId,
+    required this.isCritical,
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final farmState    = ref.watch(farmProvider);
-    final currentFarm  = farmState.currentFarm;
-    final feedHistory  = ref.watch(feedHistoryProvider);
+    final farmState   = ref.watch(farmProvider);
+    final currentFarm = farmState.currentFarm;
+    final feedHistory = ref.watch(feedHistoryProvider);
+
+    // Show loading spinner while farms are being fetched on startup
+    if (farmState.farms.isEmpty && farmState.selectedId.isEmpty) {
+      return _loadingView();
+    }
 
     if (currentFarm == null) return _noFarmView(context);
 
-    final ponds       = currentFarm.ponds.where((p) => p.status.name == 'active').toList();
-    final activePonds = ponds.length;
-
+    final ponds = currentFarm.ponds.where((p) => p.status.name == 'active').toList();
     if (ponds.isEmpty) return _noPondsView(context, ref, farmState, currentFarm);
 
-    // ── Per-pond data ─────────────────────────────────────────────────────────
-    final List<_PondSummary> summaries = ponds.map((pond) {
+    final today     = DateTime.now();
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    // ── Per-pond computation ──────────────────────────────────────────────────
+    final List<_PondRow> rows = ponds.map((pond) {
       final doc        = ref.watch(docProvider(pond.id));
       final growthLogs = ref.watch(growthProvider(pond.id));
       final logs       = feedHistory[pond.id] ?? [];
 
-      final double abw = growthLogs.isNotEmpty
-          ? growthLogs.first.abw
-          : (pond.currentAbw ?? 0.0);
+      final bool hasAbwData = growthLogs.isNotEmpty && growthLogs.first.abw > 0;
+      final double abw = hasAbwData ? growthLogs.first.abw : (pond.currentAbw ?? 0.0);
 
-      // survival estimate
       double survival = 1.0;
-      if (doc > 60) {
-        survival = 0.90;
-      } else if (doc > 30) survival = 0.95;
+      if (doc > 60)      survival = 0.90;
+      else if (doc > 30) survival = 0.95;
 
-      final double biomass = (pond.seedCount * survival * abw) / 1000;
+      final double biomass   = (pond.seedCount * survival * abw) / 1000;
       final double totalFeed = logs.isNotEmpty ? logs.first.cumulative : 0.0;
-      final double fcr   = biomass > 0.1 ? totalFeed / biomass : 0.0;
+      final double fcr       = (hasAbwData && biomass > 0.1) ? totalFeed / biomass : 0.0;
 
-      final double cropValue  = biomass * kShrimpMarketPricePerKg;
-      final double feedCost   = totalFeed * kFeedCostPerKg;
-      final double pondProfit = cropValue - feedCost;
-
-      // DOC prev week ABW for delta
-      double? prevAbw;
-      if (growthLogs.length >= 2) {
-        final weekAgo = DateTime.now().subtract(const Duration(days: 7));
-        final older = growthLogs.where((l) => l.date.isBefore(weekAgo)).firstOrNull;
-        prevAbw = older?.abw ?? growthLogs.last.abw;
-      }
-
-      // FCR trend (last 7 days) — compute daily cumulative FCR from feed history
-      final List<_FCRPoint> fcrTrend = _buildFcrTrend(logs, growthLogs, pond.seedCount);
-
-      // Status
-      String status = 'On Track';
-      if (fcr > 1.8) {
-        status = 'Critical';
-      } else if (fcr > 1.5)  status = 'Slow';
-      else if (abw > 0 && _growthDeltaPerWeek(growthLogs) < 1.0) status = 'Slow';
-
-      return _PondSummary(
-        id:         pond.id,
-        name:       pond.name,
-        doc:        doc,
-        abw:        abw,
-        prevAbw:    prevAbw,
-        fcr:        fcr,
-        seedCount:  pond.seedCount,
-        totalFeed:  totalFeed,
-        survival:   survival * 100,
-        biomass:    biomass,
-        cropValue:  cropValue,
-        feedCost:   feedCost,
-        profit:     pondProfit,
-        status:     status,
-        fcrTrend:   fcrTrend,
-        area:       pond.area,
-      );
-    }).toList();
-
-    // ── Farm-level aggregates ─────────────────────────────────────────────────
-    double totalBiomass  = summaries.fold(0.0, (s, p) => s + p.biomass);
-    double totalFeedFarm = summaries.fold(0.0, (s, p) => s + p.totalFeed);
-    double totalCropVal  = summaries.fold(0.0, (s, p) => s + p.cropValue);
-    double totalProfit   = summaries.fold(0.0, (s, p) => s + p.profit);
-    double avgSurvival   = summaries.isNotEmpty
-        ? summaries.fold(0.0, (s, p) => s + p.survival) / summaries.length
-        : 0.0;
-    double farmFcr       = totalBiomass > 0.1 ? totalFeedFarm / totalBiomass : 0.0;
-    double totalFeedCost = summaries.fold(0.0, (s, p) => s + p.feedCost);
-
-    // Weighted survival: sum(survival * seedCount) / totalSeeds
-    final int totalSeeds = summaries.fold(0, (s, p) => s + p.seedCount);
-    final double combinedSurvival = totalSeeds > 0
-        ? summaries.fold(0.0, (s, p) => s + p.survival * p.seedCount) / totalSeeds
-        : avgSurvival;
-    // True when no pond has real ABW sampling data — survival is a model estimate.
-    final bool survivalIsEstimated = summaries.every((s) => s.abw <= 0);
-
-    // Feed today (per-pond tracking for action bar)
-    double feedToday = 0.0;
-    final Set<String> pondsFedToday = {};
-    for (final pond in ponds) {
-      final logs = feedHistory[pond.id] ?? [];
+      // Today's feed
+      double todayFeed = 0;
       if (logs.isNotEmpty) {
-        final today = DateTime.now();
         final first = logs.first;
         if (first.date.year == today.year &&
             first.date.month == today.month &&
             first.date.day == today.day) {
-          feedToday += first.total;
-          pondsFedToday.add(pond.id);
+          todayFeed = first.total;
         }
       }
-    }
 
-    // Farm health score (0–100)
-    int healthScore = _computeHealthScore(farmFcr, avgSurvival, summaries);
+      // Yesterday's feed
+      double yesterdayFeed = 0;
+      for (final log in logs) {
+        if (log.date.year == yesterday.year &&
+            log.date.month == yesterday.month &&
+            log.date.day == yesterday.day) {
+          yesterdayFeed = log.total;
+          break;
+        }
+      }
 
-    // Action bar items (priority-ordered, max 2)
-    final List<_ActionItem> actionItems =
-        _buildActionItems(ponds, summaries, pondsFedToday, feedHistory);
+      // FCR trend (current vs 7 days ago)
+      bool fcrTrendUp = false;
+      if (hasAbwData && logs.length >= 2) {
+        final cutoff = today.subtract(const Duration(days: 7));
+        final oldLogs = logs.where((l) => l.date.isBefore(cutoff)).toList();
+        if (oldLogs.isNotEmpty) {
+          final oldAbw = _abwAtDoc(growthLogs, oldLogs.first.doc);
+          if (oldAbw != null && oldAbw > 0) {
+            double os = 1.0;
+            if (oldLogs.first.doc > 60)      os = 0.90;
+            else if (oldLogs.first.doc > 30) os = 0.95;
+            final oldBiomass = (pond.seedCount * os * oldAbw) / 1000;
+            final oldFcr = oldBiomass > 0.1 ? oldLogs.first.cumulative / oldBiomass : 0.0;
+            fcrTrendUp = fcr > oldFcr;
+          }
+        }
+      }
 
-    final int avgDoc = summaries.isNotEmpty
-        ? summaries.fold(0, (s, p) => s + p.doc) ~/ summaries.length
-        : 0;
+      // Status
+      String status;
+      if (fcr > 1.8)                    status = 'Critical';
+      else if (!hasAbwData && doc > 0)  status = 'Warning';
+      else if (fcr > 1.5)               status = 'Warning';
+      else                              status = 'Good';
 
-    final now = DateTime.now();
+      return _PondRow(
+        id:            pond.id,
+        name:          pond.name,
+        doc:           doc,
+        abw:           abw,
+        fcr:           fcr,
+        biomass:       biomass,
+        todayFeed:     todayFeed,
+        yesterdayFeed: yesterdayFeed,
+        status:        status,
+        fcrTrendUp:    fcrTrendUp,
+        feedTrendUp:   todayFeed >= yesterdayFeed,
+        hasAbwData:    hasAbwData,
+      );
+    }).toList();
+
+    // ── Farm-level aggregates ─────────────────────────────────────────────────
+    final double totalFeedFarm = rows.fold(0.0, (s, r) => s + (feedHistory[r.id]?.isNotEmpty == true ? feedHistory[r.id]!.first.cumulative : 0.0));
+    final double feedToday     = rows.fold(0.0, (s, r) => s + r.todayFeed);
+    final double feedYesterday = rows.fold(0.0, (s, r) => s + r.yesterdayFeed);
+    final double totalFeedCost = totalFeedFarm * kFeedCostPerKg;
+    final double totalBiomass  = rows.fold(0.0, (s, r) => s + r.biomass);
+
+    final double feedChangePct = feedYesterday > 0
+        ? ((feedToday - feedYesterday) / feedYesterday) * 100
+        : 0.0;
+
+    final double farmFcr = totalBiomass > 0.1 ? totalFeedFarm / totalBiomass : 0.0;
+    final String biomassStatus = farmFcr < 1.5
+        ? 'Within optimal range'
+        : farmFcr < 2.0 ? 'Monitor closely' : 'Needs attention';
+
+    final int needsAttentionCount = rows.where((r) => r.status != 'Good').length;
+
+    // ── Insights ─────────────────────────────────────────────────────────────
+    final insights = _buildInsights(rows, ponds, today);
 
     return Scaffold(
-      backgroundColor: _bgDark,
+      backgroundColor: _bg,
       bottomNavigationBar: const AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── HEADER ──────────────────────────────────────────────────────
-              _buildHeader(context, ref, farmState, currentFarm, activePonds, now),
-
-              // ── BODY ────────────────────────────────────────────────────────
+              _Header(
+                farmState:            farmState,
+                currentFarm:          currentFarm,
+                needsAttentionCount:  needsAttentionCount,
+                onSelectFarm: (id) => ref.read(farmProvider.notifier).selectFarm(id),
+                onAddFarm:    ()   => Navigator.pushNamed(context, AppRoutes.addFarm),
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Action Bar
-                    _ActionBar(
-                      items: actionItems,
-                      onTap: (pondId) => Navigator.pushNamed(
-                        context,
-                        AppRoutes.pondDashboard,
-                        arguments: pondId,
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Farm Health gauge + Core Metrics Grid
-                    _buildHealthAndMetricsSection(
-                      healthScore: healthScore,
-                      totalCropVal: totalCropVal,
-                      totalProfit: totalProfit,
-                      feedToday: feedToday,
+                    // ── 2×2 KPI grid ──────────────────────────────────────
+                    _KpiGrid(
+                      totalFeedFarm: totalFeedFarm,
+                      feedToday:     feedToday,
+                      feedChangePct: feedChangePct,
                       totalFeedCost: totalFeedCost,
-                      combinedSurvival: combinedSurvival,
-                      survivalIsEstimated: survivalIsEstimated,
-                      avgDoc: avgDoc,
+                      totalBiomass:  totalBiomass,
+                      biomassStatus: biomassStatus,
                     ),
 
-                    const SizedBox(height: 20),
-
-                    // Pond Status
-                    if (summaries.isNotEmpty) ...[
-                      _sectionLabel('POND STATUS'),
-                      const SizedBox(height: 10),
-                      _buildPondStatusGrid(context, ref, currentFarm.id, summaries, pondsFedToday, feedHistory),
-                      const SizedBox(height: 20),
+                    // ── Farm Insights ─────────────────────────────────────
+                    if (insights.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      const Text(
+                        'Farm Insights',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: _textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...insights.map((ins) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _InsightCard(
+                          insight: ins,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.pondDashboard,
+                            arguments: ins.pondId,
+                          ),
+                        ),
+                      )),
                     ],
 
+                    // ── Pond list ─────────────────────────────────────────
+                    const SizedBox(height: 28),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${rows.length} ACTIVE PONDS',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: _textSub,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pushNamed(context, AppRoutes.addPond),
+                          child: const Text(
+                            'VIEW ALL',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: _green,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...rows.map((r) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _PondCard(
+                        row: r,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.pondDashboard,
+                          arguments: r.id,
+                        ),
+                        onEdit: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.editPond,
+                          arguments: r.id,
+                        ),
+                        onDelete: () => _confirmDelete(
+                          context, r.name,
+                          () async {
+                            try {
+                              await ref
+                                  .read(farmProvider.notifier)
+                                  .deletePond(currentFarm.id, r.id);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to delete: $e')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    )),
                   ],
                 ),
               ),
@@ -208,340 +309,47 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  // ── HEADER ─────────────────────────────────────────────────────────────────
-  Widget _buildHeader(BuildContext context, WidgetRef ref, FarmState farmState,
-      dynamic currentFarm, int activePonds, DateTime now) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5F7FA),
-        border: Border(bottom: BorderSide(color: _borderDark)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'AQUARYTHU — FARM INTELLIGENCE',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: _textSub,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              Text(
-                DateFormat('d MMM yyyy').format(now),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: _textSub,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: _FarmDropdown(
-                  farmState: farmState,
-                  currentFarmName: currentFarm.name,
-                  onSelect: (id) =>
-                      ref.read(farmProvider.notifier).selectFarm(id),
-                  onAddFarm: () =>
-                      Navigator.pushNamed(context, AppRoutes.addFarm),
-                ),
-              ),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _accentGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: _accentGreen.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      '$activePonds active ponds',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _accentGreen,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(
-                  color: _accentGreen,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 5),
-              const Text(
-                'Data saved',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _accentGreen),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── HEALTH + CORE METRICS SECTION ───────────────────────────────────
-  Widget _buildHealthAndMetricsSection({
-    required int healthScore,
-    required double totalCropVal,
-    required double totalProfit,
-    required double feedToday,
-    required double totalFeedCost,
-    required double combinedSurvival,
-    required bool survivalIsEstimated,
-    required int avgDoc,
-  }) {
-    final bool investmentPhase = avgDoc <= 30;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FarmHealthGauge(score: healthScore),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            children: [
-              // Row 1: Crop Value + Est. Profit
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricTile(
-                      label: 'CROP VALUE',
-                      value: totalCropVal > 0
-                          ? _formatCurrency(totalCropVal)
-                          : 'Calculating...',
-                      sub: totalCropVal > 0
-                          ? 'Est. at ₹${kShrimpMarketPricePerKg.toStringAsFixed(0)}/kg'
-                          : '',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _MetricTile(
-                      label: 'EST. PROFIT',
-                      value: investmentPhase
-                          ? 'Invest. Phase'
-                          : _formatCurrency(totalProfit),
-                      sub: investmentPhase
-                          ? 'Building phase'
-                          : 'After feed cost',
-                      valueColor: investmentPhase
-                          ? _textSub
-                          : (totalProfit >= 0 ? _accentGreen : _red),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Row 2: Feed Today + Feed Cost
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricTile(
-                      label: 'FEED TODAY',
-                      value: feedToday > 0
-                          ? '${feedToday.toStringAsFixed(0)} kg'
-                          : 'No feed yet',
-                      sub: 'All ponds',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _MetricTile(
-                      label: 'FEED COST',
-                      value: totalFeedCost > 0
-                          ? _formatCurrency(totalFeedCost)
-                          : 'Starting...',
-                      sub: 'Till date',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Row 3: Survival (full width)
-              _MetricTile(
-                label: 'SURVIVAL',
-                value: combinedSurvival > 0
-                    ? survivalIsEstimated
-                        ? '~${combinedSurvival.toStringAsFixed(0)}% Est.'
-                        : '${combinedSurvival.toStringAsFixed(0)}% overall'
-                    : 'Estimating...',
-                sub: survivalIsEstimated
-                    ? 'No sampling yet — model estimate'
-                    : 'Weighted avg across ponds',
-                valueColor: survivalIsEstimated
-                    ? _textSub
-                    : combinedSurvival >= 80 ? _accentGreen : _amber,
-                fullWidth: true,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── POND STATUS GRID ───────────────────────────────────────────────────────
-  Widget _buildPondStatusGrid(
-    BuildContext context,
-    WidgetRef ref,
-    String farmId,
-    List<_PondSummary> summaries,
-    Set<String> pondsFedToday,
-    Map<String, List<FeedHistoryLog>> feedHistory,
+  // ── Insights builder ───────────────────────────────────────────────────────
+  static List<_Insight> _buildInsights(
+    List<_PondRow> rows,
+    List<Pond> ponds,
+    DateTime today,
   ) {
-    if (summaries.isEmpty) return const SizedBox.shrink();
+    final result = <_Insight>[];
 
-    final today = DateTime.now();
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: summaries.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.72,
-      ),
-      itemBuilder: (context, i) {
-        final s = summaries[i];
-        final fedToday = pondsFedToday.contains(s.id);
-        // Today's fed amount — first log entry if it was logged today
-        final logs = feedHistory[s.id] ?? [];
-        double todayFed = 0;
-        if (logs.isNotEmpty) {
-          final first = logs.first;
-          if (first.date.year == today.year &&
-              first.date.month == today.month &&
-              first.date.day == today.day) {
-            todayFed = first.total;
-          }
+    // Overfeeding: today's feed > 2.5% of biomass (in kg)
+    for (final r in rows) {
+      if (r.biomass > 0.1 && r.todayFeed > 0) {
+        final ratio = r.todayFeed / r.biomass; // biomass already in kg, feed in kg
+        if (ratio > 0.025) {
+          result.add(_Insight(
+            title:      '${r.name}: Overfeeding risk',
+            subtitle:   'Feed ratio exceeded 2.5% of biomass today.',
+            ctaLabel:   'Check Feed',
+            pondId:     r.id,
+            isCritical: true,
+          ));
         }
-        return _PondStatusCard(
-          summary: s,
-          fedToday: fedToday,
-          todayFedKg: todayFed,
-          onTap: () => Navigator.pushNamed(
-            context,
-            AppRoutes.pondDashboard,
-            arguments: s.id,
-          ),
-          onEdit: () => Navigator.pushNamed(
-            context,
-            AppRoutes.editPond,
-            arguments: s.id,
-          ),
-          onDelete: () => _confirmDelete(context, s.name, () async {
-            try {
-              await ref.read(farmProvider.notifier).deletePond(farmId, s.id);
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to delete pond: $e')),
-                );
-              }
-            }
-          }),
-        );
-      },
-    );
-  }
-
-  // ── HELPERS ────────────────────────────────────────────────────────────────
-
-  static Widget _sectionLabel(String text) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          color: _textSub,
-          letterSpacing: 1.2,
-        ),
-      );
-
-  static String _formatCurrency(double v) {
-    if (v.abs() >= 100000) {
-      return '₹${(v / 100000).toStringAsFixed(1)}L';
-    } else if (v.abs() >= 1000) {
-      return '₹${(v / 1000).toStringAsFixed(1)}K';
+      }
     }
-    return '₹${v.toStringAsFixed(0)}';
-  }
 
-  static int _computeHealthScore(
-      double fcr, double survival, List<_PondSummary> summaries) {
-    int score = 100;
-    if (fcr > 2.0) {
-      score -= 25;
-    } else if (fcr > 1.8)  score -= 18;
-    else if (fcr > 1.5)  score -= 10;
-    else if (fcr > 1.3)  score -= 5;
-
-    if (survival < 70) {
-      score -= 20;
-    } else if (survival < 80) score -= 10;
-    else if (survival < 85) score -= 5;
-
-    final critCount = summaries.where((s) => s.status == 'Critical').length;
-    final slowCount = summaries.where((s) => s.status == 'Slow').length;
-    score -= critCount * 12;
-    score -= slowCount * 5;
-
-    return score.clamp(0, 100);
-  }
-
-  static double _growthDeltaPerWeek(List<SamplingLog> logs) {
-    if (logs.isEmpty) return 999.0;
-    if (logs.length == 1) return 0.0;
-    final weekAgo = DateTime.now().subtract(const Duration(days: 7));
-    final older = logs.where((l) => l.date.isBefore(weekAgo)).firstOrNull;
-    if (older == null) return logs.first.abw - logs.last.abw;
-    return logs.first.abw - older.abw;
-  }
-
-  static List<_FCRPoint> _buildFcrTrend(List<FeedHistoryLog> feedLogs,
-      List<SamplingLog> growthLogs, int seedCount) {
-    final result = <_FCRPoint>[];
-    final last7 =
-        feedLogs.take(7).toList().reversed.toList(); // oldest → newest
-    for (final log in last7) {
-      final double abw = _abwAtDoc(growthLogs, log.doc) ?? 0;
-      double survival = 1.0;
-      if (log.doc > 60) {
-        survival = 0.90;
-      } else if (log.doc > 30) survival = 0.95;
-      final double biomass = (seedCount * survival * abw) / 1000;
-      final double fcr = biomass > 0.1 ? log.cumulative / biomass : 0;
-      if (fcr > 0) result.add(_FCRPoint(date: log.date, fcr: fcr));
+    // No sampling in 10+ days
+    for (final pond in ponds) {
+      final row = rows.where((r) => r.id == pond.id).firstOrNull;
+      if (row == null || row.doc < 1) continue;
+      final lastSample = pond.latestSampleDate;
+      final daysSince  = lastSample == null ? 999 : today.difference(lastSample).inDays;
+      if (daysSince >= 10) {
+        result.add(_Insight(
+          title:      '${row.name}: No sampling in $daysSince days',
+          subtitle:   'Biomass estimation may be inaccurate.',
+          ctaLabel:   'View Pond',
+          pondId:     row.id,
+          isCritical: false,
+        ));
+      }
     }
+
     return result;
   }
 
@@ -553,20 +361,18 @@ class DashboardScreen extends ConsumerWidget {
       final diff = (l.doc - doc).abs();
       if (diff < bestDiff) {
         bestDiff = diff;
-        closest = l;
+        closest  = l;
       }
     }
     return closest?.abw;
   }
 
-  void _confirmDelete(
-      BuildContext context, String pondName, VoidCallback onConfirmed) {
+  void _confirmDelete(BuildContext context, String name, VoidCallback onConfirmed) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Pond'),
-        content: Text(
-            "Delete '$pondName'? This action is permanent and cannot be undone."),
+        content: Text("Delete '$name'? This cannot be undone."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -574,10 +380,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: _red),
-            onPressed: () {
-              Navigator.pop(ctx);
-              onConfirmed();
-            },
+            onPressed: () { Navigator.pop(ctx); onConfirmed(); },
             child: const Text('Delete'),
           ),
         ],
@@ -585,93 +388,40 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  // ── ACTION ITEMS ───────────────────────────────────────────────────────────
-  static List<_ActionItem> _buildActionItems(
-    List<Pond> ponds,
-    List<_PondSummary> summaries,
-    Set<String> pondsFedToday,
-    Map<String, List<FeedHistoryLog>> feedHistory,
-  ) {
-    final items = <_ActionItem>[];
-    final now = DateTime.now();
-
-    // Priority 1: Feed pending — pond has not been fed today
-    for (final pond in ponds) {
-      if (!pondsFedToday.contains(pond.id)) {
-        // Use most recent planned amount as today's proxy
-        final planned = feedHistory[pond.id]?.firstOrNull?.expected ?? 0.0;
-        final qtyLabel = planned > 0
-            ? ' — ${planned.toStringAsFixed(1)} kg due'
-            : '';
-        items.add(_ActionItem(
-          message: '⚠️ Feed ${pond.name}$qtyLabel',
-          pondId: pond.id,
-          priority: 1,
-        ));
-      }
-    }
-
-    // Priority 2: Sampling due — DOC ≥ 30 and last sample ≥ 10 days ago
-    for (final pond in ponds) {
-      final summary = summaries.where((s) => s.id == pond.id).firstOrNull;
-      if (summary == null || summary.doc < 30) continue;
-      final lastSample = pond.latestSampleDate;
-      final daysSince = lastSample == null ? 999 : now.difference(lastSample).inDays;
-      if (daysSince >= 10) {
-        items.add(_ActionItem(
-          message: '📊 Sampling due in ${pond.name}',
-          pondId: pond.id,
-          priority: 2,
-        ));
-      }
-    }
-
-    // Priority 3: Growth alert
-    for (final s in summaries) {
-      if (s.status == 'Slow' || s.status == 'Critical') {
-        items.add(_ActionItem(
-          message: '🚨 Growth slower than expected in ${s.name}',
-          pondId: s.id,
-          priority: 3,
-        ));
-      }
-    }
-
-    items.sort((a, b) => a.priority.compareTo(b.priority));
-    return items.take(2).toList();
+  // ── Loading state ──────────────────────────────────────────────────────────
+  Widget _loadingView() {
+    return Scaffold(
+      backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+      body: const SafeArea(
+        child: Center(
+          child: CircularProgressIndicator(color: _green, strokeWidth: 2.5),
+        ),
+      ),
+    );
   }
 
+  // ── Empty states ───────────────────────────────────────────────────────────
   Widget _noFarmView(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgDark,
+      backgroundColor: _bg,
       bottomNavigationBar: const AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.dashboard_customize_rounded,
-                  size: 64, color: Colors.grey.shade300),
+              Icon(Icons.dashboard_customize_rounded, size: 64, color: Colors.grey.shade300),
               const SizedBox(height: 16),
-              const Text(
-                'No Farm Selected',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: _textPrimary),
-              ),
+              const Text('No Farm Selected',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _textPrimary)),
               const SizedBox(height: 8),
-              const Text(
-                'Create or select a farm to get started.',
-                style: TextStyle(color: _textSub),
-              ),
+              const Text('Create or select a farm to get started.',
+                  style: TextStyle(color: _textSub)),
               const SizedBox(height: 32),
               ElevatedButton(
-                onPressed: () =>
-                    Navigator.pushNamed(context, AppRoutes.addFarm),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentGreen,
-                    foregroundColor: Colors.black),
+                onPressed: () => Navigator.pushNamed(context, AppRoutes.addFarm),
+                style: ElevatedButton.styleFrom(backgroundColor: _green, foregroundColor: _white),
                 child: const Text('Create Farm'),
               ),
             ],
@@ -683,294 +433,236 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _noPondsView(BuildContext context, WidgetRef ref,
       FarmState farmState, dynamic currentFarm) {
-    final now = DateTime.now();
     return Scaffold(
-      backgroundColor: _bgDark,
+      backgroundColor: _bg,
       bottomNavigationBar: const AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Keep the farm header so the user can switch farms
-            _buildHeader(context, ref, farmState, currentFarm, 0, now),
-
-            // Empty state — centered in remaining space
+            _Header(
+              farmState:           farmState,
+              currentFarm:         currentFarm,
+              needsAttentionCount: 0,
+              onSelectFarm: (id) => ref.read(farmProvider.notifier).selectFarm(id),
+              onAddFarm:    ()   => Navigator.pushNamed(context, AppRoutes.addFarm),
+            ),
             Expanded(
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 360),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: _accentGreen.withOpacity(0.10),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.water_outlined,
-                            size: 40,
-                            color: _accentGreen,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 80, height: 80,
+                        decoration: BoxDecoration(
+                          color: _green.withOpacity(0.1), shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.water_outlined, size: 40, color: _green),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text('Start your first pond',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _textPrimary)),
+                      const SizedBox(height: 10),
+                      const Text('Track feed, growth, and profit easily.\nAdd a pond to get started.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14, color: _textSub, height: 1.5)),
+                      const SizedBox(height: 32),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pushNamed(context, AppRoutes.addPond),
+                          icon: const Icon(Icons.add_rounded, size: 20, color: _white),
+                          label: const Text('+ Add Pond',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _white)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _green,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'Start your first pond',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 22,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HEADER
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _Header extends StatelessWidget {
+  final FarmState farmState;
+  final dynamic currentFarm;
+  final int needsAttentionCount;
+  final void Function(String) onSelectFarm;
+  final VoidCallback onAddFarm;
+
+  const _Header({
+    required this.farmState,
+    required this.currentFarm,
+    required this.needsAttentionCount,
+    required this.onSelectFarm,
+    required this.onAddFarm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: _white,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Farm icon
+          Container(
+            width: 42, height: 42,
+            decoration: BoxDecoration(
+              color: _green.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.agriculture_rounded, color: _green, size: 22),
+          ),
+          const SizedBox(width: 10),
+
+          // Farm name + attention label
+          Expanded(
+            child: PopupMenuButton<String>(
+              offset: const Offset(0, 40),
+              color: _white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onSelected: (value) {
+                if (value == '__add__') {
+                  onAddFarm();
+                } else {
+                  onSelectFarm(value);
+                }
+              },
+              itemBuilder: (_) => [
+                ...farmState.farms.map((farm) {
+                  final sel = farm.id == farmState.selectedId;
+                  return PopupMenuItem<String>(
+                    value: farm.id,
+                    child: Row(
+                      children: [
+                        Icon(Icons.eco_rounded, size: 15,
+                            color: sel ? _green : _textSub),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(farm.name,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: sel ? _green : _textPrimary,
+                              )),
+                        ),
+                        if (sel) const Icon(Icons.check_rounded, size: 15, color: _green),
+                      ],
+                    ),
+                  );
+                }),
+                const PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: '__add__',
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 22, height: 22,
+                        decoration: BoxDecoration(
+                          color: _green.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(Icons.add_rounded, size: 14, color: _green),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text('Add New Farm',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _green)),
+                    ],
+                  ),
+                ),
+              ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          currentFarm.name,
+                          style: const TextStyle(
+                            fontSize: 20,
                             fontWeight: FontWeight.w900,
                             color: _textPrimary,
                             letterSpacing: -0.3,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'Track feed, growth, and profit easily.\nAdd a pond to get started.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: _textSub,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () =>
-                                Navigator.pushNamed(context, AppRoutes.addPond),
-                            icon: const Icon(Icons.add_rounded,
-                                size: 20, color: Colors.white),
-                            label: const Text(
-                              '+ Add Pond',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _accentGreen,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.keyboard_arrow_down_rounded,
+                          size: 18, color: _textSub),
+                    ],
+                  ),
+                  if (needsAttentionCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7, height: 7,
+                            decoration: const BoxDecoration(
+                              color: _red, shape: BoxShape.circle,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 4),
+                          Text(
+                            '$needsAttentionCount POND${needsAttentionCount > 1 ? 'S' : ''} NEED ATTENTION',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _red,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+          ),
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ACTION BAR
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _ActionItem {
-  final String message;
-  final String pondId;
-  final int priority;
-  const _ActionItem({
-    required this.message,
-    required this.pondId,
-    required this.priority,
-  });
-}
-
-class _ActionBar extends StatelessWidget {
-  final List<_ActionItem> items;
-  final void Function(String pondId) onTap;
-  const _ActionBar({required this.items, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0FDF4),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF86EFAC)),
-        ),
-        child: const Row(
-          children: [
-            Expanded(
-              child: Text(
-                '✅ All ponds on track',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF166534)),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      children: items.map((item) {
-        return GestureDetector(
-          onTap: () => onTap(item.pondId),
-          child: Container(
-            margin: EdgeInsets.only(bottom: items.indexOf(item) < items.length - 1 ? 8 : 0),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: _actionBg(item.priority),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _actionBorder(item.priority)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.message,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _actionText(item.priority),
-                    ),
-                  ),
-                ),
-                Icon(Icons.arrow_forward_ios_rounded,
-                    size: 12, color: _actionText(item.priority)),
-              ],
+          // Bell
+          GestureDetector(
+            onTap: () {},
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.notifications_none_rounded, size: 24, color: _textSub),
             ),
           ),
-        );
-      }).toList(),
-    );
-  }
 
-  static Color _actionBg(int p) {
-    if (p == 1) return const Color(0xFFFFF7ED);
-    if (p == 2) return const Color(0xFFEFF6FF);
-    return const Color(0xFFFFF1F2);
-  }
-
-  static Color _actionBorder(int p) {
-    if (p == 1) return const Color(0xFFFED7AA);
-    if (p == 2) return const Color(0xFFBFDBFE);
-    return const Color(0xFFFCA5A5);
-  }
-
-  static Color _actionText(int p) {
-    if (p == 1) return const Color(0xFF9A3412);
-    if (p == 2) return const Color(0xFF1E40AF);
-    return const Color(0xFF991B1B);
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// DATA MODELS
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _PondSummary {
-  final String id, name, status;
-  final int doc, seedCount;
-  final double abw, fcr, survival, biomass, cropValue, feedCost, profit,
-      totalFeed, area;
-  final double? prevAbw;
-  final List<_FCRPoint> fcrTrend;
-
-  const _PondSummary({
-    required this.id,
-    required this.name,
-    required this.doc,
-    required this.abw,
-    this.prevAbw,
-    required this.fcr,
-    required this.seedCount,
-    required this.totalFeed,
-    required this.survival,
-    required this.biomass,
-    required this.cropValue,
-    required this.feedCost,
-    required this.profit,
-    required this.status,
-    required this.fcrTrend,
-    required this.area,
-  });
-}
-
-class _FCRPoint {
-  final DateTime date;
-  final double fcr;
-  const _FCRPoint({required this.date, required this.fcr});
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// WIDGETS
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ── Farm Health Gauge ─────────────────────────────────────────────────────────
-class _FarmHealthGauge extends StatelessWidget {
-  final int score;
-  const _FarmHealthGauge({required this.score});
-
-  @override
-  Widget build(BuildContext context) {
-    final label = score >= 85
-        ? 'Excellent'
-        : score >= 70
-            ? 'Good'
-            : score >= 50
-                ? 'Fair'
-                : 'Critical';
-    final color = score >= 70 ? _accentGreen : score >= 50 ? _amber : _red;
-
-    return Container(
-      width: 100,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _cardDark,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _borderDark),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 70,
-            height: 70,
-            child: CustomPaint(
-              painter: _GaugePainter(score: score, color: color),
+          // Profile avatar
+          Container(
+            width: 36, height: 36,
+            decoration: const BoxDecoration(
+              color: Color(0xFF4A7BBE),
+              shape: BoxShape.circle,
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'FARM HEALTH',
-            style: TextStyle(
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
-              color: _textSub,
-              letterSpacing: 0.8,
-            ),
+            child: const Icon(Icons.person_rounded, size: 20, color: _white),
           ),
         ],
       ),
@@ -978,72 +670,110 @@ class _FarmHealthGauge extends StatelessWidget {
   }
 }
 
-class _GaugePainter extends CustomPainter {
-  final int score;
-  final Color color;
-  const _GaugePainter({required this.score, required this.color});
+// ══════════════════════════════════════════════════════════════════════════════
+// KPI GRID  (2 × 2)
+// ══════════════════════════════════════════════════════════════════════════════
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 6;
-    const startAngle = math.pi * 0.75;
-    const sweepTotal = math.pi * 1.5;
+class _KpiGrid extends StatelessWidget {
+  final double totalFeedFarm, feedToday, feedChangePct, totalFeedCost, totalBiomass;
+  final String biomassStatus;
 
-    // Background arc
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepTotal,
-      false,
-      Paint()
-        ..color = const Color(0xFF252D3D)
-        ..strokeWidth = 7
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-
-    // Filled arc
-    final sweep = sweepTotal * (score / 100);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweep,
-      false,
-      Paint()
-        ..color = color
-        ..strokeWidth = 7
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_GaugePainter old) => old.score != score;
-}
-
-// ── METRIC TILE ─────────────────────────────────────────────────────────────
-class _MetricTile extends StatelessWidget {
-  final String label, value, sub;
-  final Color? valueColor;
-  final bool fullWidth;
-
-  const _MetricTile({
-    required this.label,
-    required this.value,
-    required this.sub,
-    this.valueColor,
-    this.fullWidth = false,
+  const _KpiGrid({
+    required this.totalFeedFarm,
+    required this.feedToday,
+    required this.feedChangePct,
+    required this.totalFeedCost,
+    required this.totalBiomass,
+    required this.biomassStatus,
   });
 
   @override
   Widget build(BuildContext context) {
-    final tile = Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    final hasFeedChange = feedChangePct != 0 && feedToday > 0;
+    final biomassOk     = biomassStatus == 'Within optimal range';
+    final nf            = NumberFormat('#,###');
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _KpiCard(
+                label: 'TOTAL FEED\n(TILL DATE)',
+                value: nf.format(totalFeedFarm.round()),
+                unit:  'kg',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _KpiCard(
+                label: 'TODAY FEED\n(ALL PONDS)',
+                value: nf.format(feedToday.round()),
+                unit:  'kg',
+                sub: hasFeedChange
+                    ? '${feedChangePct > 0 ? '↑' : '↓'} ${feedChangePct.abs().toStringAsFixed(0)}% vs yesterday'
+                    : null,
+                subColor: feedChangePct > 0 ? _red : _green,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _KpiCard(
+                label:      'TOTAL FEED COST\n(₹)',
+                value:      _fmtCurrency(totalFeedCost),
+                valueColor: _green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _KpiCard(
+                label:    'ESTIMATED\nBIOMASS',
+                value:    nf.format(totalBiomass.round()),
+                unit:     'kg',
+                sub:      biomassStatus,
+                subColor: biomassOk ? _green : _amber,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _fmtCurrency(double v) {
+    if (v.abs() >= 10000000) return '₹${(v / 10000000).toStringAsFixed(1)} Cr';
+    if (v.abs() >= 100000)   return '₹${(v / 100000).toStringAsFixed(1)} L';
+    if (v.abs() >= 1000)     return '₹${(v / 1000).toStringAsFixed(1)} K';
+    return '₹${v.toStringAsFixed(0)}';
+  }
+}
+
+class _KpiCard extends StatelessWidget {
+  final String label, value;
+  final String? unit, sub;
+  final Color? valueColor, subColor;
+
+  const _KpiCard({
+    required this.label,
+    required this.value,
+    this.unit,
+    this.sub,
+    this.valueColor,
+    this.subColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
-        color: _cardDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderDark),
+        color: _white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1051,51 +781,174 @@ class _MetricTile extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: _textSub,
-              letterSpacing: 0.8,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-              color: valueColor ?? _textPrimary,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            sub,
-            style: const TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: _textSub,
+              letterSpacing: 0.4,
+              height: 1.4,
             ),
           ),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: value,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: valueColor ?? _textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (unit != null)
+                  TextSpan(
+                    text: ' $unit',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _textSub,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (sub != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              sub!,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: subColor ?? _textSub,
+              ),
+            ),
+          ],
         ],
       ),
     );
-
-    return fullWidth ? tile : Expanded(child: tile);
   }
 }
 
-// ── Pond Status Card ──────────────────────────────────────────────────────────
-class _PondStatusCard extends StatelessWidget {
-  final _PondSummary summary;
-  final bool fedToday;
-  final double todayFedKg;
+// ══════════════════════════════════════════════════════════════════════════════
+// INSIGHT CARD
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _InsightCard extends StatelessWidget {
+  final _Insight insight;
   final VoidCallback onTap;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  const _PondStatusCard({
-    required this.summary,
-    required this.fedToday,
-    required this.todayFedKg,
+
+  const _InsightCard({required this.insight, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = insight.isCritical ? _red : _amber;
+    final bg     = insight.isCritical ? _redLight : _amberLight;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accent.withOpacity(0.25)),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+            // Colored left accent bar
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Icon
+            Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  insight.isCritical
+                      ? Icons.error_outline_rounded
+                      : Icons.history_rounded,
+                  size: 18,
+                  color: accent,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Text content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 14, 12, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      insight.title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: insight.isCritical
+                            ? const Color(0xFF991B1B)
+                            : const Color(0xFF92400E),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      insight.subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _textSub,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          '${insight.ctaLabel} →',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          ),        // Row
+        ),          // IntrinsicHeight
+      ),            // Container
+    );              // GestureDetector
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POND CARD
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _PondCard extends StatelessWidget {
+  final _PondRow row;
+  final VoidCallback onTap, onEdit, onDelete;
+
+  const _PondCard({
+    required this.row,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -1103,322 +956,279 @@ class _PondStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = summary.status == 'On Track'
-        ? _accentGreen
-        : summary.status == 'Critical'
+    final statusColor = row.status == 'Good'
+        ? _green
+        : row.status == 'Critical'
             ? _red
             : _amber;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 16),
         decoration: BoxDecoration(
-          color: _cardDark,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _borderDark),
+          color: _white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row — name + status badge + 3-dot menu
+            // ── Row 1: name + badge + menu ───────────────────────────────
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Text(
+                    row.name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: _textPrimary,
+                      letterSpacing: -0.3,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Status badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        summary.name,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            color: _textPrimary),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
+                        width: 6, height: 6,
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          color: statusColor, shape: BoxShape.circle,
                         ),
-                        child: Text(
-                          summary.status,
-                          style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: statusColor),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        row.status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: statusColor,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ],
                   ),
                 ),
-                // 3-dot menu
+                const SizedBox(width: 4),
                 PopupMenuButton<String>(
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.more_vert,
-                        size: 18, color: _textSub),
-                    color: Colors.white,
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    onSelected: (value) {
-                      if (value == 'edit') onEdit();
-                      if (value == 'delete') onDelete();
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_outlined, size: 16, color: _textSub),
-                            SizedBox(width: 10),
-                            Text('Edit Pond',
-                                style: TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline_rounded,
-                                size: 16, color: _red),
-                            SizedBox(width: 10),
-                            Text('Delete',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _red)),
-                          ],
-                        ),
-                      ),
-                    ],
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_vert, size: 18, color: _textSub),
+                  color: _white,
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  onSelected: (v) {
+                    if (v == 'edit')   onEdit();
+                    if (v == 'delete') onDelete();
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        Icon(Icons.edit_outlined, size: 16, color: _textSub),
+                        SizedBox(width: 10),
+                        Text('Edit Pond',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(Icons.delete_outline_rounded, size: 16, color: _red),
+                        SizedBox(width: 10),
+                        Text('Delete',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _red)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            // ── "Needs Attention" chip if Critical ───────────────────────
+            if (row.status == 'Critical') ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _redLight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 12, color: _red),
+                    SizedBox(width: 4),
+                    Text('NEEDS ATTENTION',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: _red,
+                          letterSpacing: 0.3,
+                        )),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 14),
+            const Divider(color: _border, height: 1),
+            const SizedBox(height: 12),
+
+            // ── Stats row: DOC | FEED (D) | FCR ──────────────────────────
+            Row(
+              children: [
+                // DOC
+                Expanded(
+                  child: _StatCell(
+                    label: 'DOC',
+                    value: '${row.doc}',
                   ),
+                ),
+                // Divider
+                Container(width: 1, height: 40, color: _border),
+                // FEED (D)
+                Expanded(
+                  child: _StatCell(
+                    label: 'FEED (D)',
+                    valueWidget: row.todayFeed > 0
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Text(
+                                '${row.todayFeed.toStringAsFixed(0)} kg',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: _textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                row.feedTrendUp
+                                    ? Icons.arrow_upward_rounded
+                                    : Icons.arrow_downward_rounded,
+                                size: 14,
+                                color: row.feedTrendUp ? _red : _green,
+                              ),
+                            ],
+                          )
+                        : const Text('—',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: _textSub,
+                            )),
+                  ),
+                ),
+                // Divider
+                Container(width: 1, height: 40, color: _border),
+                // FCR
+                Expanded(
+                  child: row.hasAbwData
+                      ? _StatCell(
+                          label: 'FCR',
+                          valueWidget: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Text(
+                                row.fcr.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: row.fcrTrendUp ? _red : _textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                row.fcrTrendUp
+                                    ? Icons.arrow_upward_rounded
+                                    : Icons.arrow_downward_rounded,
+                                size: 14,
+                                color: row.fcrTrendUp ? _red : _green,
+                              ),
+                            ],
+                          ),
+                        )
+                      : _StatCell(
+                          label: 'FCR',
+                          valueWidget: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Text(
+                                'Not available',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: _amber,
+                                ),
+                              ),
+                              SizedBox(height: 1),
+                              Text(
+                                'No sampling yet',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: _textSub,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
               ],
-            ),
-            const SizedBox(height: 4),
-            // Area · DOC
-            Text(
-              '${summary.area.toStringAsFixed(1)} ac  ·  DOC ${summary.doc}',
-              style: const TextStyle(
-                  fontSize: 10,
-                  color: _textSub,
-                  fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 10),
-            // Survival %
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Survival',
-                  style: TextStyle(
-                      fontSize: 9,
-                      color: _textSub,
-                      fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  // Fix #6: tag survival as estimated when no real ABW data exists
-                  // (abw == 0 means no sampling has been done yet).
-                  // Showing "100%" on a brand-new pond is misleading.
-                  summary.abw <= 0
-                      ? '~${summary.survival.toStringAsFixed(0)}% Est.'
-                      : '${summary.survival.toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: _textPrimary,
-                      fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Survival bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: summary.survival / 100,
-                minHeight: 5,
-                backgroundColor: _borderDark,
-                valueColor: AlwaysStoppedAnimation(
-                  // Fix #6: gray bar when survival is a model estimate (no real data).
-                  summary.abw <= 0
-                      ? const Color(0xFFCBD5E1)
-                      : summary.survival >= 80 ? _accentGreen : _amber,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Seed count
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Seed',
-                  style: TextStyle(
-                      fontSize: 9,
-                      color: _textSub,
-                      fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  _formatSeedCount(summary.seedCount),
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: _textPrimary,
-                      fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Today's feed status
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: fedToday
-                    ? _accentGreen.withOpacity(0.08)
-                    : _red.withOpacity(0.07),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                fedToday
-                    ? '✅ Fed ${todayFedKg.toStringAsFixed(1)} kg today'
-                    : '🔴 Not fed yet',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: fedToday ? _accentGreen : _red,
-                ),
-              ),
             ),
           ],
         ),
       ),
     );
   }
-
-  static String _formatSeedCount(int count) {
-    if (count >= 100000) return '${(count / 100000).toStringAsFixed(1)}L';
-    if (count >= 1000) return '${(count / 1000).toStringAsFixed(0)}K';
-    return '$count';
-  }
 }
 
-// ── Farm Dropdown ─────────────────────────────────────────────────────────────
-class _FarmDropdown extends StatelessWidget {
-  final FarmState farmState;
-  final String currentFarmName;
-  final void Function(String id) onSelect;
-  final VoidCallback onAddFarm;
+class _StatCell extends StatelessWidget {
+  final String label;
+  final String? value;
+  final Widget? valueWidget;
 
-  const _FarmDropdown({
-    required this.farmState,
-    required this.currentFarmName,
-    required this.onSelect,
-    required this.onAddFarm,
-  });
+  const _StatCell({required this.label, this.value, this.valueWidget})
+      : assert(value != null || valueWidget != null);
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      offset: const Offset(0, 36),
-      color: Colors.white,
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (value) {
-        if (value == '__add__') {
-          onAddFarm();
-        } else {
-          onSelect(value);
-        }
-      },
-      itemBuilder: (_) => [
-        // Existing farms
-        ...farmState.farms.map((farm) {
-          final isSelected = farm.id == farmState.selectedId;
-          return PopupMenuItem<String>(
-            value: farm.id,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.eco_rounded,
-                  size: 15,
-                  color: isSelected ? _accentGreen : _textSub,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    farm.name,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? _accentGreen : _textPrimary,
-                    ),
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(Icons.check_rounded,
-                      size: 15, color: _accentGreen),
-              ],
-            ),
-          );
-        }),
-        // Divider
-        const PopupMenuDivider(),
-        // Add new farm
-        PopupMenuItem<String>(
-          value: '__add__',
-          child: Row(
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: _accentGreen.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(Icons.add_rounded,
-                    size: 14, color: _accentGreen),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Add New Farm',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: _accentGreen,
-                ),
-              ),
-            ],
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: _textSub,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 4),
+        if (valueWidget != null) valueWidget!
+        else Text(
+          value!,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: _textPrimary,
           ),
         ),
       ],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              currentFarmName,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: _textPrimary,
-                letterSpacing: -0.3,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 4),
-          const Icon(Icons.keyboard_arrow_down_rounded,
-              size: 20, color: _textSub),
-        ],
-      ),
     );
   }
 }
-
-

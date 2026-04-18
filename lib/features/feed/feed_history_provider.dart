@@ -1,8 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/engines/feed/master_feed_engine.dart';
 import '../../core/enums/tray_status.dart';
-import '../../core/enums/stocking_type.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
 import '../pond/pond_dashboard_provider.dart';
@@ -182,7 +179,6 @@ class FeedHistoryNotifier
         rounds: log.rounds,
         expectedFeed: log.expected,
         cumulativeFeed: log.cumulative,
-        engineVersion: MasterFeedEngine.version,
       );
       AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc}');
     } catch (e) {
@@ -244,23 +240,6 @@ class FeedHistoryNotifier
   Future<void> loadHistoryForPonds(List<String> pondIds) async {
     if (pondIds.isEmpty) return;
 
-    // Batch-fetch pond metadata so expected feed can be computed per DOC.
-    // Previously expected was always 0 for any pond not currently selected.
-    final supabase = Supabase.instance.client;
-    final pondMetaRows = List<Map<String, dynamic>>.from(
-      await supabase
-          .from('ponds')
-          .select('id, seed_count, stocking_type')
-          .inFilter('id', pondIds),
-    );
-    final Map<String, ({int seedCount, String stockingType})> pondMeta = {
-      for (final r in pondMetaRows)
-        r['id'] as String: (
-          seedCount: (r['seed_count'] as int?) ?? 100000,
-          stockingType: (r['stocking_type'] as String?) ?? 'nursery',
-        ),
-    };
-
     final newState = Map<String, List<FeedHistoryLog>>.from(state);
 
     for (final pondId in pondIds) {
@@ -277,7 +256,6 @@ class FeedHistoryNotifier
           latestByDate[dateKey] = row; // rows are ordered ascending — last wins
         }
 
-        final meta = pondMeta[pondId];
         double cumulative = 0.0;
         final logs = <FeedHistoryLog>[];
 
@@ -286,17 +264,9 @@ class FeedHistoryNotifier
           final doc = (entry.value['doc'] as int?) ?? 0;
           cumulative += feedGiven;
 
-          // Compute expected using MasterFeedEngine so trend chart and delta
-          // are accurate for every pond, not just the currently selected one.
-          final expected = (meta != null && doc > 0)
-              ? MasterFeedEngine.compute(
-                  doc: doc,
-                  stockingType: meta.stockingType == 'hatchery'
-                      ? StockingType.hatchery
-                      : StockingType.nursery,
-                  density: meta.seedCount,
-                )
-              : 0.0;
+          // baseFeed written by saveFeed() from OrchestratorResult.baseFeed —
+          // null for records logged before this change, treated as 0 (no expected line).
+          final expected = (entry.value['base_feed'] as num?)?.toDouble() ?? 0.0;
 
           logs.add(FeedHistoryLog(
             date: DateTime.parse(entry.key),

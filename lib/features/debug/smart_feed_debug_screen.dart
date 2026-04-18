@@ -78,21 +78,18 @@ class SmartFeedDebugScreen extends StatelessWidget {
           _factorRow('Tray Factor', data.trayFactor),
           _factorRow('Smart Factor', data.smartFactor,
               hint: 'SmartFeedEngineV2 combined'),
-          if (data.debugInfo != null) ...[
-            _factorRow('Raw Combined', data.debugInfo!.rawCombinedFactor,
-                hint: 'V2 × FCR × intelligence (pre-clamp)'),
-          ],
+          _factorRow('Raw Combined', data.debugInfo.rawCombinedFactor,
+              hint: 'V2 × FCR × intelligence (pre-clamp)'),
           _factorRow('Combined Factor', data.combinedFactor,
               bold: true, hint: 'clamped to [0.70, 1.30]'),
           _factorRow('FCR Factor', data.fcrFactor),
           _factorRow('Environment Factor', data.correction.environmentFactor),
-          if (data.debugInfo != null &&
-              (data.debugInfo!.rawCombinedFactor - data.combinedFactor).abs() >
-                  0.2)
+          if ((data.debugInfo.rawCombinedFactor - data.combinedFactor).abs() >
+              0.2)
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 4),
               child: Text(
-                '⚠ High stacking: raw=${data.debugInfo!.rawCombinedFactor.toStringAsFixed(3)} '
+                '⚠ High stacking: raw=${data.debugInfo.rawCombinedFactor.toStringAsFixed(3)} '
                 'clamped=${data.combinedFactor.toStringAsFixed(3)}',
                 style: const TextStyle(
                     color: Colors.orangeAccent,
@@ -221,7 +218,7 @@ class SmartFeedDebugScreen extends StatelessWidget {
       accent: Colors.white38,
       child: Column(
         children: [
-          _row('DOC', '${data.debugInfo?.doc ?? '—'}'),
+          _row('DOC', '${data.debugInfo.doc}'),
           _row('Engine Version', data.engineVersion),
           _row(
             'Sampling present',

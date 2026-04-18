@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../engines/feed/feed_base_calculation_engine.dart';
 import '../engines/feed/feed_input_builder.dart';
 import '../engines/planning/feed_plan_constants.dart';
 import '../engines/planning/feed_plan_generator.dart';
@@ -20,24 +19,25 @@ class FeedService {
     double? leftoverPercent,
     String? stockingType,
     int? density,
-    String? engineVersion,
   }) async {
-    // Store today's daily total (sum of all rounds passed so far).
-    // _persistFeedLog always passes log.rounds = ALL today's rounds, so total is
-    // the growing running-daily sum. _actualFeedForDoc and _computeLastFcr both
-    // take the LAST row per date as the authoritative day total — this is correct.
+    // feed_given = actual feed given by the farmer (sum of all rounds today).
+    // base_feed  = engine recommendation (finalFeed from orchestrator).
     // NOTE: cumulativeFeed (all-time since stocking) is intentionally NOT stored
     // here; it lives only in FeedHistoryLog in-memory state.
-    final total = FeedBaseCalculationEngine.sumRounds(rounds);
-    await supabase.from('feed_logs').insert({
-      'pond_id': pondId,
-      'feed_given': total,
-      'created_at': date.toIso8601String(),
-      'doc': doc,
-      if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
-      if (stockingType != null) 'stocking_type': stockingType,
-      if (density != null) 'density': density,
-      if (engineVersion != null) 'engine_version': engineVersion,
+    final actualFeedGiven = rounds.fold(0.0, (sum, r) => sum + r);
+    await _withRetry('saveFeed(pond=$pondId doc=$doc)', () async {
+      final result = await MasterFeedEngine.orchestrateForPond(pondId);
+      await supabase.from('feed_logs').insert({
+        'pond_id': pondId,
+        'feed_given': actualFeedGiven,
+        'base_feed': result.finalFeed,
+        'created_at': date.toIso8601String(),
+        'doc': doc,
+        if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
+        if (stockingType != null) 'stocking_type': stockingType,
+        if (density != null) 'density': density,
+        'engine_version': MasterFeedEngine.version,
+      });
     });
   }
 
@@ -46,7 +46,7 @@ class FeedService {
   Future<List<Map<String, dynamic>>> fetchFeedLogs(String pondId) async {
     return await supabase
         .from('feed_logs')
-        .select('feed_given, created_at, doc')
+        .select('feed_given, base_feed, created_at, doc')
         .eq('pond_id', pondId)
         .order('created_at', ascending: true);
   }
@@ -130,19 +130,21 @@ class FeedService {
     required double plannedAmount,
     String status = 'completed',
   }) async {
-    final response = await supabase
-        .from('feed_rounds')
-        .insert({
-          'pond_id': pondId,
-          'doc': doc,
-          'round': round,
-          'planned_amount': plannedAmount,
-          'status': status,
-          'is_manual': true,
-        })
-        .select('id')
-        .single();
-    return response['id'] as String;
+    return _withRetry('insertFeedRound(pond=$pondId doc=$doc r=$round)', () async {
+      final response = await supabase
+          .from('feed_rounds')
+          .insert({
+            'pond_id': pondId,
+            'doc': doc,
+            'round': round,
+            'planned_amount': plannedAmount,
+            'status': status,
+            'is_manual': true,
+          })
+          .select('id')
+          .single();
+      return response['id'] as String;
+    });
   }
 
   /// Mark a feed plan as completed
@@ -153,14 +155,12 @@ class FeedService {
       throw Exception('Invalid feedPlanId');
     }
 
-    try {
+    await _withRetry('markFeedPlanCompleted($feedPlanId)', () async {
       await supabase
           .from('feed_rounds')
           .update({'status': 'completed'})
           .eq('id', feedPlanId);
-    } catch (e) {
-      throw Exception('Failed to mark feed plan as completed: $e');
-    }
+    });
   }
 
   /// Pre-mark the first [count] feed rounds for a pond+doc as completed.
@@ -181,10 +181,12 @@ class FeedService {
         .limit(count);
 
     for (final row in rows) {
-      await supabase
-          .from('feed_rounds')
-          .update({'status': 'completed'})
-          .eq('id', row['id'] as String);
+      await _withRetry('premarkRoundsCompleted(${row['id']})', () async {
+        await supabase
+            .from('feed_rounds')
+            .update({'status': 'completed'})
+            .eq('id', row['id'] as String);
+      });
     }
   }
 
@@ -197,7 +199,7 @@ class FeedService {
       throw Exception('Invalid feedPlanId');
     }
 
-    try {
+    await _withRetry('overrideFeedAmount($feedPlanId)', () async {
       await supabase
           .from('feed_rounds')
           .update({
@@ -205,9 +207,7 @@ class FeedService {
             'is_manual': true,
           })
           .eq('id', feedPlanId);
-    } catch (e) {
-      throw Exception('Failed to override feed amount: $e');
-    }
+    });
   }
 
   /// Writes redistributed round amounts back to DB (called after redistribution
@@ -224,11 +224,13 @@ class FeedService {
       final amount = entry.value;
       final id = idMap[round];
       if (id == null || id.isEmpty) continue;
-      await supabase.from('feed_rounds').update({
-        'planned_amount': amount,
-        'base_feed': amount,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', id);
+      await _withRetry('persistCorrectedRounds(r$round id=$id)', () async {
+        await supabase.from('feed_rounds').update({
+          'planned_amount': amount,
+          'base_feed': amount,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', id);
+      });
     }
     AppLogger.info(
         'Redistribution written to DB for pond $pondId DOC $doc: '
@@ -277,28 +279,30 @@ class FeedService {
         // Parallelize the 4 rounds per DOC — previously sequential (4 awaits),
         // now a single parallel batch (1 await for 4 concurrent operations).
         await Future.wait(List.generate(4, (i) async {
-          final round = FeedBaseCalculationEngine.oneBasedIndex(i);
+          final round = i + 1;
           final qty = paddedRounds[i];
           final existingId = existingIds[round];
 
-          if (existingId != null) {
-            await supabase.from('feed_rounds').update({
-              'planned_amount': qty,
-              'base_feed': qty,
-              'is_manual': true,
-              'updated_at': DateTime.now().toIso8601String(),
-            }).eq('id', existingId);
-          } else {
-            await supabase.from('feed_rounds').insert({
-              'pond_id': pondId,
-              'doc': doc,
-              'round': round,
-              'planned_amount': qty,
-              'base_feed': qty,
-              'status': 'pending',
-              'is_manual': true,
-            });
-          }
+          await _withRetry('saveFeedPlans(pond=$pondId doc=$doc r=$round)', () async {
+            if (existingId != null) {
+              await supabase.from('feed_rounds').update({
+                'planned_amount': qty,
+                'base_feed': qty,
+                'is_manual': true,
+                'updated_at': DateTime.now().toIso8601String(),
+              }).eq('id', existingId);
+            } else {
+              await supabase.from('feed_rounds').insert({
+                'pond_id': pondId,
+                'doc': doc,
+                'round': round,
+                'planned_amount': qty,
+                'base_feed': qty,
+                'status': 'pending',
+                'is_manual': true,
+              });
+            }
+          });
         }));
       }
 
@@ -337,7 +341,7 @@ class FeedService {
       );
 
       for (final offset in [1, 2, 3]) {
-        final futureDoc = FeedBaseCalculationEngine.futureDocFor(doc, offset);
+        final futureDoc = doc + offset;
         if (futureDoc > 120) break;
         await _applyFactorFromBase(pondId, futureDoc, result.combinedFactor, reasonTag);
       }
@@ -368,7 +372,7 @@ class FeedService {
       final result = MasterFeedEngine.orchestrate(input);
       if (result.combinedFactor <= 0.0) return;
 
-      final nextDoc = FeedBaseCalculationEngine.nextDoc(input.doc);
+      final nextDoc = input.doc + 1;
       final reason = _reasonTag(result.combinedFactor, 'RECALC');
 
       await _logDebug(
@@ -407,7 +411,7 @@ class FeedService {
       final base = (row['base_feed'] as num?)?.toDouble();
       if (base == null || base <= 0) continue;
 
-      final adjusted = FeedBaseCalculationEngine.adjustedFeed(base, factor);
+      final adjusted = (base * factor).clamp(base * 0.70, base * 1.30);
 
       try {
         await supabase.from('feed_rounds').update({
@@ -456,8 +460,24 @@ class FeedService {
     }
   }
 
+  Future<T> _withRetry<T>(String tag, Future<T> Function() fn) async {
+    const maxAttempts = 2;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (attempt == maxAttempts) {
+          AppLogger.error('$tag failed after $maxAttempts attempts', e);
+          rethrow;
+        }
+        AppLogger.warn('$tag attempt $attempt failed, retrying', e);
+      }
+    }
+    throw StateError('unreachable');
+  }
+
   static String _reasonTag(double factor, String tag) {
-    final pct = FeedBaseCalculationEngine.factorPct(factor);
+    final pct = ((factor - 1.0) * 100).round();
     const prefix = 'TRAY';
     final tagUpper = tag.toUpperCase();
     if (pct == 0) return '${prefix}_$tagUpper HOLD';

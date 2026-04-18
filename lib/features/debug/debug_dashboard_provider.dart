@@ -1,10 +1,31 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/engines/feed/master_feed_engine.dart';
-import '../../core/engines/feed/feed_intelligence_engine.dart';
+import '../../core/engines/feed/feed_intelligence_engine.dart' show IntelligenceResult;
 import '../../core/enums/stocking_type.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/doc_utils.dart';
+
+FeedDebugData _buildDebugData(
+    OrchestratorResult result, StockingType stockingType, int density) {
+  return FeedDebugData(
+    doc: result.debugInfo.doc,
+    stockingType: stockingType,
+    density: density,
+    baseFeed: result.debugInfo.baseFeedPer100k,
+    adjustedFeed: result.debugInfo.adjustedFeed,
+    trayFactor: result.debugInfo.trayFactor,
+    rawFeed: result.debugInfo.adjustedFeed,
+    finalFeed: result.baseFeed,
+    minFeed: result.debugInfo.minFeed,
+    maxFeed: result.debugInfo.maxFeed,
+    isClamped: result.debugInfo.isBaseFeedClamped,
+    leftover: null,
+    trayActive: false,
+    trayStatusReason: 'Tray handled by SmartFeedEngineV2',
+    wasInputClamped: result.debugInfo.wasInputClamped,
+  );
+}
 
 class DebugDashboardState {
   final bool isLoading;
@@ -110,15 +131,8 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
       final density = (pond['seed_count'] as int?) ?? 100000;
       final pondName = (pond['name'] as String?) ?? pondId;
 
-      final debugData = MasterFeedEngine.computeWithDebug(
-        doc: doc,
-        stockingType: stockingType,
-        density: density,
-      );
-
-      // Full pipeline via orchestrator
       final orchestratorResult = await MasterFeedEngine.orchestrateForPond(pondId);
-      final intelligence = orchestratorResult.intelligence;
+      final debugData = _buildDebugData(orchestratorResult, stockingType, density);
 
       state = state.copyWith(
         isLoading: false,
@@ -128,7 +142,7 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
         density: density,
         latestLeftover: leftover,
         debugData: debugData,
-        intelligence: intelligence,
+        intelligence: orchestratorResult.intelligence,
         orchestratorResult: orchestratorResult,
         clearSimulated: true,
       );
@@ -138,64 +152,32 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
     }
   }
 
-  /// Re-runs base engine with the current pond context + active leftover.
-  void recalculate() {
-    final debugData = MasterFeedEngine.computeWithDebug(
-      doc: state.doc,
-      stockingType: state.stockingType,
-      density: state.density,
-    );
-
-    // Recompute intelligence from the new base feed
-    final intelligence = FeedIntelligenceEngine.compute(
-      expectedFeed: debugData.finalFeed,
-      actualFeedYesterday: state.orchestratorResult?.intelligence.actualFeed,
-    );
-
-    state = state.copyWith(
-      debugData: debugData,
-      intelligence: intelligence,
-    );
+  /// Re-runs the full pipeline from DB and refreshes all debug state.
+  Future<void> recalculate() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final orchestratorResult = await MasterFeedEngine.orchestrateForPond(pondId);
+      final debugData = _buildDebugData(orchestratorResult, state.stockingType, state.density);
+      state = state.copyWith(
+        isLoading: false,
+        debugData: debugData,
+        intelligence: orchestratorResult.intelligence,
+        orchestratorResult: orchestratorResult,
+      );
+    } catch (e) {
+      AppLogger.error('DebugDashboardNotifier.recalculate failed', e);
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
   }
 
-  /// Simulate what feed would be at a given leftover %.
+  /// Stores a simulated tray leftover % for display in the debug panel.
   void simulateTray(double leftoverPercent) {
-    final debugData = MasterFeedEngine.computeWithDebug(
-      doc: state.doc,
-      stockingType: state.stockingType,
-      density: state.density,
-    );
-
-    final intelligence = FeedIntelligenceEngine.compute(
-      expectedFeed: debugData.finalFeed,
-      actualFeedYesterday: state.orchestratorResult?.intelligence.actualFeed,
-    );
-
-    state = state.copyWith(
-      simulatedLeftover: leftoverPercent,
-      debugData: debugData,
-      intelligence: intelligence,
-    );
+    state = state.copyWith(simulatedLeftover: leftoverPercent);
   }
 
   /// Clears simulation and reverts to real tray data.
   void clearSimulation() {
-    final debugData = MasterFeedEngine.computeWithDebug(
-      doc: state.doc,
-      stockingType: state.stockingType,
-      density: state.density,
-    );
-
-    final intelligence = FeedIntelligenceEngine.compute(
-      expectedFeed: debugData.finalFeed,
-      actualFeedYesterday: state.orchestratorResult?.intelligence.actualFeed,
-    );
-
-    state = state.copyWith(
-      clearSimulated: true,
-      debugData: debugData,
-      intelligence: intelligence,
-    );
+    state = state.copyWith(clearSimulated: true);
   }
 
   Future<Map<String, dynamic>?> _fetchPond() async {

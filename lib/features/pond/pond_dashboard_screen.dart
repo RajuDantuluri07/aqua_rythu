@@ -387,6 +387,63 @@ List<SupplementItem> _getPlannedFeedSupplements(
     }
   }
 
+  void _showAnchorFeedDialog(BuildContext ctx) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Enter Current Feed Amount',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your pond has crossed DOC 30. Enter how much feed (kg) you are currently giving per day so we can adjust based on tray response.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Feed amount (kg per day)',
+                hintText: 'e.g. 4.0',
+                border: OutlineInputBorder(),
+                suffixText: 'kg',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Skip'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final val = double.tryParse(ctrl.text.trim());
+              if (val != null && val > 0) {
+                ref.read(pondDashboardProvider.notifier).updateAnchorFeed(val);
+                Navigator.pop(dialogCtx);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAddFarmDialog() {
     final nameCtrl = TextEditingController();
     final locCtrl = TextEditingController();
@@ -491,6 +548,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
               duration: Duration(seconds: 4),
             ),
           );
+        }
+      }
+
+      // TASK 2: Prompt for anchor feed on first entry into smart phase (DOC >= 31).
+      if (next.needsAnchorFeedInput && !(previous?.needsAnchorFeedInput ?? false)) {
+        ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
+        if (mounted) {
+          _showAnchorFeedDialog(context);
         }
       }
 
@@ -1662,6 +1727,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
           decision: isCurrent ? dashboardState.decision : null,
           recommendationInstruction: isCurrent ? dashboardState.recommendation?.instruction : null,
           isCurrent: isCurrent,
+          // TASK 8: pass anchor so card can show "Base Feed / Adjusted Feed" split
+          anchorFeedKg: (isCurrent && currentDoc >= 31) ? currentPond?.anchorFeed : null,
         );
 
         // External warning strip removed — FeedTimelineCard now owns the timer

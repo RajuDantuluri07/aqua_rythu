@@ -4,6 +4,29 @@
 /// All fields are the exact values used in the computation — no transformations.
 class FeedDebugInfo {
   final int doc;
+
+  // ── Stage 1: Base feed breakdown ──────────────────────────────────────────
+
+  /// Base feed per 100K shrimp before density scaling (kg).
+  final double baseFeedPer100k;
+
+  /// After density scaling, before safety clamp (kg).
+  final double adjustedFeed;
+
+  /// Safety lower bound: adjustedFeed × 0.70 (kg).
+  final double minFeed;
+
+  /// Safety upper bound: adjustedFeed × 1.30 (kg).
+  final double maxFeed;
+
+  /// True when adjustedFeed was safety-clamped.
+  final bool isBaseFeedClamped;
+
+  /// True when DOC or density was input-clamped before Stage 1.
+  final bool wasInputClamped;
+
+  // ── Stage 1 output / pipeline base ───────────────────────────────────────
+
   final double baseFeed;
   final double trayFactor;
 
@@ -35,8 +58,18 @@ class FeedDebugInfo {
   /// Feed stage name: 'blind' | 'transitional' | 'intelligent'.
   final String feedStage;
 
+  /// Full SmartFeedV2Result breakdown from toDebugMap().
+  /// Null for blind phase and anchor-feed flow (V2 not run).
+  final Map<String, dynamic>? v2Debug;
+
   const FeedDebugInfo({
     required this.doc,
+    required this.baseFeedPer100k,
+    required this.adjustedFeed,
+    required this.minFeed,
+    required this.maxFeed,
+    required this.isBaseFeedClamped,
+    required this.wasInputClamped,
     required this.baseFeed,
     required this.trayFactor,
     required this.smartFactor,
@@ -49,5 +82,6 @@ class FeedDebugInfo {
     this.clampReason,
     required this.hasSampling,
     required this.feedStage,
+    this.v2Debug,
   });
 }

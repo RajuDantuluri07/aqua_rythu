@@ -140,6 +140,15 @@ class SmartFeedV2Result {
 class SmartFeedEngineV2 {
   static const String version = 'v2.1.0';
 
+  // Configuration Constants
+  static const double _kMinSafetyClamp = 0.70;
+  static const double _kMaxSafetyClamp = 1.30;
+  static const double _kCriticalDO = 3.5;
+  static const double _kHighRiskDO = 4.5;
+  static const double _kModerateRiskDO = 5.5;
+  static const double _kHighRiskAmmonia = 0.3;
+  static const double _kModerateRiskAmmonia = 0.1;
+
   // ── PUBLIC ENTRY POINT ─────────────────────────────────────────────────────
 
   /// Calculate smart-adjusted feed for [doc] > 30.
@@ -235,15 +244,14 @@ class SmartFeedEngineV2 {
     // ── 5. Combine factors & clamp ──────────────────────────────────────────
     final rawProduct = trayFactor * growthFactor * waterFactor * docFactor;
     final clampedProduct = rawProduct.clamp(
-      _kMinFactor, // 0.70 → never below 70% of base
-      _kMaxFactor, // 1.30 → never above 130% of base
+      _kMinSafetyClamp,
+      _kMaxSafetyClamp,
     );
     final wasClamped = (rawProduct - clampedProduct).abs() > 0.001;
 
     double correctedFeed = baseFeed * clampedProduct;
     // Issue 3: cap at 2× baseFeed (scales with pond size) instead of fixed 50 kg
     correctedFeed = correctedFeed.clamp(0.1, baseFeed * 2.0);
-    correctedFeed = double.parse(correctedFeed.toStringAsFixed(3));
 
     if (wasClamped) {
       reasons.add(
@@ -392,17 +400,17 @@ class SmartFeedEngineV2 {
     required double ammonia,
   }) {
     // Critical stop — only at genuinely dangerous DO level
-    if (dissolvedOxygen < 3.5) {
+    if (dissolvedOxygen < _kCriticalDO) {
       return WaterFactorResult(
         factor: 0.0,
         isCriticalStop: true,
-        reason: 'CRITICAL: DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L < 3.5 — stop feeding',
+        reason: 'CRITICAL: DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L < $_kCriticalDO — stop feeding',
       );
     }
 
     // High risk: low DO or high ammonia
-    if (dissolvedOxygen < 4.5 || ammonia > 0.3) {
-      final who = dissolvedOxygen < 4.5
+    if (dissolvedOxygen < _kHighRiskDO || ammonia > _kHighRiskAmmonia) {
+      final who = dissolvedOxygen < _kHighRiskDO
           ? 'DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L'
           : 'NH₃ ${ammonia.toStringAsFixed(2)} mg/L';
       return WaterFactorResult(
@@ -413,8 +421,8 @@ class SmartFeedEngineV2 {
     }
 
     // Moderate stress
-    if (dissolvedOxygen < 5.5 || ammonia > 0.1) {
-      final who = dissolvedOxygen < 5.5
+    if (dissolvedOxygen < _kModerateRiskDO || ammonia > _kModerateRiskAmmonia) {
+      final who = dissolvedOxygen < _kModerateRiskDO
           ? 'DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L'
           : 'NH₃ ${ammonia.toStringAsFixed(2)} mg/L';
       return WaterFactorResult(

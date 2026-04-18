@@ -1,13 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-// ⚠️ DEPRECATED - DO NOT USE
-// This provider is disabled for MVP stabilization
-// All feed amounts come from database (feed_plans table)
-
-/// ✨ TODAY'S SMART FEED (DEACTIVATED for MVP)
-/// 
-/// For MVP: Returns null to disable smart feed calculations
-/// Feed amounts come directly from database (feed_plans table)
+import '../../core/engines/feed/master_feed_engine.dart';
 
 class SmartFeedOutput {
   final double recommendedFeed;
@@ -23,7 +15,32 @@ class SmartFeedOutput {
   });
 }
 
-/// Smart feed provider — returns null (disabled for MVP, smart engine activates post-DOC 30)
 final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, pondId) async {
-  return null;
+  final result = await MasterFeedEngine.orchestrateForPond(pondId);
+
+  final isStop = result.decision.action == 'Stop Feeding';
+  if (isStop) {
+    return SmartFeedOutput(
+      recommendedFeed: 0,
+      roundDistribution: const [],
+      isStopFeeding: true,
+      stopReason: result.decision.reason,
+    );
+  }
+
+  final total = result.finalFeed;
+  const rounds = 4;
+  final perRound = double.parse((total / rounds).toStringAsFixed(2));
+  final remainder = double.parse(
+    (total - perRound * rounds).toStringAsFixed(2),
+  );
+  final distribution = List<double>.generate(
+    rounds,
+    (i) => i == 0 ? perRound + remainder : perRound,
+  );
+
+  return SmartFeedOutput(
+    recommendedFeed: total,
+    roundDistribution: distribution,
+  );
 });

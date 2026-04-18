@@ -25,10 +25,17 @@ class AppBottomBar extends StatelessWidget {
             break;
         }
       },
+      selectedItemColor: const Color(0xFF16A34A),
+      unselectedItemColor: const Color(0xFF94A3B8),
+      backgroundColor: Colors.white,
+      elevation: 12,
+      type: BottomNavigationBarType.fixed,
+      selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      unselectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
       items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-        BottomNavigationBarItem(icon: Icon(Icons.layers), label: "Ponds"),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+        BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: "HOME"),
+        BottomNavigationBarItem(icon: Icon(Icons.water_drop_rounded), label: "TANKS"),
+        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: "PROFILE"),
       ],
     );
   }

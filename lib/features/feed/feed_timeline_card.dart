@@ -680,6 +680,60 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     );
   }
 
+  Widget _anchorFeedRow({
+    required String label,
+    required String sublabel,
+    required double kg,
+    required Color color,
+    bool isBold = false,
+    VoidCallback? onEdit,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: TextStyle(
+                    fontSize: isBold ? 15 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                TextSpan(
+                  text: '${kg.toStringAsFixed(1)} kg',
+                  style: TextStyle(
+                    fontSize: isBold ? 15 : 13,
+                    fontWeight: isBold ? FontWeight.w900 : FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                TextSpan(
+                  text: '  ($sublabel)',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _slate400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (onEdit != null)
+          GestureDetector(
+            onTap: onEdit,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Text('✏️', style: TextStyle(fontSize: 16)),
+            ),
+          ),
+      ],
+    );
+  }
+
   // ── Simple status line — replaces analytics/FCR block ────────────────────
   // Shows one clear farming signal. No numbers, no comparisons, no trends.
   Widget _simpleStatusLine() {

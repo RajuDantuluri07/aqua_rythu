@@ -227,20 +227,31 @@ class MasterFeedEngine {
   static OrchestratorResult orchestrate(FeedInput input) {
     FeedInputValidator.validate(input);
 
+    // ── Critical DO safety — enforced for ALL DOC ─────────────────────────
+    if (input.dissolvedOxygen < 3.5) {
+      AppLogger.error(
+        '[MasterFeedEngine] Critical DO (${input.dissolvedOxygen} mg/L) '
+        'at DOC ${input.doc} — stopping feed',
+      );
+      return OrchestratorResult.stopFeed(
+        reason: 'Critical DO',
+        engineVersion: version,
+        doc: input.doc,
+      );
+    }
+
     // ── Stage 1: Base feed ────────────────────────────────────────────────
-    final baseFeed = compute(
+    // computeWithDebug is called once to capture Stage 1 intermediate values
+    // for FeedDebugInfo (baseFeedPer100k, adjustedFeed, min/max, clamp flags).
+    // anchorFeed overrides the DOC-ramp output but we still compute for debug.
+    final stage1Debug = computeWithDebug(
       doc: input.doc,
       stockingType: input.stockingType,
       density: input.seedCount,
     );
-
-    // ── TASK 3: Anchor feed flow (DOC > 30, farmer-set baseline) ─────────
-    // When the farmer has provided an anchor feed, bypass SmartFeedEngineV2
-    // and use a simpler tray-response-only adjustment. The anchor is always
-    // the reference; the engine never overrides it automatically.
-    if (input.doc > kSmartModeMinDoc && input.anchorFeed != null) {
-      return _runAnchorFeedFlow(input);
-    }
+    final baseFeed = (input.doc > kSmartModeMinDoc && input.anchorFeed != null)
+        ? input.anchorFeed!
+        : stage1Debug.finalFeed;
 
     // ── Stage 1b: Resolve feed stage ──────────────────────────────────────
     final hasSampling = input.abw != null;
@@ -311,6 +322,8 @@ class MasterFeedEngine {
             ammonia: input.ammonia,
           )
         : SmartFeedEngineV2.blindPhaseResult(baseFeed, input.doc);
+
+    AppLogger.debug('SMART_FEED_V2: ${v2Result.toDebugMap()}');
 
     final intelligenceFactor = _intelligenceFactor(intelligence);
 
@@ -532,6 +545,12 @@ class MasterFeedEngine {
       engineVersion: version,
       debugInfo: FeedDebugInfo(
         doc: input.doc,
+        baseFeedPer100k: stage1Debug.baseFeed,
+        adjustedFeed: stage1Debug.adjustedFeed,
+        minFeed: stage1Debug.minFeed,
+        maxFeed: stage1Debug.maxFeed,
+        isBaseFeedClamped: stage1Debug.isClamped,
+        wasInputClamped: stage1Debug.wasInputClamped,
         baseFeed: baseFeed,
         trayFactor: correction.trayFactor,
         smartFactor: correction.v2Factor,
@@ -544,6 +563,7 @@ class MasterFeedEngine {
         clampReason: correction.clampReason,
         hasSampling: input.abw != null,
         feedStage: feedStage.name,
+        v2Debug: input.doc > kSmartModeMinDoc ? v2Result.toDebugMap() : null,
       ),
     );
   }
@@ -585,162 +605,6 @@ class MasterFeedEngine {
     if (pct > 0) return '+$pct%';
     if (pct < 0) return '$pct%';
     return '0%';
-  }
-
-  // ── ANCHOR FEED FLOW (TASKS 4–7) ─────────────────────────────────────────
-
-  /// Aggregate per-tray statuses into a single TrayStatus using score-based
-  /// voting (same logic as PondDashboardNotifier.logTray).
-  static double _anchorTrayFactor(FeedInput input) {
-    if (input.trayStatuses.isEmpty) return 1.0; // TASK 6: no tray → factor 1.0
-
-    int totalScore = 0;
-    for (final s in input.trayStatuses) {
-      if (s == TrayStatus.full) {
-        totalScore += 3;
-      } else if (s == TrayStatus.partial) {
-        totalScore += 2;
-      }
-      // empty contributes 0
-    }
-    final avg = totalScore / input.trayStatuses.length;
-
-    // TASK 5: factor map
-    if (avg >= 2.5) return 0.8;  // full tray — reduce
-    if (avg >= 1.0) return 1.0;  // partial  — maintain
-    return 1.1;                  // empty    — increase
-  }
-
-  /// Anchor-feed flow for DOC > 30 when the farmer has set a baseline.
-  ///
-  /// Formula: adjustedFeed = anchorFeed × trayFactor, clamped ±30%.
-  /// Bypasses SmartFeedEngineV2 entirely (anti-pattern: don't run both).
-  static OrchestratorResult _runAnchorFeedFlow(FeedInput input) {
-    final anchor = input.anchorFeed!;
-
-    // TASK 5: tray factor
-    final trayFactor = _anchorTrayFactor(input);
-
-    // TASK 4: raw adjusted feed
-    final rawFeed = anchor * trayFactor;
-
-    // Clamp to ±30% of anchor
-    final minFeed = anchor * FeedEngineConstants.minFeedFactor;
-    final maxFeed = anchor * FeedEngineConstants.maxFeedFactor;
-    double adjustedFeed = rawFeed.clamp(minFeed, maxFeed);
-
-    // TASK 7: prevent zero / negative feed
-    if (adjustedFeed <= 0) adjustedFeed = anchor;
-
-    // Absolute safety caps
-    adjustedFeed = adjustedFeed.clamp(kAbsoluteMinFeed, kAbsoluteMaxFeed);
-
-    final bool wasClamped = (rawFeed - adjustedFeed).abs() > 0.001;
-    final combinedFactor =
-        double.parse((adjustedFeed / anchor).toStringAsFixed(3));
-
-    final trayReason = trayFactor > 1.0
-        ? 'Tray empty — shrimp eating all feed (${_factorToPercent(trayFactor)})'
-        : trayFactor < 1.0
-            ? 'Tray full — shrimp leaving feed (${_factorToPercent(trayFactor)})'
-            : 'Tray normal — maintaining anchor feed';
-
-    final correction = CorrectionResult(
-      finalFeed: double.parse(adjustedFeed.toStringAsFixed(3)),
-      trayFactor: trayFactor,
-      growthFactor: 1.0,
-      samplingFactor: 1.0,
-      environmentFactor: 1.0,
-      fcrFactor: 1.0,
-      intelligenceFactor: 1.0,
-      v2Factor: trayFactor,
-      combinedFactor: combinedFactor,
-      reasons: [
-        'Anchor feed: ${anchor.toStringAsFixed(1)} kg (farmer input)',
-        trayReason,
-        if (wasClamped) 'Safety clamp applied (±30% of anchor)',
-      ],
-      alerts: [],
-      isCriticalStop: false,
-      isSmartApplied: true,
-      factorBreakdown: {'tray': trayFactor},
-      factorExplanations: {
-        if ((trayFactor - 1.0).abs() > 0.01) 'tray': trayReason,
-      },
-      wasCombinedClamped: wasClamped,
-      clampReason: wasClamped
-          ? (rawFeed > maxFeed ? 'Feed increase capped at +30%' : 'Feed reduction capped at -30%')
-          : null,
-    );
-
-    final intelligence = IntelligenceResult(
-      expectedFeed: anchor,
-      status: FeedStatus.onTrack,
-    );
-
-    final action = trayFactor > 1.0
-        ? 'Increase'
-        : trayFactor < 1.0
-            ? 'Reduce'
-            : 'Maintain';
-
-    final decision = FeedDecision(
-      action: action,
-      deltaKg: double.parse((adjustedFeed - anchor).toStringAsFixed(3)),
-      reason: trayFactor > 1.0
-          ? 'Tray empty — shrimp eating all feed'
-          : trayFactor < 1.0
-              ? 'Tray full — shrimp leaving feed'
-              : 'Tray normal — anchor feed maintained',
-      recommendations: ['Feed ${adjustedFeed.toStringAsFixed(1)} kg per round'],
-      decisionTrace: [
-        'Anchor: ${anchor.toStringAsFixed(1)} kg (farmer input)',
-        'Tray factor: $trayFactor',
-        '= Adjusted: ${adjustedFeed.toStringAsFixed(1)} kg',
-        if (wasClamped) 'Clamped: ${correction.clampReason}',
-      ],
-    );
-
-    final recommendation = FeedRecommendationEngine.compute(
-      finalFeedPerDay: adjustedFeed,
-      decision: decision,
-      lastFeedTime: input.lastFeedTime,
-      doc: input.doc,
-      minGapMinutes: 180,
-    );
-
-    AppLogger.info('ANCHOR_FEED_FLOW', {
-      'doc': input.doc,
-      'anchor': anchor,
-      'trayFactor': trayFactor,
-      'adjustedFeed': adjustedFeed,
-      'wasClamped': wasClamped,
-    });
-
-    return OrchestratorResult(
-      baseFeed: anchor,
-      feedStage: FeedStage.intelligent,
-      intelligence: intelligence,
-      correction: correction,
-      decision: decision,
-      recommendation: recommendation,
-      engineVersion: version,
-      debugInfo: FeedDebugInfo(
-        doc: input.doc,
-        baseFeed: anchor,
-        trayFactor: trayFactor,
-        smartFactor: trayFactor,
-        combinedFactor: combinedFactor,
-        rawCombinedFactor: trayFactor,
-        fcr: 1.0,
-        finalFeed: adjustedFeed,
-        isSmartApplied: true,
-        wasClamped: wasClamped,
-        clampReason: correction.clampReason,
-        hasSampling: input.abw != null,
-        feedStage: 'anchor',
-      ),
-    );
   }
 
   static Map<String, String> _buildFactorExplanations({

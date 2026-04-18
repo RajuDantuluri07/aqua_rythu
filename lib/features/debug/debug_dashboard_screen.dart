@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_config.dart';
 import '../../core/engines/feed/master_feed_engine.dart';
 import '../../core/engines/feed/feed_intelligence_engine.dart';
-import '../../core/engines/feed/smart_feed_engine_v2.dart';
 import '../../core/enums/feed_stage.dart';
 import '../../core/enums/stocking_type.dart';
 import 'debug_dashboard_provider.dart';
@@ -444,7 +443,7 @@ class _Body extends ConsumerWidget {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDlgState) {
-            final factor = SmartFeedEngineV2.getTrayFactor(sliderValue);
+            final factor = state.orchestratorResult?.debugInfo.trayFactor ?? 1.0;
             final factorColor = _trayColor(factor);
 
             return AlertDialog(

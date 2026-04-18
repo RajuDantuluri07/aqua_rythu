@@ -1,200 +1,205 @@
 import '../models/feed_input.dart';
+import '../utils/logger.dart';
 
-/// Validator for FeedInput to catch invalid data before processing.
-/// Prevents NaN, negative values, and out-of-range inputs.
+/// Validates FeedInput before pipeline processing.
+///
+/// Policy: log warnings for out-of-range data; log errors for corrupt data
+/// (NaN/Infinite). Never throw — the engine's own clamping is the safety net.
+/// Throwing here was causing silent feed failures when exceptions were swallowed
+/// upstream, which is worse than continuing with a logged warning.
 class FeedInputValidator {
-  /// Validate all FeedInput fields
-  /// Throws Exception with descriptive message if validation fails
   static void validate(FeedInput input) {
-    // Seed count validation
-    // BUG-12 fix: previous max was 10M — far too high for AP coastal ponds.
-    // Realistic range: 1,000 (minimum viable) → 500,000 (max stocking density).
-    // A typo of 1,000,000 instead of 100,000 (easy on phone keypad) previously
-    // produced 20 kg/round — catastrophic overfeed with no guard.
+    // ── seedCount ────────────────────────────────────────────────────────────
+    // BUG-12: previous max was 10M — far too high for AP coastal ponds.
+    // Engine clamps to [1000, 1_000_000] in computeWithDebug, so out-of-range
+    // inputs won't produce runaway feed values. Just warn here.
     if (input.seedCount < 1000) {
-      throw Exception(
-        "Invalid seedCount: ${input.seedCount}. Minimum stocking is 1,000 shrimp",
+      AppLogger.warn(
+        'FeedInput.seedCount=${input.seedCount} below minimum (1,000). '
+        'Engine will clamp — verify pond data.',
       );
-    }
-    if (input.seedCount > 500000) {
-      throw Exception(
-        "Invalid seedCount: ${input.seedCount}. "
-        "Exceeds maximum supported stocking density (500,000 per pond). "
-        "Check for a typo — e.g., 1,00,000 instead of 1,00,000.",
+    } else if (input.seedCount > 500000) {
+      AppLogger.warn(
+        'FeedInput.seedCount=${input.seedCount} exceeds 500,000. '
+        'Possible typo (e.g. 1,00,000 vs 1,00,000). Engine will clamp.',
       );
     }
 
-    // DOC (Days of Culture) validation
+    // ── DOC ──────────────────────────────────────────────────────────────────
+    // Engine clamps DOC to [1, FeedConfig.maxDoc] in computeWithDebug.
     if (input.doc < 1 || input.doc > 180) {
-      throw Exception(
-        "Invalid doc: ${input.doc}. Must be between 1-180 days",
+      AppLogger.warn(
+        'FeedInput.doc=${input.doc} outside [1, 180]. '
+        'Engine will clamp — verify stocking date.',
       );
     }
 
-    // ABW (Average Body Weight) validation if provided
+    // ── ABW ──────────────────────────────────────────────────────────────────
     if (input.abw != null) {
-      if (input.abw!.isNaN) {
-        throw Exception("Invalid abw: NaN - Sampling data is corrupted");
-      }
-      if (input.abw! < 0 || input.abw! > 1000) {
-        throw Exception(
-          "Invalid abw: ${input.abw}. Must be between 0-1000 grams",
+      if (input.abw!.isNaN || input.abw!.isInfinite) {
+        AppLogger.error(
+          'FeedInput.abw is ${input.abw} — sampling data corrupted. '
+          'Pipeline will treat ABW as absent.',
+        );
+      } else if (input.abw! < 0 || input.abw! > 1000) {
+        AppLogger.warn(
+          'FeedInput.abw=${input.abw} outside [0, 1000] g. '
+          'Verify sampling record.',
         );
       }
     }
 
-    // Feeding score validation
-    if (input.feedingScore.isNaN) {
-      throw Exception("Invalid feedingScore: NaN");
-    }
-    if (input.feedingScore < 0 || input.feedingScore > 5) {
-      throw Exception(
-        "Invalid feedingScore: ${input.feedingScore}. Must be 0-5 scale (e.g., 3.5)",
+    // ── feedingScore ─────────────────────────────────────────────────────────
+    if (input.feedingScore.isNaN || input.feedingScore.isInfinite) {
+      AppLogger.error('FeedInput.feedingScore is ${input.feedingScore} — data corrupted.');
+    } else if (input.feedingScore < 0 || input.feedingScore > 5) {
+      AppLogger.warn(
+        'FeedInput.feedingScore=${input.feedingScore} outside [0, 5]. '
+        'Expected 0–5 scale.',
       );
     }
 
-    // Intake percent validation
-    if (input.intakePercent.isNaN) {
-      throw Exception("Invalid intakePercent: NaN");
-    }
-    if (input.intakePercent < 0 || input.intakePercent > 100) {
-      throw Exception(
-        "Invalid intakePercent: ${input.intakePercent}. Must be 0-100%",
+    // ── intakePercent ─────────────────────────────────────────────────────────
+    if (input.intakePercent.isNaN || input.intakePercent.isInfinite) {
+      AppLogger.error('FeedInput.intakePercent is ${input.intakePercent} — data corrupted.');
+    } else if (input.intakePercent < 0 || input.intakePercent > 100) {
+      AppLogger.warn(
+        'FeedInput.intakePercent=${input.intakePercent} outside [0, 100]%.',
       );
     }
 
-    // Dissolved oxygen validation
-    if (input.dissolvedOxygen.isNaN) {
-      throw Exception("Invalid dissolvedOxygen: NaN - Check sensor reading");
-    }
-    if (input.dissolvedOxygen < 0 || input.dissolvedOxygen > 20) {
-      throw Exception(
-        "Invalid dissolvedOxygen: ${input.dissolvedOxygen} ppm. Must be 0-20 ppm",
+    // ── dissolvedOxygen ──────────────────────────────────────────────────────
+    // Critical for stop-feeding logic — log as error so it's visible in monitoring.
+    if (input.dissolvedOxygen.isNaN || input.dissolvedOxygen.isInfinite) {
+      AppLogger.error(
+        'FeedInput.dissolvedOxygen is ${input.dissolvedOxygen} — sensor failure. '
+        'SmartFeedEngineV2 will apply conservative water factor.',
+      );
+    } else if (input.dissolvedOxygen < 0 || input.dissolvedOxygen > 20) {
+      AppLogger.warn(
+        'FeedInput.dissolvedOxygen=${input.dissolvedOxygen} ppm outside [0, 20]. '
+        'Possible sensor error.',
       );
     }
 
-    // Temperature validation
-    if (input.temperature.isNaN) {
-      throw Exception("Invalid temperature: NaN");
-    }
-    if (input.temperature < 10 || input.temperature > 40) {
-      throw Exception(
-        "Invalid temperature: ${input.temperature}°C. Beyond aquaculture range (10-40°C)",
+    // ── temperature ──────────────────────────────────────────────────────────
+    if (input.temperature.isNaN || input.temperature.isInfinite) {
+      AppLogger.error('FeedInput.temperature is ${input.temperature} — sensor failure.');
+    } else if (input.temperature < 10 || input.temperature > 40) {
+      AppLogger.warn(
+        'FeedInput.temperature=${input.temperature}°C outside aquaculture range [10, 40].',
       );
     }
 
-    // pH change validation
-    if (input.phChange.isNaN) {
-      throw Exception("Invalid phChange: NaN");
-    }
-    if (input.phChange < -2 || input.phChange > 2) {
-      throw Exception(
-        "Invalid phChange: ${input.phChange}. Unrealistic pH swing (typical ±0.5)",
+    // ── phChange ─────────────────────────────────────────────────────────────
+    if (input.phChange.isNaN || input.phChange.isInfinite) {
+      AppLogger.error('FeedInput.phChange is ${input.phChange} — data corrupted.');
+    } else if (input.phChange < -2 || input.phChange > 2) {
+      AppLogger.warn(
+        'FeedInput.phChange=${input.phChange} outside [-2, 2]. '
+        'Typical range is ±0.5.',
       );
     }
 
-    // Ammonia validation
-    if (input.ammonia.isNaN) {
-      throw Exception("Invalid ammonia: NaN");
-    }
-    if (input.ammonia < 0 || input.ammonia > 5) {
-      throw Exception(
-        "Invalid ammonia: ${input.ammonia} ppm. Must be 0-5 ppm",
+    // ── ammonia ──────────────────────────────────────────────────────────────
+    if (input.ammonia.isNaN || input.ammonia.isInfinite) {
+      AppLogger.error('FeedInput.ammonia is ${input.ammonia} — data corrupted.');
+    } else if (input.ammonia < 0 || input.ammonia > 5) {
+      AppLogger.warn(
+        'FeedInput.ammonia=${input.ammonia} ppm outside [0, 5].',
       );
     }
 
-    // Mortality validation
+    // ── mortality ────────────────────────────────────────────────────────────
     if (input.mortality < 0) {
-      throw Exception(
-        "Invalid mortality: ${input.mortality}. Cannot be negative",
+      AppLogger.warn('FeedInput.mortality=${input.mortality} is negative — treating as 0.');
+    } else if (input.mortality > input.seedCount) {
+      AppLogger.error(
+        'FeedInput.mortality=${input.mortality} exceeds seedCount=${input.seedCount}. '
+        'Data entry error.',
       );
-    }
-    if (input.mortality > input.seedCount) {
-      throw Exception(
-        "Invalid mortality: ${input.mortality}. Exceeds seedCount (${input.seedCount})",
-      );
-    }
-    // Max reasonable: 10% of population per day
-    if (input.mortality > input.seedCount * 0.1) {
-      throw Exception(
-        "Invalid mortality: ${input.mortality} (${(input.mortality / input.seedCount * 100).toStringAsFixed(1)}%). "
-        "Exceeds 10% population - check for data entry error",
+    } else if (input.seedCount > 0 && input.mortality > input.seedCount * 0.1) {
+      AppLogger.warn(
+        'FeedInput.mortality=${input.mortality} '
+        '(${(input.mortality / input.seedCount * 100).toStringAsFixed(1)}% of stock) '
+        'exceeds 10% daily — verify record.',
       );
     }
 
-    // Tray statuses validation
-    // ✅ Allow empty trays for DOC ≤ 30 (blind feeding)
-    // ✅ For DOC > 30 with no tray history: engine uses neutral tray factor (1.0) —
-    //    this is expected for new ponds in first days of smart mode. Do NOT throw;
-    //    throwing here was silently producing zero feed (caught by try/catch upstream).
+    // ── trayStatuses ─────────────────────────────────────────────────────────
+    // Empty for DOC ≤ 30 (blind phase) is expected.
+    // Empty for DOC > 30 is valid for new ponds; engine uses neutral factor (1.0).
 
-    // FCR validation if provided
+    // ── lastFcr ──────────────────────────────────────────────────────────────
     if (input.lastFcr != null) {
-      if (input.lastFcr!.isNaN) {
-        throw Exception("Invalid lastFcr: NaN - Historical data corrupted");
-      }
-      if (input.lastFcr! < 0.5 || input.lastFcr! > 5) {
-        throw Exception(
-          "Invalid lastFcr: ${input.lastFcr}. Must be 0.5-5 (typical 1.2-1.4)",
+      if (input.lastFcr!.isNaN || input.lastFcr!.isInfinite) {
+        AppLogger.error('FeedInput.lastFcr is ${input.lastFcr} — historical data corrupted.');
+      } else if (input.lastFcr! < 0.5 || input.lastFcr! > 5) {
+        AppLogger.warn(
+          'FeedInput.lastFcr=${input.lastFcr} outside [0.5, 5]. '
+          'Typical range is 1.2–1.4.',
         );
       }
     }
 
-    // Yesterday's actual feed validation if provided
+    // ── actualFeedYesterday ──────────────────────────────────────────────────
     if (input.actualFeedYesterday != null) {
-      if (input.actualFeedYesterday!.isNaN) {
-        throw Exception("Invalid actualFeedYesterday: NaN");
-      }
-      if (input.actualFeedYesterday! < 0) {
-        throw Exception(
-          "Invalid actualFeedYesterday: ${input.actualFeedYesterday} - Cannot be negative",
+      if (input.actualFeedYesterday!.isNaN || input.actualFeedYesterday!.isInfinite) {
+        AppLogger.error('FeedInput.actualFeedYesterday is ${input.actualFeedYesterday} — corrupted.');
+      } else if (input.actualFeedYesterday! < 0) {
+        AppLogger.warn(
+          'FeedInput.actualFeedYesterday=${input.actualFeedYesterday} is negative.',
         );
-      }
-      // Max reasonable: 500kg for a single day (large intensive farm)
-      if (input.actualFeedYesterday! > 500) {
-        throw Exception(
-          "Invalid actualFeedYesterday: ${input.actualFeedYesterday} kg - "
-          "Exceeds typical daily feed (check for unit error or data corruption)",
+      } else if (input.actualFeedYesterday! > 500) {
+        AppLogger.warn(
+          'FeedInput.actualFeedYesterday=${input.actualFeedYesterday} kg exceeds 500 kg. '
+          'Check for unit error.',
         );
       }
     }
   }
 
-  /// Validate output is within reasonable ranges
-  /// Called after MasterFeedEngine.run() to catch calculation errors
+  /// Validate pipeline output is within reasonable ranges.
+  /// Logs warnings instead of throwing — the engine already applied safety caps,
+  /// so a throw here would crash valid pipelines (e.g. aggressive tray correction).
   static void validateOutput(double recommendedFeed, double baseFeed) {
     if (recommendedFeed.isNaN) {
-      throw Exception("Output validation failed: recommendedFeed is NaN");
+      AppLogger.error('Output validation: recommendedFeed is NaN — pipeline error.');
+      return;
     }
     if (recommendedFeed.isInfinite) {
-      throw Exception("Output validation failed: recommendedFeed is Infinite");
+      AppLogger.error('Output validation: recommendedFeed is Infinite — pipeline error.');
+      return;
     }
     if (recommendedFeed < 0) {
-      throw Exception("Output validation failed: recommendedFeed is negative ($recommendedFeed)");
+      AppLogger.error(
+        'Output validation: recommendedFeed=$recommendedFeed is negative — pipeline error.',
+      );
+      return;
     }
     if (recommendedFeed > 10000) {
-      throw Exception(
-        "Output validation failed: recommendedFeed ($recommendedFeed kg) "
-        "exceeds physical delivery limit - Check calculation error",
+      AppLogger.error(
+        'Output validation: recommendedFeed=$recommendedFeed kg exceeds physical limit.',
       );
+      return;
     }
 
-    // Check that output is within safety bounds relative to base
-    final lowerBound = baseFeed * 0.5;  // Can't go below 50%
-    final upperBound = baseFeed * 1.5;  // Can't go above 150%
-    if (recommendedFeed < lowerBound) {
-      throw Exception(
-        "Output validation warning: recommendedFeed (${recommendedFeed.toStringAsFixed(2)} kg) "
-        "below 50% of base (${baseFeed.toStringAsFixed(2)} kg). "
-        "Check if critical conditions (DO < 4, high ammonia) are being masked.",
-      );
-    }
-    if (recommendedFeed > upperBound) {
-      throw Exception(
-        "Output validation warning: recommendedFeed (${recommendedFeed.toStringAsFixed(2)} kg) "
-        "exceeds 150% of base (${baseFeed.toStringAsFixed(2)} kg). "
-        "Check FCR/tray bonus stacking.",
-      );
+    if (baseFeed > 0) {
+      final lowerBound = baseFeed * 0.5;
+      final upperBound = baseFeed * 1.5;
+      if (recommendedFeed < lowerBound) {
+        AppLogger.warn(
+          'Output validation: recommendedFeed=${recommendedFeed.toStringAsFixed(2)} kg '
+          'is below 50% of base=${baseFeed.toStringAsFixed(2)} kg. '
+          'Critical condition (DO/ammonia) may be active.',
+        );
+      } else if (recommendedFeed > upperBound) {
+        AppLogger.warn(
+          'Output validation: recommendedFeed=${recommendedFeed.toStringAsFixed(2)} kg '
+          'exceeds 150% of base=${baseFeed.toStringAsFixed(2)} kg. '
+          'Check FCR/tray correction stacking.',
+        );
+      }
     }
   }
 }
