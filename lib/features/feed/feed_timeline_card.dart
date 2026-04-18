@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../core/engines/feed_decision_engine.dart';
+import '../../core/engines/feed/feed_decision_engine.dart';
 import '../../core/enums/tray_status.dart';
 
 enum FeedRoundState { done, current, upcoming }
@@ -86,6 +86,10 @@ class FeedTimelineCard extends StatefulWidget {
   /// Whether this is the current round that should be worked on now.
   final bool isCurrent;
 
+  /// Farmer's anchor feed (kg) — non-null only when DOC > 30 and anchor is set.
+  /// When provided, the card shows "Base Feed (Your input)" + "Adjusted Feed (Tray-based)".
+  final double? anchorFeedKg;
+
   const FeedTimelineCard({
     super.key,
     required this.round,
@@ -119,6 +123,7 @@ class FeedTimelineCard extends StatefulWidget {
     this.decision,
     this.recommendationInstruction,
     this.isCurrent = false,
+    this.anchorFeedKg,
   });
 
   @override
@@ -217,6 +222,10 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   @override
   Widget build(BuildContext context) {
+    assert(() {
+      debugPrint('🎯 Feed card rebuild | round: ${widget.round} | state: ${widget.state.name}');
+      return true;
+    }());
     final isDone    = widget.state == FeedRoundState.done;
     final isCurrent = widget.state == FeedRoundState.current;
 
@@ -549,6 +558,15 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               feedModeLabel(widget.feedMode),
               style: const TextStyle(fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
             ),
+            if (widget.feedMode == FeedMode.smart) ...[
+              const SizedBox(height: 2),
+              Text(
+                widget.anchorFeedKg != null
+                    ? 'Smart feed based on tray response'
+                    : 'Estimated feed based on growth curve',
+                style: const TextStyle(fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
+              ),
+            ],
             // Feeding progress
             if (widget.totalRounds > 0) ...[
               const SizedBox(height: 4),
@@ -563,37 +581,57 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ],
             const SizedBox(height: 16),
 
-            // Recommended Feed
-            Row(
-              children: [
-                const Text(
-                  "Recommended Feed:",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: _ink,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "${widget.recommendedFeedKg.toStringAsFixed(1)} kg",
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: _ink,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (widget.onEdit != null)
-                  GestureDetector(
-                    onTap: () => _showEditDialog(context),
-                    child: const Text(
-                      "✏️",
-                      style: TextStyle(fontSize: 16),
+            // Feed quantity display — anchor mode vs standard
+            if (widget.anchorFeedKg != null && widget.feedMode == FeedMode.smart) ...[
+              // TASK 8: Base feed (farmer anchor) + adjusted feed (tray-based)
+              _anchorFeedRow(
+                label: 'Base Feed',
+                sublabel: 'Your input',
+                kg: widget.anchorFeedKg!,
+                color: _slate500,
+              ),
+              const SizedBox(height: 6),
+              _anchorFeedRow(
+                label: 'Adjusted Feed',
+                sublabel: 'Tray-based',
+                kg: widget.recommendedFeedKg,
+                color: _ink,
+                isBold: true,
+                onEdit: widget.onEdit != null ? () => _showEditDialog(context) : null,
+              ),
+            ] else ...[
+              // Standard display
+              Row(
+                children: [
+                  const Text(
+                    "Recommended Feed:",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _ink,
                     ),
                   ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "${widget.recommendedFeedKg.toStringAsFixed(1)} kg",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: _ink,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (widget.onEdit != null)
+                    GestureDetector(
+                      onTap: () => _showEditDialog(context),
+                      child: const Text(
+                        "✏️",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ),
+                ],
+              ),
+            ],
             // Safety clamp indicator
             if (widget.isSafetyClamped) ...[
               const SizedBox(height: 4),
@@ -665,7 +703,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       color = _amber;
       icon = Icons.checklist_rounded;
     } else {
-      message = 'Shrimp eating well';
+      message = 'Feeding on track';
       color = _green;
       icon = Icons.check_circle_outline_rounded;
     }
@@ -918,7 +956,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       impactColor = _green;
     } else if (widget.correctionPercent != null && widget.correctionPercent! > 2) {
       final pct = widget.correctionPercent!.round();
-      reason = 'Increased by $pct% — shrimp eating well';
+      reason = 'Increased by $pct% — good consumption';
       impact = 'Good for growth this week';
       impactColor = _green;
     } else if (widget.leftoverPercent != null && widget.leftoverPercent! > 15) {
@@ -926,7 +964,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       impact = 'Watch tray closely next round';
       impactColor = _amber;
     } else {
-      reason = 'Maintained — shrimp are eating well';
+      reason = 'Maintained — good consumption';
       impact = 'Growth on track';
       impactColor = _green;
     }

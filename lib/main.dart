@@ -3,7 +3,7 @@ import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'theme/app_theme.dart';
+import 'core/theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/profile/farm_settings_provider.dart';
 import 'features/profile/user_provider.dart';

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../farm/farm_provider.dart';
-import '../../services/pond_service.dart';
+import 'package:aqua_rythu/core/services/pond_service.dart';
 import '../../routes/app_routes.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {

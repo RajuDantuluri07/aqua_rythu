@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'tray_model.dart';
-import '../../services/tray_service.dart';
+import 'package:aqua_rythu/core/services/tray_service.dart';
 import '../../core/utils/logger.dart';
 
 class TrayNotifier extends StateNotifier<List<TrayLog>> {

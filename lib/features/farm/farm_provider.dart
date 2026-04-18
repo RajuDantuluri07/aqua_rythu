@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
-import 'package:aqua_rythu/services/farm_service.dart';
-import 'package:aqua_rythu/services/pond_service.dart';
-import 'package:aqua_rythu/services/feed_service.dart';
+import 'package:aqua_rythu/core/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/pond_service.dart';
+import 'package:aqua_rythu/core/services/feed_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/utils/doc_utils.dart';
@@ -27,6 +27,10 @@ class Pond {
   final int postWeekFeedRounds;   // Rounds for DOC 8+  (default 4)
   final bool isCustomFeedPlan;    // If true, use above values; else use default DOC logic
 
+  // Anchor feed (DOC > 30): farmer-set baseline, adjusted by tray response
+  final double? anchorFeed;
+  final bool isAnchorInitialized;
+
   Pond({
     required this.id,
     required this.name,
@@ -42,6 +46,8 @@ class Pond {
     this.initialFeedRounds = 2,
     this.postWeekFeedRounds = 4,
     this.isCustomFeedPlan = false,
+    this.anchorFeed,
+    this.isAnchorInitialized = false,
   });
 
   /// Returns how many feed rounds apply for the given DOC, respecting
@@ -68,6 +74,8 @@ class Pond {
     int? initialFeedRounds,
     int? postWeekFeedRounds,
     bool? isCustomFeedPlan,
+    double? anchorFeed,
+    bool? isAnchorInitialized,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -84,6 +92,8 @@ class Pond {
       initialFeedRounds: initialFeedRounds ?? this.initialFeedRounds,
       postWeekFeedRounds: postWeekFeedRounds ?? this.postWeekFeedRounds,
       isCustomFeedPlan: isCustomFeedPlan ?? this.isCustomFeedPlan,
+      anchorFeed: anchorFeed ?? this.anchorFeed,
+      isAnchorInitialized: isAnchorInitialized ?? this.isAnchorInitialized,
     );
   }
 
@@ -188,6 +198,8 @@ class FarmNotifier extends StateNotifier<FarmState> {
                 initialFeedRounds: p['initial_feed_rounds'] ?? 2,
                 postWeekFeedRounds: p['post_week_feed_rounds'] ?? 4,
                 isCustomFeedPlan: p['is_custom_feed_plan'] ?? false,
+                anchorFeed: p['anchor_feed'] != null ? (p['anchor_feed'] as num).toDouble() : null,
+                isAnchorInitialized: p['is_anchor_initialized'] ?? false,
               ));
             } catch (e) {
               AppLogger.error('Failed to parse pond: $e', e);
@@ -291,6 +303,27 @@ class FarmNotifier extends StateNotifier<FarmState> {
           ponds: f.ponds.map((p) {
             if (p.id == pondId) {
               return p.copyWith(status: status);
+            }
+            return p;
+          }).toList(),
+        );
+      }).toList(),
+    );
+  }
+
+  void updateAnchorFeed(String pondId, double anchorFeed) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        return Farm(
+          id: f.id,
+          name: f.name,
+          location: f.location,
+          ponds: f.ponds.map((p) {
+            if (p.id == pondId) {
+              return p.copyWith(
+                anchorFeed: anchorFeed,
+                isAnchorInitialized: true,
+              );
             }
             return p;
           }).toList(),

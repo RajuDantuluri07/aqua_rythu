@@ -1,0 +1,1 @@
+enum StockingType { hatchery, nursery }

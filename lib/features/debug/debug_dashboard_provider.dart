@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/engines/master_feed_engine.dart';
-import '../../core/engines/feed_intelligence_engine.dart';
-import '../../core/engines/feed_orchestrator.dart';
+import '../../core/engines/feed/master_feed_engine.dart';
+import '../../core/engines/feed/feed_intelligence_engine.dart';
+import '../../core/enums/stocking_type.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/doc_utils.dart';
 
@@ -13,7 +13,7 @@ class DebugDashboardState {
   // Pond context
   final String pondName;
   final int doc;
-  final String stockingType;
+  final StockingType stockingType;
   final int density;
 
   // Latest tray leftover from DB (null = none)
@@ -36,7 +36,7 @@ class DebugDashboardState {
     this.error,
     this.pondName = '',
     this.doc = 1,
-    this.stockingType = 'nursery',
+    this.stockingType = StockingType.nursery,
     this.density = 100000,
     this.latestLeftover,
     this.simulatedLeftover,
@@ -53,7 +53,7 @@ class DebugDashboardState {
     String? error,
     String? pondName,
     int? doc,
-    String? stockingType,
+    StockingType? stockingType,
     int? density,
     double? latestLeftover,
     double? simulatedLeftover,
@@ -103,7 +103,10 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
 
       final stockingDate = DateTime.parse(pond['stocking_date'] as String);
       final doc = calculateDocFromStockingDate(stockingDate);
-      final stockingType = (pond['stocking_type'] as String?) ?? 'nursery';
+      final stockingType = StockingType.values.firstWhere(
+        (type) => type.name == ((pond['stocking_type'] as String?) ?? 'nursery'),
+        orElse: () => StockingType.nursery,
+      );
       final density = (pond['seed_count'] as int?) ?? 100000;
       final pondName = (pond['name'] as String?) ?? pondId;
 
@@ -111,11 +114,10 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
         doc: doc,
         stockingType: stockingType,
         density: density,
-        leftoverPercent: leftover,
       );
 
       // Full pipeline via orchestrator
-      final orchestratorResult = await FeedOrchestrator.computeForPond(pondId);
+      final orchestratorResult = await MasterFeedEngine.orchestrateForPond(pondId);
       final intelligence = orchestratorResult.intelligence;
 
       state = state.copyWith(
@@ -142,7 +144,6 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
       doc: state.doc,
       stockingType: state.stockingType,
       density: state.density,
-      leftoverPercent: state.activeLeftover,
     );
 
     // Recompute intelligence from the new base feed
@@ -163,7 +164,6 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
       doc: state.doc,
       stockingType: state.stockingType,
       density: state.density,
-      leftoverPercent: leftoverPercent,
     );
 
     final intelligence = FeedIntelligenceEngine.compute(
@@ -184,7 +184,6 @@ class DebugDashboardNotifier extends StateNotifier<DebugDashboardState> {
       doc: state.doc,
       stockingType: state.stockingType,
       density: state.density,
-      leftoverPercent: state.latestLeftover,
     );
 
     final intelligence = FeedIntelligenceEngine.compute(

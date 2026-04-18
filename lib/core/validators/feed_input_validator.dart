@@ -1,4 +1,4 @@
-import '../engines/models/feed_input.dart';
+import '../models/feed_input.dart';
 
 /// Validator for FeedInput to catch invalid data before processing.
 /// Prevents NaN, negative values, and out-of-range inputs.
@@ -124,15 +124,9 @@ class FeedInputValidator {
 
     // Tray statuses validation
     // ✅ Allow empty trays for DOC ≤ 30 (blind feeding)
-    // ✅ In smart mode, either a current tray log or valid recent tray history
-    //    is required. Sentinel values like [-1.0] do not count as tray data.
-    final hasValidRecentTrayHistory =
-        input.recentTrayLeftoverPct.any((value) => value >= 0);
-    if (input.trayStatuses.isEmpty &&
-        input.doc > 30 &&
-        !hasValidRecentTrayHistory) {
-      throw Exception("Invalid trayStatuses: Empty list and no recent tray history available");
-    }
+    // ✅ For DOC > 30 with no tray history: engine uses neutral tray factor (1.0) —
+    //    this is expected for new ponds in first days of smart mode. Do NOT throw;
+    //    throwing here was silently producing zero feed (caught by try/catch upstream).
 
     // FCR validation if provided
     if (input.lastFcr != null) {

@@ -1,6 +1,7 @@
-import 'package:aqua_rythu/core/engines/feed_orchestrator.dart';
-import 'package:aqua_rythu/core/engines/models/feed_input.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_orchestrator.dart';
+import 'package:aqua_rythu/core/models/feed_input.dart';
 import 'package:aqua_rythu/core/enums/tray_status.dart';
+import 'package:aqua_rythu/core/enums/stocking_type.dart';
 
 void main() {
   simulateDay();
@@ -13,7 +14,7 @@ void simulateDay() {
     seedCount: 120000,
     doc: 5,
     abw: 0.35,
-    stockingType: 'nursery',
+    stockingType: StockingType.nursery,
     feedingScore: 3.0,
     intakePercent: 85.0,
     dissolvedOxygen: 5.5,
@@ -37,7 +38,7 @@ void simulateDay() {
     seedCount: 120000,
     doc: 5,
     abw: 0.38,
-    stockingType: 'nursery',
+    stockingType: StockingType.nursery,
     feedingScore: 3.0,
     intakePercent: 88.0,
     dissolvedOxygen: 6.2,

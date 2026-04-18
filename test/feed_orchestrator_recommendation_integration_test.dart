@@ -1,8 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:aqua_rythu/core/engines/feed_orchestrator.dart';
-import 'package:aqua_rythu/core/engines/feed_recommendation_engine.dart';
-import 'package:aqua_rythu/core/engines/models/feed_input.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_orchestrator.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_recommendation_engine.dart';
+import 'package:aqua_rythu/core/models/feed_input.dart';
 import 'package:aqua_rythu/core/enums/tray_status.dart';
+import 'package:aqua_rythu/core/enums/stocking_type.dart';
 
 void main() {
   group('FeedOrchestrator recommendation integration', () {
@@ -11,7 +12,7 @@ void main() {
         seedCount: 100000,
         doc: 20,
         abw: null,
-        stockingType: 'nursery',
+        stockingType: StockingType.nursery,
         feedingScore: 3.0,
         intakePercent: 65.0,
         dissolvedOxygen: 6.0,
@@ -38,7 +39,7 @@ void main() {
         seedCount: 100000,
         doc: 20,
         abw: null,
-        stockingType: 'nursery',
+        stockingType: StockingType.nursery,
         feedingScore: 3.0,
         intakePercent: 95.0,
         dissolvedOxygen: 6.0,
@@ -65,7 +66,7 @@ void main() {
         seedCount: 100000,
         doc: 35,
         abw: 3.0,
-        stockingType: 'nursery',
+        stockingType: StockingType.nursery,
         feedingScore: 3.0,
         intakePercent: 95.0,
         dissolvedOxygen: 2.0,

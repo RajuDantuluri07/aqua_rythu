@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/feed_service.dart';
+import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
-import '../../core/engines/feed_plan_constants.dart';
+import '../../core/engines/planning/feed_plan_constants.dart';
 
 class FeedDayPlan {
   final int doc;

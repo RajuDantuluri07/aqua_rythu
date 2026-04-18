@@ -10,7 +10,7 @@ import '../supplements/supplement_provider.dart';
 import '../pond/pond_dashboard_provider.dart';
 import '../growth/growth_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../services/pond_service.dart';
+import 'package:aqua_rythu/core/services/pond_service.dart';
 import '../../core/utils/logger.dart';
 
 class NewCycleSetupScreen extends ConsumerStatefulWidget {

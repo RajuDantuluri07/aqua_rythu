@@ -1,351 +1,145 @@
 import 'package:flutter/material.dart';
-import '../../models/feed_result.dart';
+import '../../core/engines/feed/master_feed_engine.dart';
+import '../../core/enums/feed_stage.dart';
 
 class SmartFeedDebugScreen extends StatelessWidget {
-  final FeedResult data;
+  final OrchestratorResult data;
 
   const SmartFeedDebugScreen({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        title: const Text("Smart Feed Debug Dashboard"),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        title: const Text('Feed Decision Debug',
+            style: TextStyle(color: Colors.white, fontSize: 16)),
+        backgroundColor: const Color(0xFF1E293B),
+        iconTheme: const IconThemeData(color: Colors.white70),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             _feedSummaryCard(),
-            const SizedBox(height: 16),
-            _feedSourceCard(),
-            const SizedBox(height: 16),
-            _feedBreakdownCard(),
-            const SizedBox(height: 16),
-            _smartFactorsCard(),
-            const SizedBox(height: 16),
-            _explanationCard(),
-            const SizedBox(height: 16),
-            _recommendationCard(),
-            const SizedBox(height: 16),
-            _decisionTraceCard(),
-            const SizedBox(height: 16),
-            _debugLogs(),
+            const SizedBox(height: 12),
+            _factorsCard(),
+            const SizedBox(height: 12),
+            _reasoningCard(),
+            const SizedBox(height: 12),
+            _contextCard(),
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  // 🔷 1. Feed Summary
+  // ── Section 1: Feed Summary ───────────────────────────────────────────────
+
   Widget _feedSummaryCard() {
     return _card(
+      title: 'Feed Summary',
+      accent: Colors.greenAccent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Today's Feed Recommendation",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          Text("🐟 ${data.finalFeed.toStringAsFixed(2)} kg",
-              style:
-                  const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(
-            "📉 Adjusted from: ${data.docFeed.toStringAsFixed(2)} kg",
-            style: TextStyle(color: Colors.grey[600]),
+          _row('Base Feed', '${data.baseFeed.toStringAsFixed(2)} kg'),
+          _row(
+            'Final Feed',
+            '${data.finalFeed.toStringAsFixed(2)} kg',
+            bold: true,
+            valueColor: Colors.greenAccent,
           ),
-          const SizedBox(height: 4),
-          Text(
-            "⚙️ Mode: ${data.source == FeedSource.doc ? "DOC" : "SMART (Biomass + FCR)"}",
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 🔷 2. Feed Source
-  Widget _feedSourceCard() {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Feed Source",
-              style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _sourceChip("DOC", data.source == FeedSource.doc),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Container(
-                    height: 2,
-                    color: Colors.grey[300],
-                  ),
-                ),
+          if (data.correction.isCriticalStop)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                '🚨 CRITICAL STOP — No feeding',
+                style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13),
               ),
-              _sourceChip("BIOMASS", data.source == FeedSource.biomass),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "Active: ${data.source == FeedSource.doc ? "DOC" : "BIOMASS"}",
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "Reason: ${data.source == FeedSource.biomass ? "Sampling available (ABW: 12.5g)" : "Sampling not available"}",
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sourceChip(String label, bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: active ? Colors.green : Colors.grey[200],
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: active ? Colors.white : Colors.black54,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  // 🔷 3. Breakdown
-  Widget _feedBreakdownCard() {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Feed Breakdown",
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 12),
-          _row("DOC Feed", data.docFeed),
-          if (data.biomassFeed != null) ...[
-            _row("Biomass Feed", data.biomassFeed!),
-            const SizedBox(height: 4),
-          ],
-          if (data.fcrFactor != null) ...[
-            _row("FCR Adjustment",
-                (data.docFeed - (data.biomassFeed ?? data.docFeed))),
-            const SizedBox(height: 4),
-          ],
-          Divider(color: Colors.grey[300]),
-          _row("Final Feed", data.finalFeed, bold: true, highlight: true),
-        ],
-      ),
-    );
-  }
-
-  // 🔷 4. Smart Factors
-  Widget _smartFactorsCard() {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Smart Factors",
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 12),
-          _factor("FCR Factor", data.fcrFactor),
-          _factor("Tray Factor", data.trayFactor),
-          _factor("Growth Factor", data.growthFactor),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
-              children: [
-                const Text("Confidence Score: ",
-                    style: TextStyle(fontWeight: FontWeight.w500)),
-                Text(
-                  "${(data.confidenceScore * 100).toStringAsFixed(0)}%",
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.blue),
-                )
-              ],
-            ),
-          )
         ],
       ),
     );
   }
 
-  Widget _factor(String name, double? value) {
-    if (value == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Text("🟡 $name: ",
-                style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text("Not Available",
-                style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-          ],
-        ),
-      );
-    }
+  // ── Section 2: Factors ────────────────────────────────────────────────────
 
-    String emoji;
+  Widget _factorsCard() {
+    return _card(
+      title: 'Factors',
+      accent: Colors.amberAccent,
+      child: Column(
+        children: [
+          _factorRow('Tray Factor', data.trayFactor),
+          _factorRow('Smart Factor', data.smartFactor,
+              hint: 'SmartFeedEngineV2 combined'),
+          if (data.debugInfo != null) ...[
+            _factorRow('Raw Combined', data.debugInfo!.rawCombinedFactor,
+                hint: 'V2 × FCR × intelligence (pre-clamp)'),
+          ],
+          _factorRow('Combined Factor', data.combinedFactor,
+              bold: true, hint: 'clamped to [0.70, 1.30]'),
+          _factorRow('FCR Factor', data.fcrFactor),
+          _factorRow('Environment Factor', data.correction.environmentFactor),
+          if (data.debugInfo != null &&
+              (data.debugInfo!.rawCombinedFactor - data.combinedFactor).abs() >
+                  0.2)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: Text(
+                '⚠ High stacking: raw=${data.debugInfo!.rawCombinedFactor.toStringAsFixed(3)} '
+                'clamped=${data.combinedFactor.toStringAsFixed(3)}',
+                style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _factorRow(String label, double value,
+      {String? hint, bool bold = false}) {
     Color color;
-
-    if (value > 1.02) {
-      emoji = "🟢";
-      color = Colors.green;
-    } else if (value < 0.98) {
-      emoji = "🔴";
-      color = Colors.red;
+    if (value > 1.01) {
+      color = Colors.greenAccent;
+    } else if (value < 0.99) {
+      color = Colors.orangeAccent;
     } else {
-      emoji = "🔵";
-      color = Colors.blue;
+      color = Colors.white70;
     }
-
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 7),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text("$emoji $name: ",
-              style: const TextStyle(fontWeight: FontWeight.w500)),
-          Text(
-            value.toStringAsFixed(2),
-            style:
-                TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 14),
-          )
-        ],
-      ),
-    );
-  }
-
-  // 🔷 5. Explanation
-  Widget _explanationCard() {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Why this feed?",
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 12),
-          Text(
-            data.explanation,
-            style: TextStyle(
-              color: Colors.grey[800],
-              height: 1.5,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.amber[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.amber[200]!),
-            ),
-            child: const Column(
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Recommendations:",
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13, color: Colors.amber)),
-                SizedBox(height: 8),
-                Text("→ Monitor tray after next feed",
-                    style: TextStyle(fontSize: 12)),
-                SizedBox(height: 4),
-                Text("→ Consider reducing by 0.5 kg tomorrow",
-                    style: TextStyle(fontSize: 12)),
+                Text(label,
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 13)),
+                if (hint != null)
+                  Text(hint,
+                      style:
+                          const TextStyle(color: Colors.white24, fontSize: 10)),
               ],
             ),
-          )
-        ],
-      ),
-    );
-  }
-
-  // 🔷 6. Recommendations
-  Widget _recommendationCard() {
-    if (data.recommendations.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Next Actions",
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 12),
-          ...data.recommendations.map((recommendation) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("→ ",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.blue)),
-                    Expanded(
-                      child: Text(
-                        recommendation,
-                        style: TextStyle(
-                          color: Colors.grey[800],
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  // 🔷 7. Decision Trace
-  Widget _decisionTraceCard() {
-    if (data.decisionTrace.isEmpty) return const SizedBox.shrink();
-
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Decision Trace",
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
           ),
-          const SizedBox(height: 10),
-          ...data.decisionTrace.map(
-            (step) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "• ",
-                    style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.bold),
-                  ),
-                  Expanded(
-                    child: Text(
-                      step,
-                      style: TextStyle(color: Colors.grey[800], fontSize: 13, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
+          Text(
+            value.toStringAsFixed(3),
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+              fontFamily: 'monospace',
             ),
           ),
         ],
@@ -353,101 +147,171 @@ class SmartFeedDebugScreen extends StatelessWidget {
     );
   }
 
-  // 🔷 8. Debug Logs
-  Widget _debugLogs() {
-    return ExpansionTile(
-      title: const Text("Debug Logs",
-          style: TextStyle(fontWeight: FontWeight.w600)),
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[300]!),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _logEntry("FEED_SOURCE", data.source.name.toUpperCase()),
-              _logEntry("DOC_FEED", data.docFeed.toStringAsFixed(2)),
-              _logEntry("BIOMASS_FEED",
-                  data.biomassFeed?.toStringAsFixed(2) ?? "N/A"),
-              _logEntry("FCR_FACTOR",
-                  data.fcrFactor?.toStringAsFixed(2) ?? "N/A"),
-              _logEntry("TRAY_FACTOR",
-                  data.trayFactor?.toStringAsFixed(2) ?? "N/A"),
-              _logEntry("GROWTH_FACTOR",
-                  data.growthFactor?.toStringAsFixed(2) ?? "N/A"),
-              _logEntry("FINAL_FEED", data.finalFeed.toStringAsFixed(2)),
-              _logEntry("CONFIDENCE_SCORE",
-                  "${(data.confidenceScore * 100).toStringAsFixed(1)}%"),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  // ── Section 3: Reasoning ──────────────────────────────────────────────────
 
-  Widget _logEntry(String key, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _reasoningCard() {
+    final reasons = data.correction.factorExplanations;
+    final combinedPct = ((data.combinedFactor - 1.0) * 100).round();
+    final combinedLabel = combinedPct > 0
+        ? '+$combinedPct%'
+        : combinedPct < 0
+            ? '$combinedPct%'
+            : '0%';
+
+    return _card(
+      title: 'Reasoning',
+      accent: Colors.tealAccent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(key,
+          if (data.correction.isCriticalStop)
+            const Text(
+              '🚨 Critical stop — dissolved oxygen too low. No feeding.',
+              style: TextStyle(color: Colors.redAccent, fontSize: 13),
+            )
+          else if (reasons.isEmpty)
+            const Text(
+              'No adjustments — feed is at base level.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            )
+          else ...[
+            ...reasons.entries.map((e) {
+              final isPositive = e.value.contains('+');
+              final isNegative =
+                  e.value.contains('-') && !e.value.startsWith('CRITICAL');
+              final color = isPositive
+                  ? Colors.greenAccent
+                  : isNegative
+                      ? Colors.orangeAccent
+                      : Colors.white54;
+              final prefix = isPositive ? '+' : isNegative ? '−' : '•';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text('$prefix ${e.value}',
+                    style: TextStyle(color: color, fontSize: 13)),
+              );
+            }),
+            const Divider(color: Colors.white12, height: 20),
+            Text(
+              'Final adjustment: $combinedLabel',
               style: const TextStyle(
-                  color: Colors.white70, fontFamily: 'monospace', fontSize: 11)),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'monospace',
-                  fontSize: 11)),
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  // 🔳 Common Card UI
-  Widget _card({required Widget child}) {
+  // ── Section 4: Context ────────────────────────────────────────────────────
+
+  Widget _contextCard() {
+    final stage = data.feedStage;
+    final stageName = stage == FeedStage.blind
+        ? 'Blind (no corrections)'
+        : stage == FeedStage.transitional
+            ? 'Transitional (growth only)'
+            : 'Intelligent (full)';
+
+    return _card(
+      title: 'Context',
+      accent: Colors.white38,
+      child: Column(
+        children: [
+          _row('DOC', '${data.debugInfo?.doc ?? '—'}'),
+          _row('Engine Version', data.engineVersion),
+          _row(
+            'Sampling present',
+            data.intelligence.hasActualData ? 'Yes' : 'No',
+            valueColor: data.intelligence.hasActualData
+                ? Colors.greenAccent
+                : Colors.white54,
+          ),
+          _row(
+            'Smart corrections',
+            data.isSmartApplied ? 'Active (DOC > 30)' : 'Not active (DOC ≤ 30)',
+            valueColor:
+                data.isSmartApplied ? Colors.greenAccent : Colors.white54,
+          ),
+          _row('Feed stage', stageName),
+          _row('Decision', data.decision.action,
+              valueColor: _decisionColor(data.decision.action)),
+        ],
+      ),
+    );
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  Color _decisionColor(String action) {
+    switch (action) {
+      case 'Stop Feeding':
+        return Colors.redAccent;
+      case 'Reduce Feeding':
+        return Colors.orangeAccent;
+      case 'Increase Feeding':
+        return Colors.cyanAccent;
+      default:
+        return Colors.greenAccent;
+    }
+  }
+
+  Widget _card(
+      {required String title,
+      required Widget child,
+      Color accent = Colors.white38}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: accent == Colors.white38 ? Colors.white60 : accent,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 10),
+          child,
         ],
       ),
-      child: child,
     );
   }
 
-  Widget _row(String label, double value,
-      {bool bold = false, bool highlight = false}) {
+  Widget _row(String label, String value,
+      {bool bold = false, Color? valueColor}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 7),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
+          Expanded(
+            flex: 5,
+            child: Text(label,
+                style: const TextStyle(color: Colors.white54, fontSize: 13)),
+          ),
+          Expanded(
+            flex: 5,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
               style: TextStyle(
-                fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-                color: highlight ? Colors.black : Colors.grey[700],
-              )),
-          Text(
-            "${value.toStringAsFixed(2)} kg",
-            style: TextStyle(
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-              color: highlight ? Colors.green : Colors.black,
-              fontSize: highlight ? 16 : 14,
+                color: valueColor ?? Colors.white,
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
         ],

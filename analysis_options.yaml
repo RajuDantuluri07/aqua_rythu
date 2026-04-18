@@ -15,6 +15,7 @@ analyzer:
     - lib/core/utils/_archive/**
     - lib/features/**/_archive/**
     - test/_archive/**
+    - test/legacy/**
 
 linter:
   # The lint rules applied to this project can be customized in the

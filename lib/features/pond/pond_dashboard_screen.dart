@@ -1,4 +1,4 @@
-import '../../services/farm_service.dart';
+import 'package:aqua_rythu/core/services/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
@@ -26,16 +26,17 @@ import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
-import 'package:aqua_rythu/core/engines/feed_plan_constants.dart';
-import 'package:aqua_rythu/core/engines/feed_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/tray_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/pond_value_engine.dart';
-import 'package:aqua_rythu/core/engines/feed_status_engine.dart' hide FeedDecision;
-import 'package:aqua_rythu/core/engines/engine_constants.dart';
+import 'package:aqua_rythu/core/engines/planning/feed_plan_constants.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_decision_engine.dart';
+import 'package:aqua_rythu/core/engines/tray/tray_decision_engine.dart';
+import 'package:aqua_rythu/core/engines/pond/pond_value_engine.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_status_engine.dart' hide FeedDecision;
+import 'package:aqua_rythu/core/engines/feed/engine_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
 import 'package:flutter/foundation.dart';
+import '../../core/config/app_config.dart';
 import '../debug/debug_dashboard_screen.dart';
 import 'package:aqua_rythu/features/home/alert_strip.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
@@ -74,7 +75,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
   /// Secret 5-tap trigger → opens the Feed Engine Debug dashboard.
   void _onDebugTap(String pondId, String pondName) {
-    if (!kDebugMode) return;
+    if (!AppConfig.isDebugMode) return;
     _debugTapCount++;
     if (_debugTapCount >= 5) {
       _debugTapCount = 0;
@@ -882,22 +883,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
       lastFeedTime: dashboardState.lastFeedTime,
       doc: currentDoc,
       feedsDoneToday: completedRoundsCount,
-    );
-
-    // Tray decision evaluation for insight display
-    final todaySorted = (todayTrayMap.entries.toList()
-          ..sort((a, b) => b.key.compareTo(a.key)))
-        .map((e) => e.value)
-        .toList();
-    final seenKeys = <String>{};
-    final dedupedTrayLogs = <TrayLog>[];
-    for (final log in [...todaySorted, ...trayLogs]) {
-      if (seenKeys.add('${log.doc}_${log.round}')) dedupedTrayLogs.add(log);
-    }
-    TrayDecisionEngine.evaluate(
-      allTrayLogs: dedupedTrayLogs,
-      doc: currentDoc,
-      baseFeed: plannedFeed,
     );
 
     // ── HomeViewModel — single source of truth for all home sections ─────────
@@ -1969,7 +1954,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
     final trayDecision = TrayDecisionEngine.evaluate(
       allTrayLogs: dedupedLogs,
       doc: currentDoc,
-      baseFeed: plannedFeed,
     );
 
     final String action = trayDecision.action;

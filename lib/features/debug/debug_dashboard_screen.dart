@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/engines/master_feed_engine.dart';
-import '../../core/engines/feed_decision_engine.dart';
-import '../../core/engines/feed_intelligence_engine.dart';
-import '../../core/engines/feed_orchestrator.dart';
+import '../../core/config/app_config.dart';
+import '../../core/engines/feed/master_feed_engine.dart';
+import '../../core/engines/feed/feed_intelligence_engine.dart';
+import '../../core/engines/feed/smart_feed_engine_v2.dart';
 import '../../core/enums/feed_stage.dart';
+import '../../core/enums/stocking_type.dart';
 import 'debug_dashboard_provider.dart';
 
 class DebugDashboardScreen extends ConsumerStatefulWidget {
@@ -27,6 +28,10 @@ class _DebugDashboardScreenState extends ConsumerState<DebugDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AppConfig.isDebugMode) {
+      return const SizedBox.shrink();
+    }
+
     final state = ref.watch(debugDashboardProvider(widget.pondId));
     final notifier =
         ref.read(debugDashboardProvider(widget.pondId).notifier);
@@ -82,6 +87,70 @@ class _Body extends ConsumerWidget {
         _PipelineBanner(result: result),
         const SizedBox(height: 12),
 
+        // ── FEED SUMMARY ───────────────────────────────────────────────────
+        _Section(
+          title: 'Feed Summary',
+          accent: Colors.greenAccent,
+          children: [
+            _Row('Base Feed',
+                '${(result?.baseFeed ?? d.finalFeed).toStringAsFixed(2)} kg'),
+            _Row('Final Feed',
+                result != null
+                    ? '${result.finalFeed.toStringAsFixed(2)} kg'
+                    : '${d.finalFeed.toStringAsFixed(2)} kg',
+                bold: true,
+                valueColor: Colors.greenAccent),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // ── FACTORS ────────────────────────────────────────────────────────
+        if (result != null)
+          _Section(
+            title: 'Factors',
+            accent: Colors.amberAccent,
+            children: [
+              _Row('Tray Factor',
+                  result.trayFactor.toStringAsFixed(2),
+                  valueColor: _factorColor(result.trayFactor)),
+              _Row('Smart Factor',
+                  result.smartFactor.toStringAsFixed(2),
+                  hint: 'SmartFeedEngineV2 combined',
+                  valueColor: _factorColor(result.smartFactor)),
+              _Row('Combined Factor',
+                  result.combinedFactor.toStringAsFixed(2),
+                  bold: true,
+                  valueColor: Colors.amberAccent),
+            ],
+          ),
+        if (result != null) const SizedBox(height: 12),
+
+        // ── REASONING ─────────────────────────────────────────────────────
+        if (result != null)
+          _ReasoningSection(result: result),
+        if (result != null) const SizedBox(height: 12),
+
+        // ── CONTEXT ───────────────────────────────────────────────────────
+        _Section(
+          title: 'Context',
+          children: [
+            _Row('DOC', '${state.doc}'),
+            _Row('Sampling',
+                result?.intelligence.hasActualData == true ? 'Yes' : 'No',
+                valueColor: result?.intelligence.hasActualData == true
+                    ? Colors.greenAccent
+                    : Colors.white54),
+            _Row('Smart corrections',
+                result?.isSmartApplied == true
+                    ? 'Active (DOC > 30)'
+                    : 'Not active (DOC ≤ 30)',
+                valueColor: result?.isSmartApplied == true
+                    ? Colors.greenAccent
+                    : Colors.white54),
+          ],
+        ),
+        const SizedBox(height: 12),
+
         // ── 1. POND CONTEXT ────────────────────────────────────────────────
         _Section(
           title: '1. Pond Context',
@@ -94,7 +163,7 @@ class _Body extends ConsumerWidget {
             ),
             _Row('Pond', state.pondName),
             _Row('DOC', '${state.doc}'),
-            _Row('Stocking', state.stockingType.toUpperCase()),
+            _Row('Stocking', state.stockingType.name.toUpperCase()),
             _Row('Density', '${state.density} shrimp'),
           ],
         ),
@@ -375,7 +444,7 @@ class _Body extends ConsumerWidget {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDlgState) {
-            final factor = MasterFeedEngine.trayFactor(sliderValue);
+            final factor = SmartFeedEngineV2.getTrayFactor(sliderValue);
             final factorColor = _trayColor(factor);
 
             return AlertDialog(
@@ -517,8 +586,8 @@ class _Body extends ConsumerWidget {
     }
   }
 
-  String _baseHint(String stockingType, int doc) {
-    if (stockingType == 'hatchery') {
+  String _baseHint(StockingType stockingType, int doc) {
+    if (stockingType == StockingType.hatchery) {
       return '2.0 + (${doc - 1} × 0.15)';
     }
     return '4.0 + (${doc - 1} × 0.25)';
@@ -568,6 +637,112 @@ class _PipelineBanner extends StatelessWidget {
             ),
           );
         }),
+      ),
+    );
+  }
+}
+
+// ── REASONING SECTION ────────────────────────────────────────────────────────
+
+// Canonical display order for factor explanations — do NOT rely on Map iteration.
+const _kFactorOrder = ['tray', 'growth', 'environment', 'doc', 'fcr', 'intelligence'];
+
+class _ReasoningSection extends StatelessWidget {
+  final OrchestratorResult result;
+
+  const _ReasoningSection({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final explanations = result.correction.factorExplanations;
+    final combinedPct = ((result.combinedFactor - 1.0) * 100).round();
+    final combinedLabel = combinedPct > 0
+        ? '+$combinedPct%'
+        : combinedPct < 0
+            ? '$combinedPct%'
+            : '0%';
+
+    // Ordered entries — deterministic regardless of insertion order.
+    final orderedEntries = _kFactorOrder
+        .where(explanations.containsKey)
+        .map((k) => MapEntry(k, explanations[k]!))
+        .toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.tealAccent.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Reasoning',
+            style: TextStyle(
+              color: Colors.tealAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (result.correction.isCriticalStop)
+            const Text(
+              '🚨 Critical stop — dissolved oxygen too low. No feeding.',
+              style: TextStyle(color: Colors.redAccent, fontSize: 13),
+            )
+          else if (orderedEntries.isEmpty)
+            const Text(
+              'No adjustments — feed is at base level.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            )
+          else ...[
+            ...orderedEntries.map((e) {
+              final isPositive = e.value.contains('+');
+              final isNegative =
+                  e.value.contains('-') && !e.value.startsWith('CRITICAL');
+              final color = isPositive
+                  ? Colors.greenAccent
+                  : isNegative
+                      ? Colors.orangeAccent
+                      : Colors.white54;
+              final prefix = isPositive ? '+' : isNegative ? '−' : '•';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text(
+                  '$prefix ${e.value}',
+                  style: TextStyle(color: color, fontSize: 13),
+                ),
+              );
+            }),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Divider(color: Colors.white12),
+            ),
+            Text(
+              'Final adjustment: $combinedLabel',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            // Clamp visibility (TASK 6)
+            if (result.correction.wasCombinedClamped) ...[
+              const SizedBox(height: 6),
+              Text(
+                '⚠ ${result.correction.clampReason ?? "Feed capped by safety limit"}',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }

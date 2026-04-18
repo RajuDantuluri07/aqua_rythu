@@ -1,5 +1,5 @@
-import 'package:aqua_rythu/core/engines/feed_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/feed_intelligence_engine.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_decision_engine.dart';
+import 'package:aqua_rythu/core/engines/feed/feed_intelligence_engine.dart';
 import 'package:aqua_rythu/core/enums/feed_stage.dart';
 import 'package:flutter_test/flutter_test.dart';
 

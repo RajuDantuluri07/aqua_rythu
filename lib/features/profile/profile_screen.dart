@@ -8,7 +8,7 @@ import '../auth/auth_provider.dart';
 import '../farm/farm_provider.dart';
 import '../farm/edit_farm_dialog.dart';
 import 'user_provider.dart';
-import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/farm_service.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/features/farm/farm_provider.dart';
-import 'package:aqua_rythu/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/farm_service.dart';
 import 'package:aqua_rythu/features/pond/add_pond_screen.dart';
 
 class AddFarmScreen extends ConsumerStatefulWidget {

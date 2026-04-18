@@ -13,6 +13,12 @@ class AppLogger {
     if (payload != null) debugPrint('PAYLOAD: $payload');
   }
 
+  static void warn(String message, [Object? payload]) {
+    if (!kDebugMode) return;
+    debugPrint('WARN: $message');
+    if (payload != null) debugPrint('PAYLOAD: $payload');
+  }
+
   static void error(String message, [Object? error, StackTrace? stackTrace]) {
     if (!kDebugMode) return;
     debugPrint('ERROR: $message');

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// App-wide configuration loaded from --dart-define build arguments.
 ///
 /// Pass at build time:
@@ -7,6 +9,7 @@
 class AppConfig {
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const bool isDebugMode = kDebugMode;
 
   /// Fails fast at startup if keys are missing — better than a silent
   /// network error deep in the app.

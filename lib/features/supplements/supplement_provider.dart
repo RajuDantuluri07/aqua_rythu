@@ -2,7 +2,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
-import 'package:aqua_rythu/services/supplement_service.dart';
+import 'package:aqua_rythu/core/services/supplement_service.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 
 enum SupplementStatus { upcoming, active, completed }

@@ -1,8 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/engines/master_feed_engine.dart';
+import '../../core/engines/feed/master_feed_engine.dart';
 import '../../core/enums/tray_status.dart';
-import '../../services/feed_service.dart';
+import '../../core/enums/stocking_type.dart';
+import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
 import '../pond/pond_dashboard_provider.dart';
 
@@ -181,6 +182,7 @@ class FeedHistoryNotifier
         rounds: log.rounds,
         expectedFeed: log.expected,
         cumulativeFeed: log.cumulative,
+        engineVersion: MasterFeedEngine.version,
       );
       AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc}');
     } catch (e) {
@@ -289,7 +291,9 @@ class FeedHistoryNotifier
           final expected = (meta != null && doc > 0)
               ? MasterFeedEngine.compute(
                   doc: doc,
-                  stockingType: meta.stockingType,
+                  stockingType: meta.stockingType == 'hatchery'
+                      ? StockingType.hatchery
+                      : StockingType.nursery,
                   density: meta.seedCount,
                 )
               : 0.0;

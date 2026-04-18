@@ -46,3 +46,12 @@ class AppSpacing {
 class AppTypography {
   // Placeholder for typography if needed
 }
+
+class AppTheme {
+  static ThemeData get lightTheme => ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        fontFamily: 'Inter',
+      );
+}
