@@ -30,7 +30,8 @@ import 'package:aqua_rythu/core/engines/planning/feed_plan_constants.dart';
 import 'package:aqua_rythu/core/engines/feed/feed_decision_engine.dart';
 import 'package:aqua_rythu/core/engines/tray/tray_decision_engine.dart';
 import 'package:aqua_rythu/core/engines/pond/pond_value_engine.dart';
-import 'package:aqua_rythu/core/engines/feed/feed_status_engine.dart' hide FeedDecision;
+import 'package:aqua_rythu/core/engines/feed/feed_status_engine.dart'
+    hide FeedDecision;
 import 'package:aqua_rythu/core/engines/feed/engine_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
@@ -55,13 +56,14 @@ class PondDashboardScreen extends ConsumerStatefulWidget {
 
 class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     with SingleTickerProviderStateMixin {
-
   late AnimationController _pulseController;
   bool _showFeedScheduleTip = false;
   int _debugTapCount = 0;
   bool _completedRoundsExpanded = false;
   // T13 — tracks which round just completed to show feedback prompt once
   int _lastFeedbackRound = -1;
+  // Flag to prevent repeated anchor feed dialog popup
+  bool _anchorFeedDialogShown = false;
 
   @override
   void initState() {
@@ -87,7 +89,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       );
     }
   }
-
 
   Future<void> _checkFeedScheduleTip() async {
     final prefs = await SharedPreferences.getInstance();
@@ -161,8 +162,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   /// A round is locked when the previous round is not fully cleared.
   /// DOC ≤ 30: cleared = feed done.
   /// DOC ≥ 31: cleared = feed done AND tray logged.
-  bool _isLocked(int doc, int round, Map<int, bool> feedDone,
-      Map<int, bool> trayDone) {
+  bool _isLocked(
+      int doc, int round, Map<int, bool> feedDone, Map<int, bool> trayDone) {
     if (round <= 1) return false;
     final prev = round - 1;
     final prevFeedDone = feedDone[prev] ?? false;
@@ -172,14 +173,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     return false;
   }
 
-List<SupplementItem> _getPlannedFeedSupplements(
+  List<SupplementItem> _getPlannedFeedSupplements(
       List<Supplement> supplements, String feedingTime, double feedQty) {
     final items = <SupplementItem>[];
     for (final supplement in supplements) {
       if (supplement.type != SupplementType.feedMix) {
         continue;
       }
-      if (supplement.isPaused || !supplement.feedingTimes.contains(feedingTime)) {
+      if (supplement.isPaused ||
+          !supplement.feedingTimes.contains(feedingTime)) {
         continue;
       }
       items.addAll(supplement.calculateDosage(feedQty));
@@ -220,11 +222,12 @@ List<SupplementItem> _getPlannedFeedSupplements(
     if (feedQty <= 0) {
       return false;
     }
-    final alreadyLogged = ref.read(supplementLogProvider.notifier).hasFeedLogForRoundOnDate(
-          pondId: pondId,
-          round: round,
-          date: DateTime.now(),
-        );
+    final alreadyLogged =
+        ref.read(supplementLogProvider.notifier).hasFeedLogForRoundOnDate(
+              pondId: pondId,
+              round: round,
+              date: DateTime.now(),
+            );
     if (alreadyLogged) {
       return true;
     }
@@ -280,7 +283,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
     } catch (e) {
       if (kDebugMode) debugPrint('Time parse failed for "$timeValue": $e');
     }
-    return DateTime(dateOnly.year, dateOnly.month, dateOnly.day, baseDate.hour, baseDate.minute);
+    return DateTime(dateOnly.year, dateOnly.month, dateOnly.day, baseDate.hour,
+        baseDate.minute);
   }
 
   String _formatWaterTime(DateTime dateTime) {
@@ -331,17 +335,20 @@ List<SupplementItem> _getPlannedFeedSupplements(
   /// DB always has 4 rows — we show only rounds where planned_amount > 0.
   /// Time labels come from getFeedConfig using the round index.
   List<Map<String, dynamic>> _getFeedRounds(
-      int doc, Map<int, double> roundFeedAmounts, [Pond? pond]) {
+      int doc, Map<int, double> roundFeedAmounts,
+      [Pond? pond]) {
     final config = getFeedConfig(doc);
 
     if (roundFeedAmounts.isEmpty) {
       // No DB data yet — show 4 rounds by default
       const defaultActive = 4;
-      return List.generate(defaultActive, (i) => {
-        'round': i + 1,
-        'time': config.timingsDisplay[i],
-        'key': 'R${i + 1}',
-      });
+      return List.generate(
+          defaultActive,
+          (i) => {
+                'round': i + 1,
+                'time': config.timingsDisplay[i],
+                'key': 'R${i + 1}',
+              });
     }
 
     // Show only rounds with qty > 0 and a valid scheduled time
@@ -354,7 +361,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
       final idx = r - 1;
       if (idx < 0 || idx >= config.timingsDisplay.length) continue;
       final time = config.timingsDisplay[idx];
-      if (time.startsWith('--')) continue; // skip rounds with no scheduled time for this DOC
+      if (time.startsWith('--'))
+        continue; // skip rounds with no scheduled time for this DOC
       result.add({'round': r, 'time': time, 'key': 'R$r'});
     }
     return result;
@@ -409,7 +417,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
             const SizedBox(height: 16),
             TextField(
               controller: ctrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Feed amount (kg per day)',
                 hintText: 'e.g. 4.0',
@@ -423,7 +432,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
         actions: [
           TextButton(
             onPressed: () {
-              ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
+              ref
+                  .read(pondDashboardProvider.notifier)
+                  .clearNeedsAnchorFeedInput();
               Navigator.pop(dialogCtx);
             },
             child: const Text('Skip'),
@@ -433,7 +444,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
               final val = double.tryParse(ctrl.text.trim());
               if (val != null && val > 0) {
                 ref.read(pondDashboardProvider.notifier).updateAnchorFeed(val);
-                ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
+                ref
+                    .read(pondDashboardProvider.notifier)
+                    .clearNeedsAnchorFeedInput();
                 Navigator.pop(dialogCtx);
               }
             },
@@ -491,7 +504,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
               if (nameCtrl.text.isNotEmpty) {
                 final messenger = ScaffoldMessenger.of(context);
                 final navigator = Navigator.of(context);
-                final createdLabel = AppLocalizations.of(context).t('farm_created');
+                final createdLabel =
+                    AppLocalizations.of(context).t('farm_created');
                 try {
                   final farmService = FarmService();
                   await farmService.createFarm(
@@ -500,12 +514,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     farmType: 'Semi-Intensive',
                   );
                   if (mounted) {
-                    messenger.showSnackBar(SnackBar(content: Text(createdLabel)));
+                    messenger
+                        .showSnackBar(SnackBar(content: Text(createdLabel)));
                     navigator.pop();
                   }
                 } catch (e) {
                   if (mounted) {
-                    messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                    messenger
+                        .showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                 }
               }
@@ -555,12 +571,22 @@ List<SupplementItem> _getPlannedFeedSupplements(
         }
       }
 
-      // TASK 2: Prompt for anchor feed on first entry into smart phase (DOC >= 31).
-      if (next.needsAnchorFeedInput && !(previous?.needsAnchorFeedInput ?? false)) {
+      // TASK 2: Prompt for anchor feed on first entry into smart phase (DOC <= 30 only).
+      // DOC > 30: No popup (smart mode already active)
+      // DOC <= 30: Popup shown only once via _anchorFeedDialogShown flag
+      final currentDoc = ref.read(docProvider(next.selectedPond));
+      if (next.needsAnchorFeedInput &&
+          !(previous?.needsAnchorFeedInput ?? false) &&
+          currentDoc <= 30 &&
+          !_anchorFeedDialogShown) {
+        _anchorFeedDialogShown = true;
         ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
-        if (mounted) {
-          _showAnchorFeedDialog(context);
-        }
+        // Use post-frame callback to avoid showing dialog during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showAnchorFeedDialog(context);
+          }
+        });
       }
 
       // Warn farmer when a tray log failed to save to the server.
@@ -621,7 +647,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
             (p) => p.id == selectedPond,
             orElse: () => ponds.first,
           )
-        : null;  // ✅ CLEANED: Return null if no ponds - let UI handle gracefully
+        : null; // ✅ CLEANED: Return null if no ponds - let UI handle gracefully
 
     /// ⚠️ HANDLED: Check for no farms first, then no ponds
     if (currentPond == null) {
@@ -645,7 +671,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.landscape_outlined, size: 64, color: Colors.grey[400]),
+                  Icon(Icons.landscape_outlined,
+                      size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
                     AppLocalizations.of(context).t('no_farms'),
@@ -689,7 +716,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.water_drop_outlined, size: 64, color: Colors.grey[400]),
+                Icon(Icons.water_drop_outlined,
+                    size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
                   AppLocalizations.of(context).t('no_ponds'),
@@ -757,7 +785,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 const Icon(Icons.water_drop_outlined,
                     size: 64, color: Colors.grey),
                 AppSpacing.hBase,
-                Text("${AppLocalizations.of(context).t('no_ponds')} — ${currentFarm.name}",
+                Text(
+                    "${AppLocalizations.of(context).t('no_ponds')} — ${currentFarm.name}",
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
                 AppSpacing.hM,
@@ -848,9 +877,11 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
     // Trends calculated for future use (FCR decrease = good, ABW increase = good)
     // ignore: unused_local_variable
-    final double fcrTrend = (pondFcr > 0 && prevFcr > 0) ? (pondFcr - prevFcr) : 0;
+    final double fcrTrend =
+        (pondFcr > 0 && prevFcr > 0) ? (pondFcr - prevFcr) : 0;
     // ignore: unused_local_variable
-    final double abwTrend = (currentAbw > 0 && prevAbw > 0) ? (currentAbw - prevAbw) : 0;
+    final double abwTrend =
+        (currentAbw > 0 && prevAbw > 0) ? (currentAbw - prevAbw) : 0;
 
     final supplementLogs = ref.watch(supplementLogProvider);
     final now = DateTime.now();
@@ -863,18 +894,20 @@ List<SupplementItem> _getPlannedFeedSupplements(
         .toList();
 
     // Both planned and consumed come from provider state (single source of truth)
-    final double plannedFeed = dashboardState.roundFeedAmounts.values
-        .fold(0.0, (sum, v) => sum + v);
+    final double plannedFeed =
+        dashboardState.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
 
     final double consumedFeed = dashboardState.roundFeedStatus.entries
         .where((e) => e.value == 'completed')
-        .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
+        .fold(0.0,
+            (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
     // Smart Feed auto-enables at DOC ≥ 30 (smart_feeding = doc >= 30).
     // The DB flag `isSmartFeedEnabled` is the farmer's manual preference; even if
     // never toggled, Smart Mode activates at DOC 30 because the round lock and
     // SmartFeedEngine both trigger on doc >= 30.
-    final isSmartFeedEnabled = currentPond.isSmartFeedEnabled || (currentDoc >= 30);
+    final isSmartFeedEnabled =
+        currentPond.isSmartFeedEnabled || (currentDoc >= 30);
 
     // ── DOC-adaptive mode ────────────────────────────────────────────────────
     final String mode;
@@ -891,8 +924,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
     {
       DateTime expected = DateTime(today.year, today.month, today.day);
       for (final log in history) {
-        final logDay =
-            DateTime(log.date.year, log.date.month, log.date.day);
+        final logDay = DateTime(log.date.year, log.date.month, log.date.day);
         if (logDay == expected && log.total > 0) {
           streak++;
           expected = expected.subtract(const Duration(days: 1));
@@ -906,9 +938,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
     final double survivalFraction = _estimatedSurvivalRate(currentDoc) / 100.0;
     String? traySignal;
     {
-      final recentTray = trayLogs
-          .where((l) => !l.isSkipped && l.trays.isNotEmpty)
-          .firstOrNull;
+      final recentTray =
+          trayLogs.where((l) => !l.isSkipped && l.trays.isNotEmpty).firstOrNull;
       if (recentTray != null) {
         final full = recentTray.trays.where((t) => t == TrayStatus.full).length;
         final empty =
@@ -916,8 +947,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
         final total = recentTray.trays.length;
         if (full > total / 2) {
           traySignal = 'full';
-        } else if (empty > total / 2) traySignal = 'empty';
-        else traySignal = 'partial';
+        } else if (empty > total / 2)
+          traySignal = 'empty';
+        else
+          traySignal = 'partial';
       }
     }
     final bool hasTrayData =
@@ -956,21 +989,21 @@ List<SupplementItem> _getPlannedFeedSupplements(
 
     // ── HomeViewModel — single source of truth for all home sections ─────────
     final vm = HomeBuilder.build(
-      doc:             currentDoc,
-      feedsDone:       completedRoundsCount,
-      maxFeeds:        currentDoc <= 7 ? 2 : 4,
-      lastFeedTime:    dashboardState.lastFeedTime,
+      doc: currentDoc,
+      feedsDone: completedRoundsCount,
+      maxFeeds: currentDoc <= 7 ? 2 : 4,
+      lastFeedTime: dashboardState.lastFeedTime,
       roundFeedStatus: dashboardState.roundFeedStatus,
-      trayDone:        trayDone,
-      consumedFeed:    consumedFeed,
-      plannedFeed:     plannedFeed,
-      feedHistory:     history,
-      trayLogs:        trayLogs,
-      growthLogs:      growthLogs,
-      currentAbw:      currentAbw,
-      pondFcr:         pondFcr,
-      streak:          streak,
-      seedCount:       currentPond.seedCount,
+      trayDone: trayDone,
+      consumedFeed: consumedFeed,
+      plannedFeed: plannedFeed,
+      feedHistory: history,
+      trayLogs: trayLogs,
+      growthLogs: growthLogs,
+      currentAbw: currentAbw,
+      pondFcr: pondFcr,
+      streak: streak,
+      seedCount: currentPond.seedCount,
     );
 
     // ── Savings vs plan for completed rounds ──────────────────────────────────
@@ -978,7 +1011,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
     if (completedRoundsCount >= 1 && consumedFeed > 0) {
       final double baseline = dashboardState.roundFeedStatus.entries
           .where((e) => e.value == 'completed')
-          .fold(0.0, (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
+          .fold(
+              0.0,
+              (sum, e) =>
+                  sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
       if (baseline > 0) {
         final diff = baseline - consumedFeed;
         if (diff > 0.001) heroSavedToday = diff * kFeedCostPerKg;
@@ -986,13 +1022,14 @@ List<SupplementItem> _getPlannedFeedSupplements(
     }
 
     // ── Current (hero) round data ─────────────────────────────────────────────
-    final int? heroRound = pendingRounds.isNotEmpty ? pendingRounds.first : null;
+    final int? heroRound =
+        pendingRounds.isNotEmpty ? pendingRounds.first : null;
     String heroTime = '';
     double heroQty = 0;
     List<String> heroSupplements = [];
     if (heroRound != null) {
-      final feedRoundsData =
-          _getFeedRounds(currentDoc, dashboardState.roundFeedAmounts, currentPond);
+      final feedRoundsData = _getFeedRounds(
+          currentDoc, dashboardState.roundFeedAmounts, currentPond);
       final roundData = feedRoundsData.firstWhere(
         (r) => r['round'] == heroRound,
         orElse: () => <String, dynamic>{},
@@ -1000,8 +1037,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
       heroTime = (roundData['time'] as String?) ?? '';
       final heroTimeKey = (roundData['key'] as String?) ?? 'R$heroRound';
       heroQty = dashboardState.roundFeedAmounts[heroRound] ?? 0;
-      heroSupplements = _getPlannedFeedSupplements(activePlansToday, heroTimeKey, heroQty)
-          .map((s) => '${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}')
+      heroSupplements = _getPlannedFeedSupplements(
+              activePlansToday, heroTimeKey, heroQty)
+          .map((s) =>
+              '${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}')
           .toList();
     }
 
@@ -1031,9 +1070,11 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 children: [
                   const LanguageSwitcherDark(),
                   GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.addPond),
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.addPond),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
                         color: const Color(0xFF16A34A),
                         borderRadius: BorderRadius.circular(24),
@@ -1070,7 +1111,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       bool isSelected = pond.id == selectedPond;
 
                       final hasFeed =
-                          (ref.watch(feedHistoryProvider)[pond.id] ?? []).isNotEmpty;
+                          (ref.watch(feedHistoryProvider)[pond.id] ?? [])
+                              .isNotEmpty;
                       final hasHarvest =
                           ref.watch(harvestProvider(pond.id)).isNotEmpty;
 
@@ -1089,19 +1131,22 @@ List<SupplementItem> _getPlannedFeedSupplements(
                             context: context,
                             builder: (BuildContext dialogContext) {
                               return AlertDialog(
-                                title: Text(AppLocalizations.of(context).t('delete_pond')),
+                                title: Text(AppLocalizations.of(context)
+                                    .t('delete_pond')),
                                 content: Text(
                                     "Delete '${pond.name}'? This pond has no feed or harvest records. It will be permanently removed."),
                                 actions: <Widget>[
                                   TextButton(
-                                    child: Text(AppLocalizations.of(context).t('cancel')),
+                                    child: Text(AppLocalizations.of(context)
+                                        .t('cancel')),
                                     onPressed: () =>
                                         Navigator.of(dialogContext).pop(),
                                   ),
                                   TextButton(
                                     style: TextButton.styleFrom(
                                         foregroundColor: Colors.red),
-                                    child: Text(AppLocalizations.of(context).t('delete')),
+                                    child: Text(AppLocalizations.of(context)
+                                        .t('delete')),
                                     onPressed: () async {
                                       if (currentFarm != null) {
                                         try {
@@ -1111,8 +1156,11 @@ List<SupplementItem> _getPlannedFeedSupplements(
                                                   currentFarm.id, pond.id);
                                         } catch (e) {
                                           if (dialogContext.mounted) {
-                                            ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                              const SnackBar(content: Text("Failed to delete pond. Please try again.")),
+                                            ScaffoldMessenger.of(dialogContext)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content: Text(
+                                                      "Failed to delete pond. Please try again.")),
                                             );
                                           }
                                           return;
@@ -1149,7 +1197,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         ),
                       );
                     }),
-
                   ],
                 ),
               ),
@@ -1201,10 +1248,10 @@ List<SupplementItem> _getPlannedFeedSupplements(
               if (isCompleted)
                 _buildCompletedDashboard(context, ref, currentPond)
               else ...[
-
                 if (currentDoc > 120) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade50,
                       borderRadius: AppRadius.rs,
@@ -1212,12 +1259,16 @@ List<SupplementItem> _getPlannedFeedSupplements(
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade800),
+                        Icon(Icons.warning_amber_rounded,
+                            size: 16, color: Colors.orange.shade800),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             AppLocalizations.of(context).t('extended_culture'),
-                            style: TextStyle(color: Colors.orange.shade800, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.orange.shade800,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -1234,13 +1285,15 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       child: CircularProgressIndicator(),
                     ),
                   )
-                else if (dashboardState.roundFeedAmounts.isEmpty && currentDoc < 30)
+                else if (dashboardState.roundFeedAmounts.isEmpty &&
+                    currentDoc < 30)
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
                         children: [
-                          Icon(Icons.restaurant_menu_outlined, size: 48, color: Colors.grey[400]),
+                          Icon(Icons.restaurant_menu_outlined,
+                              size: 48, color: Colors.grey[400]),
                           const SizedBox(height: 12),
                           Text(
                             AppLocalizations.of(context).t('no_feed_plan'),
@@ -1292,78 +1345,86 @@ List<SupplementItem> _getPlannedFeedSupplements(
                         onFeedbackSubmit: (round, isAccurate) {
                           setState(() => _lastFeedbackRound = -1);
                           // TODO: persist FeedFeedback to DB
-                          debugPrint('[FeedFeedback] R$round accurate=$isAccurate doc=$currentDoc pond=$selectedPond');
+                          debugPrint(
+                              '[FeedFeedback] R$round accurate=$isAccurate doc=$currentDoc pond=$selectedPond');
                         },
                       ),
 
                       const SizedBox(height: 12),
                       GestureDetector(
-                          onTap: () => setState(() => _completedRoundsExpanded = !_completedRoundsExpanded),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _completedRoundsExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                                  size: 18,
-                                  color: const Color(0xFF64748B),
+                        onTap: () => setState(() => _completedRoundsExpanded =
+                            !_completedRoundsExpanded),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _completedRoundsExpanded
+                                    ? Icons.expand_less_rounded
+                                    : Icons.expand_more_rounded,
+                                size: 18,
+                                color: const Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _completedRoundsExpanded
+                                    ? 'Hide Completed Rounds'
+                                    : 'Completed Rounds',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF64748B),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _completedRoundsExpanded ? 'Hide Completed Rounds' : 'Completed Rounds',
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF16A34A),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${dashboardState.roundFeedStatus.values.where((s) => s == 'completed').length} done',
                                   style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF64748B),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
                                   ),
                                 ),
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF16A34A),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    '${dashboardState.roundFeedStatus.values.where((s) => s == 'completed').length} done',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
-                        if (_completedRoundsExpanded) ...[
-                          const SizedBox(height: 8),
-                          ..._buildTimeline(
-                            today: today,
-                            currentDoc: currentDoc,
-                            pondName: currentPond.name,
-                            pondArea: currentPond.area,
-                            todayTrayMap: todayTrayMap,
-                            dashboardState: dashboardState,
-                            trayDone: trayDone,
-                            activePlansToday: activePlansToday,
-                            todaySupplementLogs: todaySupplementLogs,
-                            selectedPond: selectedPond,
-                            smartFeedOutput: null,
-                            currentPond: currentPond,
-                            isSmartFeedEnabled: isSmartFeedEnabled,
-                            valueDelta: pondValue.delta,
-                            showDoneRoundsOnly: true,
-                          ),
-                        ],
-                      ],
                       ),
+                      if (_completedRoundsExpanded) ...[
+                        const SizedBox(height: 8),
+                        ..._buildTimeline(
+                          today: today,
+                          currentDoc: currentDoc,
+                          pondName: currentPond.name,
+                          pondArea: currentPond.area,
+                          todayTrayMap: todayTrayMap,
+                          dashboardState: dashboardState,
+                          trayDone: trayDone,
+                          activePlansToday: activePlansToday,
+                          todaySupplementLogs: todaySupplementLogs,
+                          selectedPond: selectedPond,
+                          smartFeedOutput: null,
+                          currentPond: currentPond,
+                          isSmartFeedEnabled: isSmartFeedEnabled,
+                          valueDelta: pondValue.delta,
+                          showDoneRoundsOnly: true,
+                        ),
+                      ],
+                    ],
+                  ),
                 const SizedBox(height: 16),
 
                 /// ── QUICK ACTIONS (Feed/Supp + Tank Ops) ─────────────────────
@@ -1391,16 +1452,22 @@ List<SupplementItem> _getPlannedFeedSupplements(
                           _pulseController.stop();
                           setState(() => _showFeedScheduleTip = false);
                         }
-                        Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => FeedScheduleScreen(pondId: selectedPond)));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    FeedScheduleScreen(pondId: selectedPond)));
                       },
                     ),
                     _TankOpButton(
                       label: AppLocalizations.of(context).t('supplement_mix'),
                       icon: Icons.science_rounded,
                       iconColor: Colors.deepPurple,
-                      onTap: () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => SupplementMixScreen(pondId: selectedPond))),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  SupplementMixScreen(pondId: selectedPond))),
                     ),
                     _TankOpButton(
                       label: AppLocalizations.of(context).t('sampling'),
@@ -1410,11 +1477,15 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       badgeColor: const Color(0xFFDC2626),
                       onTap: () {
                         if (isCompleted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(AppLocalizations.of(context).t('sampling_locked'))));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(AppLocalizations.of(context)
+                                  .t('sampling_locked'))));
                         } else {
-                          Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => SamplingScreen(pondId: selectedPond)));
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      SamplingScreen(pondId: selectedPond)));
                         }
                       },
                     ),
@@ -1431,11 +1502,15 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       badgeColor: const Color(0xFF16A34A),
                       onTap: () {
                         if (isCompleted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(AppLocalizations.of(context).t('water_test_locked'))));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(AppLocalizations.of(context)
+                                  .t('water_test_locked'))));
                         } else {
-                          Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => WaterTestScreen(pondId: selectedPond)));
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      WaterTestScreen(pondId: selectedPond)));
                         }
                       },
                     ),
@@ -1459,22 +1534,23 @@ List<SupplementItem> _getPlannedFeedSupplements(
                       onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => FeedHistoryScreen(pondId: selectedPond))),
+                              builder: (_) =>
+                                  FeedHistoryScreen(pondId: selectedPond))),
                     ),
                   ],
                 ),
-              // ── INTELLIGENCE LAYER (below quick actions) ───────────────────
-              if (!isCompleted) ...[
-                const SizedBox(height: 20),
+                // ── INTELLIGENCE LAYER (below quick actions) ───────────────────
+                if (!isCompleted) ...[
+                  const SizedBox(height: 20),
 
-                // Feed vs Ideal trend (7-day sparkline)
-                FeedTrendCard(data: vm.trend),
+                  // Feed vs Ideal trend (7-day sparkline)
+                  FeedTrendCard(data: vm.trend),
 
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
 
-                // Removed: Growth status, Waste insight, Activity timeline, Smart insight
-              ],
-              // ── END INTELLIGENCE LAYER ──────────────────────────────────────
+                  // Removed: Growth status, Waste insight, Activity timeline, Smart insight
+                ],
+                // ── END INTELLIGENCE LAYER ──────────────────────────────────────
               ],
             ],
           ),
@@ -1509,9 +1585,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
     int lastFeedbackRound = -1,
     void Function(int round, bool isAccurate)? onFeedbackSubmit,
   }) {
-    final feedRoundsData = _getFeedRounds(currentDoc, dashboardState.roundFeedAmounts, currentPond);
+    final feedRoundsData = _getFeedRounds(
+        currentDoc, dashboardState.roundFeedAmounts, currentPond);
     final List<Map<String, dynamic>> timelineItems = [];
-
 
     // Add Feed Rounds
     for (var data in feedRoundsData) {
@@ -1555,7 +1631,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
       if (log.supplementType != SupplementType.waterMix) {
         continue;
       }
-      final alreadyRepresented = waterPlans.any((plan) => plan.id == log.supplementId);
+      final alreadyRepresented =
+          waterPlans.any((plan) => plan.id == log.supplementId);
       if (alreadyRepresented) {
         continue;
       }
@@ -1571,224 +1648,256 @@ List<SupplementItem> _getPlannedFeedSupplements(
     timelineItems.sort((a, b) =>
         (a['sortTime'] as DateTime).compareTo(b['sortTime'] as DateTime));
 
-    return timelineItems.map<Widget?>((itemData) {
-      final bool isFeed = itemData['type'] == 'feed';
+    return timelineItems
+        .map<Widget?>((itemData) {
+          final bool isFeed = itemData['type'] == 'feed';
 
-      // Filter by mode: showDoneRoundsOnly shows only done feed rounds,
-      // otherwise shows active rounds + water supplements (skips done feed)
-      if (!isFeed && showDoneRoundsOnly) return null;
+          // Filter by mode: showDoneRoundsOnly shows only done feed rounds,
+          // otherwise shows active rounds + water supplements (skips done feed)
+          if (!isFeed && showDoneRoundsOnly) return null;
 
-      Widget card;
+          Widget card;
 
-      if (isFeed) {
-        // ── Feed round card (unified for all DOCs) ─────────────────────
-        final Map<int, bool> feedDoneMap = {
-          for (final e in dashboardState.roundFeedStatus.entries)
-            e.key: e.value == 'completed',
-        };
-        final round = itemData['round'] as int;
-        final time = itemData['time'] as String;
-        final timeKey = itemData['key'] as String;
-        final double qty = dashboardState.roundFeedAmounts[round] ?? 0.0;
-        final thisRoundLog = todayTrayMap[round];
+          if (isFeed) {
+            // ── Feed round card (unified for all DOCs) ─────────────────────
+            final Map<int, bool> feedDoneMap = {
+              for (final e in dashboardState.roundFeedStatus.entries)
+                e.key: e.value == 'completed',
+            };
+            final round = itemData['round'] as int;
+            final time = itemData['time'] as String;
+            final timeKey = itemData['key'] as String;
+            final double qty = dashboardState.roundFeedAmounts[round] ?? 0.0;
+            final thisRoundLog = todayTrayMap[round];
 
-        final roundState = _getSimpleRoundState(
-          doc: currentDoc,
-          round: round,
-          totalRounds: dashboardState.roundFeedAmounts.isNotEmpty
-              ? dashboardState.roundFeedAmounts.values.where((v) => v > 0).length
-              : (currentDoc <= 7 ? 2 : 4),
-          feedDone: feedDoneMap,
-          trayDone: trayDone,
-        );
+            final roundState = _getSimpleRoundState(
+              doc: currentDoc,
+              round: round,
+              totalRounds: dashboardState.roundFeedAmounts.isNotEmpty
+                  ? dashboardState.roundFeedAmounts.values
+                      .where((v) => v > 0)
+                      .length
+                  : (currentDoc <= 7 ? 2 : 4),
+              feedDone: feedDoneMap,
+              trayDone: trayDone,
+            );
 
-        final bool isDone = roundState['isDone'] as bool;
-        final bool isCurrent = roundState['isCurrent'] as bool;
-        final bool isTrayLogged = roundState['isTrayLogged'] as bool;
-        // A tray log exists but it was auto-skipped (farmer moved on without logging)
-        final bool isTraySkipped = isTrayLogged && (todayTrayMap[round]?.isSkipped ?? false);
-        // DOC 15–29: tray is optional — show the button but don't block progression.
-        // DOC ≥ 30:  tray is mandatory — handled by _isLocked/_getCurrentRound.
-        // isPendingTray = tray not yet handled at all (neither logged nor skipped)
-        final bool isPendingTray = isDone && currentDoc >= 15 && !isTrayLogged;
+            final bool isDone = roundState['isDone'] as bool;
+            final bool isCurrent = roundState['isCurrent'] as bool;
+            final bool isTrayLogged = roundState['isTrayLogged'] as bool;
+            // A tray log exists but it was auto-skipped (farmer moved on without logging)
+            final bool isTraySkipped =
+                isTrayLogged && (todayTrayMap[round]?.isSkipped ?? false);
+            // DOC 15–29: tray is optional — show the button but don't block progression.
+            // DOC ≥ 30:  tray is mandatory — handled by _isLocked/_getCurrentRound.
+            // isPendingTray = tray not yet handled at all (neither logged nor skipped)
+            final bool isPendingTray =
+                isDone && currentDoc >= 15 && !isTrayLogged;
 
-        // Filter: skip non-done rounds in done-only mode.
-        if (showDoneRoundsOnly && !isDone) return null;
-        // In active mode: only skip done rounds that have NO pending tray action.
-        // If tray is pending or skipped, keep the card visible so farmer can log it.
-        if (!showDoneRoundsOnly && isDone && !isPendingTray && !isTraySkipped) return null;
+            // Filter: skip non-done rounds in done-only mode.
+            if (showDoneRoundsOnly && !isDone) return null;
+            // In active mode: only skip done rounds that have NO pending tray action.
+            // If tray is pending or skipped, keep the card visible so farmer can log it.
+            if (!showDoneRoundsOnly &&
+                isDone &&
+                !isPendingTray &&
+                !isTraySkipped) return null;
 
-        final FeedRoundState cardState = isDone
-            ? FeedRoundState.done
-            : isCurrent
-                ? FeedRoundState.current
-                : FeedRoundState.upcoming;
+            final FeedRoundState cardState = isDone
+                ? FeedRoundState.done
+                : isCurrent
+                    ? FeedRoundState.current
+                    : FeedRoundState.upcoming;
 
-        // First upcoming round after current = "NEXT"
-        final int currentRound = feedDoneMap.entries
-            .where((e) => !e.value)
-            .map((e) => e.key)
-            .fold<int>(0, (m, r) => m == 0 ? r : (r < m ? r : m));
-        final bool isNext = cardState == FeedRoundState.upcoming && round == currentRound + 1;
+            // First upcoming round after current = "NEXT"
+            final int currentRound = feedDoneMap.entries
+                .where((e) => !e.value)
+                .map((e) => e.key)
+                .fold<int>(0, (m, r) => m == 0 ? r : (r < m ? r : m));
+            final bool isNext = cardState == FeedRoundState.upcoming &&
+                round == currentRound + 1;
 
-        // Supplements: applied for done rounds, planned for others
-        final appliedSupplements = _getAppliedFeedSupplements(round, todaySupplementLogs);
-        final List<String> supplements = appliedSupplements.isNotEmpty
-            ? appliedSupplements
-                .map((s) => "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
-                .toList()
-            : _getPlannedFeedSupplements(activePlansToday, timeKey, qty)
-                .map((s) => "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
-                .toList();
+            // Supplements: applied for done rounds, planned for others
+            final appliedSupplements =
+                _getAppliedFeedSupplements(round, todaySupplementLogs);
+            final List<String> supplements = appliedSupplements.isNotEmpty
+                ? appliedSupplements
+                    .map((s) =>
+                        "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
+                    .toList()
+                : _getPlannedFeedSupplements(activePlansToday, timeKey, qty)
+                    .map((s) =>
+                        "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
+                    .toList();
 
-        final double finalFeedKg = dashboardState.roundFinalFeedAmounts[round] ?? qty;
-        final bool isManuallyEdited = dashboardState.roundIsManuallyEdited[round] ?? false;
+            final double finalFeedKg =
+                dashboardState.roundFinalFeedAmounts[round] ?? qty;
+            final bool isManuallyEdited =
+                dashboardState.roundIsManuallyEdited[round] ?? false;
 
-        // T10 — Safety clamp: cap recommendation to ±20/25% of last feed
-        final double lastKg = round > 1 ? (dashboardState.roundFeedAmounts[round - 1] ?? 0.0) : 0.0;
-        final double safeQty = (lastKg > 0 && qty > 0)
-            ? qty.clamp(lastKg * 0.75, lastKg * 1.2)
-            : qty;
-        final bool isSafetyClamped = lastKg > 0 && (safeQty - qty).abs() > 0.01;
+            // T10 — Safety clamp: cap recommendation to ±20/25% of last feed
+            final double lastKg = round > 1
+                ? (dashboardState.roundFeedAmounts[round - 1] ?? 0.0)
+                : 0.0;
+            final double safeQty = (lastKg > 0 && qty > 0)
+                ? qty.clamp(lastKg * 0.75, lastKg * 1.2)
+                : qty;
+            final bool isSafetyClamped =
+                lastKg > 0 && (safeQty - qty).abs() > 0.01;
 
-        card = FeedTimelineCard(
-          round: round,
-          time: time,
-          recommendedFeedKg: safeQty,
-          finalFeedKg: finalFeedKg,
-          isManuallyEdited: isManuallyEdited,
-          state: cardState,
-          isPendingTray: isPendingTray,
-          isTraySkipped: isTraySkipped,
-          trayStatuses: thisRoundLog?.isSkipped == true ? null : thisRoundLog?.trays,
-          supplements: supplements,
-          isSmartFeed: isSmartFeedEnabled,
-          lastFeedKg: lastKg > 0 ? lastKg : null,
-          leftoverPercent: thisRoundLog?.leftoverPercent,
-          correctionPercent: 0, // TODO: calculate
-          // Hero timer SSOT — card owns the live countdown internally.
-          // Only supplied for the current (active) round; null for done/upcoming.
-          nextFeedAt: isCurrent ? nextFeedAt : null,
-          onEdit: isCurrent
-              ? (double newQty) {
-                  ref.read(pondDashboardProvider.notifier).editRoundAmount(
-                        round,
-                        newQty,
-                        persistToPlan: currentDoc >= 30,
-                      );
-                }
-              : null,
-          // MARK AS FED: always available on the current round, for all DOCs
-          onMarkDone: isCurrent
-              ? () {
-                  // T13 — show feedback prompt on the done card after this round
-                  setState(() => _lastFeedbackRound = round);
-                  final actualQty = finalFeedKg;
-                  if (actualQty > 0) {
-                    _logFeedSupplementApplication(
-                      pondId: selectedPond,
-                      pondName: pondName,
-                      round: round,
-                      feedQty: actualQty,
-                      activePlansToday: activePlansToday,
-                    );
-                  }
-                  // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
-                  // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
-                  ref.read(pondDashboardProvider.notifier).markFeedDone(
-                        round,
-                        actualQty: actualQty,
-                      );
-                  // V2-01: ₹ delta snackbar — closes dopamine loop after every feed.
-                  // Shows "+₹120 added to pond value" immediately after marking done.
-                  final completedAfter = round;
-                  final motivationMsg = _feedMotivationMessage(completedAfter);
-                  final valueLabel = _formatCurrency(valueDelta);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(
-                      valueDelta >= 1
-                          ? '$motivationMsg  •  +$valueLabel added to pond value'
-                          : motivationMsg,
-                    ),
-                    backgroundColor: const Color(0xFF16A34A),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 3),
-                  ));
-                }
-              : null,
-          // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
-          onLogTray: (isPendingTray || isTraySkipped) ? () => openTray(round, false) : null,
-          isNext: isNext,
-          // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
-          insight: isCurrent ? insight : null,
-          completedRounds: completedRounds,
-          totalRounds: totalRounds,
-          confidenceScore: isCurrent ? confidenceScore : null,
-          isSafetyClamped: isCurrent && isSafetyClamped,
-          feedMode: feedMode,
-          showFeedbackPrompt: isDone && round == lastFeedbackRound,
-          onFeedback: isDone ? (bool isAccurate) => onFeedbackSubmit?.call(round, isAccurate) : null,
-          decision: isCurrent ? dashboardState.decision : null,
-          recommendationInstruction: isCurrent ? dashboardState.recommendation?.instruction : null,
-          isCurrent: isCurrent,
-          // TASK 8: pass anchor so card can show "Base Feed / Adjusted Feed" split
-          anchorFeedKg: (isCurrent && currentDoc >= 31) ? currentPond?.anchorFeed : null,
-        );
-
-        // External warning strip removed — FeedTimelineCard now owns the timer
-        // and warning UX internally via its 3-state layout (Too Early / Window
-        // Open / Overdue). The nextFeedAt DateTime drives all of this.
-      } else {
-        final log = itemData['log'] as SupplementLog?;
-        final plan = itemData['plan'] as Supplement?;
-        final isApplied = log != null;
-
-        final scheduledAt = plan != null
-            ? _waterPlanScheduleForDay(plan, today)
-            : (log?.scheduledAt ?? log?.timestamp ?? today);
-        final items = log?.appliedItems ??
-            (plan != null ? plan.calculateAppliedItems(pondArea: pondArea) : <CalculatedItem>[]);
-
-        card = _WaterRoundCard(
-          time: itemData['time'],
-          title: log?.supplementName ?? plan?.name ?? "Water Mix",
-          items: items,
-          isApplied: isApplied,
-          onMarkDone: plan == null || isApplied
-              ? null
-              : () {
-                  if (pondArea <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Pond area must be greater than zero"),
+            card = FeedTimelineCard(
+              round: round,
+              time: time,
+              recommendedFeedKg: safeQty,
+              finalFeedKg: finalFeedKg,
+              isManuallyEdited: isManuallyEdited,
+              state: cardState,
+              isPendingTray: isPendingTray,
+              isTraySkipped: isTraySkipped,
+              trayStatuses:
+                  thisRoundLog?.isSkipped == true ? null : thisRoundLog?.trays,
+              supplements: supplements,
+              isSmartFeed: isSmartFeedEnabled,
+              lastFeedKg: lastKg > 0 ? lastKg : null,
+              leftoverPercent: thisRoundLog?.leftoverPercent,
+              correctionPercent: 0, // TODO: calculate
+              // Hero timer SSOT — card owns the live countdown internally.
+              // Only supplied for the current (active) round; null for done/upcoming.
+              nextFeedAt: isCurrent ? nextFeedAt : null,
+              onEdit: isCurrent
+                  ? (double newQty) {
+                      ref.read(pondDashboardProvider.notifier).editRoundAmount(
+                            round,
+                            newQty,
+                            persistToPlan: currentDoc >= 30,
+                          );
+                    }
+                  : null,
+              // MARK AS FED: always available on the current round, for all DOCs
+              onMarkDone: isCurrent
+                  ? () {
+                      // T13 — show feedback prompt on the done card after this round
+                      setState(() => _lastFeedbackRound = round);
+                      final actualQty = finalFeedKg;
+                      if (actualQty > 0) {
+                        _logFeedSupplementApplication(
+                          pondId: selectedPond,
+                          pondName: pondName,
+                          round: round,
+                          feedQty: actualQty,
+                          activePlansToday: activePlansToday,
+                        );
+                      }
+                      // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
+                      // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
+                      ref.read(pondDashboardProvider.notifier).markFeedDone(
+                            round,
+                            actualQty: actualQty,
+                          );
+                      // V2-01: ₹ delta snackbar — closes dopamine loop after every feed.
+                      // Shows "+₹120 added to pond value" immediately after marking done.
+                      final completedAfter = round;
+                      final motivationMsg =
+                          _feedMotivationMessage(completedAfter);
+                      final valueLabel = _formatCurrency(valueDelta);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(
+                          valueDelta >= 1
+                              ? '$motivationMsg  •  +$valueLabel added to pond value'
+                              : motivationMsg,
+                        ),
+                        backgroundColor: const Color(0xFF16A34A),
                         behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    return;
-                  }
-                  final didLog = _logWaterSupplementApplication(
-                    pondId: dashboardState.selectedPond,
-                    pondName: pondName,
-                    pondArea: pondArea,
-                    plan: plan,
-                    scheduledAt: scheduledAt,
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        didLog
-                            ? "Water supplement marked as applied"
-                            : "Unable to apply water supplement",
-                      ),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-        );
-      }
+                        duration: const Duration(seconds: 3),
+                      ));
+                    }
+                  : null,
+              // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
+              onLogTray: (isPendingTray || isTraySkipped)
+                  ? () => openTray(round, false)
+                  : null,
+              isNext: isNext,
+              // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
+              insight: isCurrent ? insight : null,
+              completedRounds: completedRounds,
+              totalRounds: totalRounds,
+              confidenceScore: isCurrent ? confidenceScore : null,
+              isSafetyClamped: isCurrent && isSafetyClamped,
+              feedMode: feedMode,
+              showFeedbackPrompt: isDone && round == lastFeedbackRound,
+              onFeedback: isDone
+                  ? (bool isAccurate) =>
+                      onFeedbackSubmit?.call(round, isAccurate)
+                  : null,
+              decision: isCurrent ? dashboardState.decision : null,
+              recommendationInstruction:
+                  isCurrent ? dashboardState.recommendation?.instruction : null,
+              isCurrent: isCurrent,
+              // TASK 8: pass anchor so card can show "Base Feed / Adjusted Feed" split
+              anchorFeedKg: (isCurrent && currentDoc >= 31)
+                  ? currentPond?.anchorFeed
+                  : null,
+            );
 
-      return card;
-    }).whereType<Widget>().toList();
+            // External warning strip removed — FeedTimelineCard now owns the timer
+            // and warning UX internally via its 3-state layout (Too Early / Window
+            // Open / Overdue). The nextFeedAt DateTime drives all of this.
+          } else {
+            final log = itemData['log'] as SupplementLog?;
+            final plan = itemData['plan'] as Supplement?;
+            final isApplied = log != null;
+
+            final scheduledAt = plan != null
+                ? _waterPlanScheduleForDay(plan, today)
+                : (log?.scheduledAt ?? log?.timestamp ?? today);
+            final items = log?.appliedItems ??
+                (plan != null
+                    ? plan.calculateAppliedItems(pondArea: pondArea)
+                    : <CalculatedItem>[]);
+
+            card = _WaterRoundCard(
+              time: itemData['time'],
+              title: log?.supplementName ?? plan?.name ?? "Water Mix",
+              items: items,
+              isApplied: isApplied,
+              onMarkDone: plan == null || isApplied
+                  ? null
+                  : () {
+                      if (pondArea <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text("Pond area must be greater than zero"),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+                      final didLog = _logWaterSupplementApplication(
+                        pondId: dashboardState.selectedPond,
+                        pondName: pondName,
+                        pondArea: pondArea,
+                        plan: plan,
+                        scheduledAt: scheduledAt,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            didLog
+                                ? "Water supplement marked as applied"
+                                : "Unable to apply water supplement",
+                          ),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+            );
+          }
+
+          return card;
+        })
+        .whereType<Widget>()
+        .toList();
   }
 
   // ── Estimated survival rate based on DOC ──────────────────────────
@@ -1844,7 +1953,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
     // Seed count display: 100000 → "1L", 200000 → "2L", else "Xk"
     final String seedLabel;
     if (seedCount >= 100000) {
-      seedLabel = '${(seedCount / 100000).toStringAsFixed(seedCount % 100000 == 0 ? 0 : 1)}L';
+      seedLabel =
+          '${(seedCount / 100000).toStringAsFixed(seedCount % 100000 == 0 ? 0 : 1)}L';
     } else {
       seedLabel = '${(seedCount / 1000).toStringAsFixed(0)}k';
     }
@@ -1891,8 +2001,7 @@ List<SupplementItem> _getPlannedFeedSupplements(
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(6),
@@ -2106,8 +2215,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
                 Flexible(
                   child: Text(
                     reason,
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF2E7D32)),
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF2E7D32)),
                   ),
                 ),
               ],
@@ -2143,7 +2252,6 @@ List<SupplementItem> _getPlannedFeedSupplements(
               ],
             ),
           ],
-
         ],
       ),
     );
@@ -2166,7 +2274,9 @@ List<SupplementItem> _getPlannedFeedSupplements(
       child: Row(
         children: [
           Icon(
-            isDone ? Icons.check_circle_rounded : Icons.arrow_forward_ios_rounded,
+            isDone
+                ? Icons.check_circle_rounded
+                : Icons.arrow_forward_ios_rounded,
             size: isDone ? 18 : 14,
             color: const Color(0xFF16A34A),
           ),
@@ -2187,7 +2297,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
   }
 
   // ── P3-04: ALL ROUNDS DONE CARD ─────────────────────────────────────────
-  Widget _buildAllDoneCard({required int completedRounds, required int totalRounds}) {
+  Widget _buildAllDoneCard(
+      {required int completedRounds, required int totalRounds}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -2205,7 +2316,8 @@ List<SupplementItem> _getPlannedFeedSupplements(
               color: const Color(0xFF16A34A),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+            child:
+                const Icon(Icons.check_rounded, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2458,16 +2570,16 @@ class _WaterRoundCard extends StatelessWidget {
   });
 
   // ── Water palette (mirrors FeedTimelineCard's green palette but teal) ──
-  static const _teal       = Color(0xFF0D9488);
-  static const _tealLight  = Color(0xFF14B8A6);
-  static const _tealBg     = Color(0xFFF0FDFA);
+  static const _teal = Color(0xFF0D9488);
+  static const _tealLight = Color(0xFF14B8A6);
+  static const _tealBg = Color(0xFFF0FDFA);
   static const _tealBorder = Color(0xFF99F6E4);
-  static const _slate100   = Color(0xFFF1F5F9);
-  static const _slate200   = Color(0xFFE2E8F0);
-  static const _slate400   = Color(0xFF94A3B8);
-  static const _slate500   = Color(0xFF64748B);
-  static const _ink        = Color(0xFF0F172A);
-  static const _red        = Color(0xFFDC2626);
+  static const _slate100 = Color(0xFFF1F5F9);
+  static const _slate200 = Color(0xFFE2E8F0);
+  static const _slate400 = Color(0xFF94A3B8);
+  static const _slate500 = Color(0xFF64748B);
+  static const _ink = Color(0xFF0F172A);
+  static const _red = Color(0xFFDC2626);
 
   @override
   Widget build(BuildContext context) {
@@ -2510,7 +2622,8 @@ class _WaterRoundCard extends StatelessWidget {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: const Color(0x260D9488),
                               borderRadius: BorderRadius.circular(4),
@@ -2552,7 +2665,8 @@ class _WaterRoundCard extends StatelessWidget {
                       textAlign: TextAlign.end,
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: _teal,
                         borderRadius: BorderRadius.circular(4),
@@ -2602,7 +2716,8 @@ class _WaterRoundCard extends StatelessWidget {
                           ? "${item.quantity.toStringAsFixed(1)}${item.unit}"
                           : "${(item.totalDose as double).toStringAsFixed(1)}${item.unit}";
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _teal.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(6),
@@ -2652,7 +2767,10 @@ class _WaterRoundCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _tealLight, width: 2),
         boxShadow: [
-          BoxShadow(color: _tealLight.withOpacity(0.18), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(
+              color: _tealLight.withOpacity(0.18),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -2733,7 +2851,8 @@ class _WaterRoundCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.water_drop_rounded, size: 14, color: _teal),
+                        const Icon(Icons.water_drop_rounded,
+                            size: 14, color: _teal),
                         const SizedBox(width: 6),
                         const Text(
                           "MIX REQUIRED",
@@ -2746,7 +2865,8 @@ class _WaterRoundCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
                             color: _red.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(4),
@@ -2784,12 +2904,14 @@ class _WaterRoundCard extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _teal,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle_rounded, size: 20, color: Colors.white),
+                      Icon(Icons.check_circle_rounded,
+                          size: 20, color: Colors.white),
                       SizedBox(width: 10),
                       Text(
                         "MARK AS APPLIED",
@@ -2815,7 +2937,8 @@ class _WaterRoundCard extends StatelessWidget {
   Widget _badge(String text, Color textColor, Color bgColor) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+          color: bgColor, borderRadius: BorderRadius.circular(20)),
       child: Text(
         text,
         style: TextStyle(
@@ -2835,10 +2958,15 @@ class _WaterRoundCard extends StatelessWidget {
       final row = <Widget>[];
       row.add(Expanded(child: _itemCell(items[i])));
       if (i + 1 < items.length) {
-        row.add(Container(width: 1, height: 40, color: _slate200, margin: const EdgeInsets.symmetric(horizontal: 8)));
+        row.add(Container(
+            width: 1,
+            height: 40,
+            color: _slate200,
+            margin: const EdgeInsets.symmetric(horizontal: 8)));
         row.add(Expanded(child: _itemCell(items[i + 1])));
       }
-      rows.add(Row(crossAxisAlignment: CrossAxisAlignment.start, children: row));
+      rows.add(
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: row));
       if (i + 2 < items.length) rows.add(const SizedBox(height: 8));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
@@ -2997,7 +3125,8 @@ class _TankOpButton extends StatelessWidget {
                       top: -4,
                       right: -8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 2),
                         decoration: BoxDecoration(
                           color: badgeColor,
                           borderRadius: BorderRadius.circular(6),
@@ -3060,10 +3189,10 @@ class _DailyPerformanceCard extends StatelessWidget {
     required this.totalRounds,
   });
 
-  static const _green  = Color(0xFF16A34A);
-  static const _amber  = Color(0xFFF59E0B);
-  static const _red    = Color(0xFFEF4444);
-  static const _slate  = Color(0xFF64748B);
+  static const _green = Color(0xFF16A34A);
+  static const _amber = Color(0xFFF59E0B);
+  static const _red = Color(0xFFEF4444);
+  static const _slate = Color(0xFF64748B);
   static const _border = Color(0xFFE2E8F0);
 
   // T14 — Overall feeding score from adherence
@@ -3080,12 +3209,15 @@ class _DailyPerformanceCard extends StatelessWidget {
     required double growthRatio,
   }) {
     final bool feedGood = adherence > 0.9;
-    final bool fcrGood  = fcr <= 0 || fcr <= 1.4;
+    final bool fcrGood = fcr <= 0 || fcr <= 1.4;
     final bool growthOk = growthRatio <= 0 || growthRatio >= 0.85;
 
-    final int goodCount = (feedGood ? 1 : 0) + (fcrGood ? 1 : 0) + (growthOk ? 1 : 0);
-    if (goodCount == 3) return const _DayVerdict('Great day! Everything on track ✅', _green);
-    if (goodCount == 2) return const _DayVerdict('Good day — minor area to improve', _amber);
+    final int goodCount =
+        (feedGood ? 1 : 0) + (fcrGood ? 1 : 0) + (growthOk ? 1 : 0);
+    if (goodCount == 3)
+      return const _DayVerdict('Great day! Everything on track ✅', _green);
+    if (goodCount == 2)
+      return const _DayVerdict('Good day — minor area to improve', _amber);
     return const _DayVerdict('Needs attention — check the signals below', _red);
   }
 
@@ -3096,31 +3228,56 @@ class _DailyPerformanceCard extends StatelessWidget {
     final String feedScore = _feedingScore(adherence);
     final String feedLabel;
     final Color feedColor;
-    if (adherence >= 1.0) { feedLabel = '$feedScore ✅'; feedColor = _green; }
-    else if (adherence >= 0.75) { feedLabel = feedScore; feedColor = _amber; }
-    else { feedLabel = feedScore; feedColor = _red; }
+    if (adherence >= 1.0) {
+      feedLabel = '$feedScore ✅';
+      feedColor = _green;
+    } else if (adherence >= 0.75) {
+      feedLabel = feedScore;
+      feedColor = _amber;
+    } else {
+      feedLabel = feedScore;
+      feedColor = _red;
+    }
 
     // FCR
     final String fcrLabel;
     final Color fcrColor;
-    if (fcr <= 0)         { fcrLabel = 'No data yet'; fcrColor = _slate; }
-    else if (fcr <= 1.2)  { fcrLabel = 'Excellent'; fcrColor = _green; }
-    else if (fcr <= 1.4)  { fcrLabel = 'Stable'; fcrColor = _green; }
-    else if (fcr <= 1.6)  { fcrLabel = 'Watch it'; fcrColor = _amber; }
-    else                  { fcrLabel = 'Too high'; fcrColor = _red; }
+    if (fcr <= 0) {
+      fcrLabel = 'No data yet';
+      fcrColor = _slate;
+    } else if (fcr <= 1.2) {
+      fcrLabel = 'Excellent';
+      fcrColor = _green;
+    } else if (fcr <= 1.4) {
+      fcrLabel = 'Stable';
+      fcrColor = _green;
+    } else if (fcr <= 1.6) {
+      fcrLabel = 'Watch it';
+      fcrColor = _amber;
+    } else {
+      fcrLabel = 'Too high';
+      fcrColor = _red;
+    }
 
     // Growth
-    final double growthRatio = (currentAbw > 0 && expectedAbw > 0)
-        ? currentAbw / expectedAbw
-        : 0.0;
+    final double growthRatio =
+        (currentAbw > 0 && expectedAbw > 0) ? currentAbw / expectedAbw : 0.0;
     final String growthLabel;
     final Color growthColor;
     if (currentAbw <= 0 || expectedAbw <= 0) {
-      growthLabel = 'Do a sampling'; growthColor = _slate;
+      growthLabel = 'Do a sampling';
+      growthColor = _slate;
     } else {
-      if (growthRatio >= 1.0)       { growthLabel = 'Ahead ✅'; growthColor = _green; }
-      else if (growthRatio >= 0.85) { growthLabel = 'On track'; growthColor = _green; }
-      else                          { growthLabel = 'Slightly slow'; growthColor = _amber; }
+      if (growthRatio >= 1.0) {
+        growthLabel = 'Ahead ✅';
+        growthColor = _green;
+      } else if (growthRatio >= 0.85) {
+        growthLabel = 'On track';
+        growthColor = _green;
+      } else {
+        growthLabel = 'Slightly slow';
+        growthColor = _amber;
+      }
     }
 
     // T14 — Overall day verdict
@@ -3175,7 +3332,8 @@ class _DailyPerformanceCard extends StatelessWidget {
               _PerfDivider(),
               _PerfItem(label: 'FCR', value: fcrLabel, color: fcrColor),
               _PerfDivider(),
-              _PerfItem(label: 'Growth', value: growthLabel, color: growthColor),
+              _PerfItem(
+                  label: 'Growth', value: growthLabel, color: growthColor),
             ],
           ),
         ],
@@ -3194,7 +3352,8 @@ class _PerfItem extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _PerfItem({required this.label, required this.value, required this.color});
+  const _PerfItem(
+      {required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) => Expanded(
