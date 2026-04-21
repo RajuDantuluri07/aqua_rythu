@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/enums/tray_status.dart';
+import '../../features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
 import '../pond/pond_dashboard_provider.dart';
@@ -48,7 +48,8 @@ class FeedHistoryNotifier
   double _expectedFeedForDoc(String pondId, int doc) {
     final dashboardState = ref.read(pondDashboardProvider);
     if (dashboardState.selectedPond == pondId) {
-      return dashboardState.roundFeedAmounts.values.fold(0.0, (sum, val) => sum + val);
+      return dashboardState.roundFeedAmounts.values
+          .fold(0.0, (sum, val) => sum + val);
     }
     // Fix #5: returns 0 for non-selected ponds — callers should supply expectedFeed
     // directly to avoid this broken path.
@@ -81,12 +82,11 @@ class FeedHistoryNotifier
     final today = DateTime(now.year, now.month, now.day);
     // Fix #5: prefer caller-supplied expected; only fall back to state lookup
     // for the currently-selected pond (still correct for that case).
-    final expected = expectedFeed > 0
-        ? expectedFeed
-        : _expectedFeedForDoc(pondId, doc);
+    final expected =
+        expectedFeed > 0 ? expectedFeed : _expectedFeedForDoc(pondId, doc);
 
     final List<FeedHistoryLog> pondLogs =
-    List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
+        List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
 
     // Check if today already exists
     int todayIdx = pondLogs.indexWhere((log) =>
@@ -125,7 +125,8 @@ class FeedHistoryNotifier
         date: existing.date,
         doc: doc,
         rounds: newRounds,
-        smartFeedRecommendations: newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
+        smartFeedRecommendations:
+            newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
         trayStatuses: newTrays,
         expected: expected,
         cumulative: prevCum + newTotal,
@@ -148,7 +149,8 @@ class FeedHistoryNotifier
             date: today,
             doc: doc,
             rounds: newRounds,
-            smartFeedRecommendations: newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
+            smartFeedRecommendations:
+                newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
             trayStatuses: newTrays,
             expected: expected,
             cumulative: prevCum + qty,
@@ -156,9 +158,8 @@ class FeedHistoryNotifier
     }
 
     // ✅ Update local state with strict type safety
-    state = Map<String, List<FeedHistoryLog>>.from(state)
-      ..[pondId] = pondLogs;
-    
+    state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
+
     // ✅ Persist to database before returning so callers can safely reload
     //    the dashboard and reconstruct lastFeedTime from persisted data.
     final logToSave = pondLogs[todayIdx != -1 ? todayIdx : 0];
@@ -170,7 +171,7 @@ class FeedHistoryNotifier
     // 🔄 SMART FEED TRIGGER: Recalculate after feed logged
     _triggerSmartFeedRecalculation(pondId);
   }
-  
+
   /// ✅ Persist feed log to database
   Future<void> _persistFeedLog({
     required String pondId,
@@ -184,6 +185,8 @@ class FeedHistoryNotifier
         rounds: log.rounds,
         expectedFeed: log.expected,
         cumulativeFeed: log.cumulative,
+        baseFeed: log.expected, // Use expected feed as base feed reference
+        engineVersion: 'v1-controller', // New controller-based architecture
       );
       AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc}');
     } catch (e) {
@@ -208,7 +211,7 @@ class FeedHistoryNotifier
     final today = DateTime(now.year, now.month, now.day);
 
     final List<FeedHistoryLog> pondLogs =
-    List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
+        List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
 
     final todayIdx = pondLogs.indexWhere((log) =>
         log.date.year == today.year &&
@@ -234,7 +237,8 @@ class FeedHistoryNotifier
         date: existing.date,
         doc: existing.doc,
         rounds: existing.rounds,
-        smartFeedRecommendations: newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
+        smartFeedRecommendations:
+            newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
         trayStatuses: newTrays,
         expected: existing.expected,
         cumulative: existing.cumulative,
@@ -275,13 +279,15 @@ class FeedHistoryNotifier
         final logs = <FeedHistoryLog>[];
 
         for (final entry in latestByDate.entries) {
-          final feedGiven = (entry.value['feed_given'] as num?)?.toDouble() ?? 0.0;
+          final feedGiven =
+              (entry.value['feed_given'] as num?)?.toDouble() ?? 0.0;
           final doc = (entry.value['doc'] as int?) ?? 0;
           cumulative += feedGiven;
 
           // baseFeed written by saveFeed() from OrchestratorResult.baseFeed —
           // null for records logged before this change, treated as 0 (no expected line).
-          final expected = (entry.value['base_feed'] as num?)?.toDouble() ?? 0.0;
+          final expected =
+              (entry.value['base_feed'] as num?)?.toDouble() ?? 0.0;
 
           logs.add(FeedHistoryLog(
             date: DateTime.parse(entry.key),

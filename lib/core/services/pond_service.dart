@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../engines/planning/feed_plan_generator.dart';
+import '../../systems/planning/feed_plan_generator.dart';
 import '../utils/logger.dart';
 import '../utils/doc_utils.dart';
+import '../../features/farm/farm_provider.dart';
+export '../../features/farm/farm_provider.dart' show Pond, PondStatus;
 
 class PondService {
   final supabase = Supabase.instance.client;
@@ -53,8 +55,7 @@ class PondService {
           'p_farm_id': farmId,
           'p_name': name,
           'p_area': area,
-          'p_stocking_date':
-              stockingDate.toIso8601String().split('T')[0],
+          'p_stocking_date': stockingDate.toIso8601String().split('T')[0],
           'p_seed_count': seedCount,
           'p_pl_size': plSize,
           'p_num_trays': numTrays,
@@ -108,16 +109,61 @@ class PondService {
       stockingDate: DateTime.parse(pond['stocking_date']),
     );
 
-    AppLogger.info("Feed schedule generated for pond: $pondId (DOC 1–25 blind phase)");
+    AppLogger.info(
+        "Feed schedule generated for pond: $pondId (DOC 1–25 blind phase)");
+  }
+
+  // ================================
+  // ✅ GET SINGLE POND
+  // ================================
+  Future<Pond?> getPondById(String pondId) async {
+    try {
+      final row = await supabase.from('ponds').select('''
+            id,
+            name,
+            area,
+            stocking_date,
+            seed_count,
+            pl_size,
+            num_trays,
+            status,
+            current_abw,
+            latest_sample_date,
+            is_smart_feed_enabled,
+            anchor_feed,
+            is_anchor_initialized
+          ''').eq('id', pondId).maybeSingle();
+
+      if (row == null) return null;
+
+      return Pond(
+        id: row['id'] as String,
+        name: row['name'] as String,
+        area: (row['area'] as num?)?.toDouble() ?? 0.0,
+        stockingDate: DateTime.parse(row['stocking_date'] as String),
+        seedCount: row['seed_count'] ?? 100000,
+        plSize: row['pl_size'] ?? 10,
+        numTrays: row['num_trays'] ?? 4,
+        status: PondStatus.values.byName(row['status'] ?? 'active'),
+        currentAbw: (row['current_abw'] as num?)?.toDouble(),
+        latestSampleDate: row['latest_sample_date'] != null
+            ? DateTime.parse(row['latest_sample_date'] as String)
+            : null,
+        isSmartFeedEnabled: row['is_smart_feed_enabled'] ?? false,
+        anchorFeed: (row['anchor_feed'] as num?)?.toDouble(),
+        isAnchorInitialized: row['is_anchor_initialized'] ?? false,
+      );
+    } catch (e) {
+      AppLogger.error('Failed to fetch pond by ID: $pondId', e);
+      return null;
+    }
   }
 
   // ================================
   // ✅ GET PONDS (NO BROKEN FILTERS)
   // ================================
   Future<List<Map<String, dynamic>>> getPonds(String farmId) async {
-    return await supabase
-        .from('ponds')
-        .select('''
+    return await supabase.from('ponds').select('''
           id,
           name,
           area,
@@ -128,9 +174,7 @@ class PondService {
           status,
           current_abw,
           is_smart_feed_enabled
-        ''')
-        .eq('farm_id', farmId)
-        .order('created_at', ascending: false);
+        ''').eq('farm_id', farmId).order('created_at', ascending: false);
   }
 
   // ================================
@@ -162,15 +206,18 @@ class PondService {
   // ================================
   // These methods are deprecated for MVP stabilization
   // Use feed_rounds table only
-  
+
   @Deprecated('Use feed_rounds table only - feed_schedules is deprecated')
-  Future<void> saveFeedSchedule(String pondId, List<Map<String, dynamic>> scheduleData) async {
-    throw UnimplementedError('saveFeedSchedule is deprecated - use feed_rounds table only');
+  Future<void> saveFeedSchedule(
+      String pondId, List<Map<String, dynamic>> scheduleData) async {
+    throw UnimplementedError(
+        'saveFeedSchedule is deprecated - use feed_rounds table only');
   }
 
   @Deprecated('Use feed_rounds table only - feed_schedules is deprecated')
   Future<List<Map<String, dynamic>>> getFeedSchedule(String pondId) async {
-    throw UnimplementedError('getFeedSchedule is deprecated - use feed_rounds table only');
+    throw UnimplementedError(
+        'getFeedSchedule is deprecated - use feed_rounds table only');
   }
 
   // ================================
@@ -236,10 +283,7 @@ class PondService {
         supabase.from('harvest_logs').delete().eq('pond_id', pondId),
       ]);
 
-      await supabase
-          .from('ponds')
-          .delete()
-          .eq('id', pondId);
+      await supabase.from('ponds').delete().eq('id', pondId);
 
       AppLogger.info("Pond deleted from DB: $pondId");
     } catch (e) {
@@ -256,13 +300,10 @@ class PondService {
     required String status,
   }) async {
     try {
-      await supabase
-          .from('ponds')
-          .update({
-            'status': status,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', pondId);
+      await supabase.from('ponds').update({
+        'status': status,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', pondId);
 
       AppLogger.info("Pond status updated: $pondId → $status");
     } catch (e) {
@@ -273,7 +314,7 @@ class PondService {
   // ================================
   // ✅ SMART FEED ACTIVATION
   // ================================
-  
+
   Future<void> updateAnchorFeed({
     required String pondId,
     required double anchorFeed,
@@ -285,7 +326,8 @@ class PondService {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', pondId);
 
-      AppLogger.info('Anchor feed set for pond $pondId: ${anchorFeed.toStringAsFixed(2)} kg');
+      AppLogger.info(
+          'Anchor feed set for pond $pondId: ${anchorFeed.toStringAsFixed(2)} kg');
     } catch (e) {
       throw Exception('Failed to update anchor feed: $e');
     }
@@ -296,15 +338,13 @@ class PondService {
     required bool isEnabled,
   }) async {
     try {
-      await supabase
-          .from('ponds')
-          .update({
-            'is_smart_feed_enabled': isEnabled,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', pondId);
-      
-      AppLogger.info("Smart feed status updated for pond $pondId (enabled: $isEnabled)");
+      await supabase.from('ponds').update({
+        'is_smart_feed_enabled': isEnabled,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', pondId);
+
+      AppLogger.info(
+          "Smart feed status updated for pond $pondId (enabled: $isEnabled)");
     } catch (e) {
       throw Exception('Failed to update Smart Feed status: $e');
     }

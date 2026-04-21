@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../core/engines/feed/feed_decision_engine.dart';
-import '../../core/enums/tray_status.dart';
+import '../../systems/feed/feed_decision_engine.dart';
+import '../../features/tray/enums/tray_status.dart';
 
 enum FeedRoundState { done, current, upcoming }
 

@@ -1,4 +1,4 @@
-import '../../core/enums/tray_status.dart';
+import '../../features/tray/enums/tray_status.dart';
 
 class TrayLog {
   final String pondId;

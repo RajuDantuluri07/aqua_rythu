@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:aqua_rythu/core/engines/smart_feed_engine_v2.dart';
+import 'package:aqua_rythu/systems/smart_feed_engine_v2.dart';
 
 void main() {
   group('SmartFeedEngineV2 - Smart Feed & FCR Tests', () {

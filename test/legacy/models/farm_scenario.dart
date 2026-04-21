@@ -1,4 +1,4 @@
-import 'package:aqua_rythu/core/engines/feed_intelligence_engine.dart';
+import 'package:aqua_rythu/systems/feed_intelligence_engine.dart';
 
 class FarmScenario {
   final String name;

@@ -1,6 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/engines/feed/master_feed_engine.dart';
+import '../pond/controllers/pond_dashboard_controller.dart';
 
+/// ⚠️ DEPRECATED: Use [PondDashboardController] directly instead.
+///
+/// This provider is kept for backward compatibility but now delegates
+/// to the controller to prevent duplicate feed engine calls.
+///
+/// The controller is the single source of truth for feed orchestration.
+@Deprecated(
+    'Use PondDashboardController.load() instead. This provider will be removed.')
 class SmartFeedOutput {
   final double recommendedFeed;
   final List<double> roundDistribution;
@@ -15,8 +23,22 @@ class SmartFeedOutput {
   });
 }
 
-final smartFeedProvider = FutureProvider.family<SmartFeedOutput?, String>((ref, pondId) async {
-  final result = await MasterFeedEngine.orchestrateForPond(pondId);
+/// DEPRECATED: Use [PondDashboardController] directly.
+///
+/// This provider now delegates to the controller to ensure:
+/// - Feed engine runs exactly once per pond+doc
+/// - No flickering from competing calculations
+/// - Consistent feed values across the app
+@Deprecated(
+    'Use pondDashboardController.load(pondId) instead. This provider will be removed.')
+final smartFeedProvider =
+    FutureProvider.family<SmartFeedOutput?, String>((ref, pondId) async {
+  // ✅ DELEGATE TO CONTROLLER: Prevents duplicate orchestrator calls
+  final viewState = await pondDashboardController.load(pondId);
+
+  if (viewState.feedResult == null) return null;
+
+  final result = viewState.feedResult!;
 
   final isStop = result.decision.action == 'Stop Feeding';
   if (isStop) {

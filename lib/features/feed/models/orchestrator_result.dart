@@ -1,7 +1,7 @@
 import '../enums/feed_stage.dart';
-import '../engines/feed/feed_intelligence_engine.dart';
-import '../engines/feed/feed_decision_engine.dart';
-import '../engines/feed/feed_recommendation_engine.dart';
+import '../../../systems/feed/feed_intelligence_engine.dart';
+import '../../../systems/feed/feed_decision_engine.dart';
+import '../../../systems/feed/feed_recommendation_engine.dart';
 import 'correction_result.dart';
 import 'feed_debug_info.dart';
 
@@ -71,7 +71,9 @@ class OrchestratorResult {
       isCriticalStop: true,
       isSmartApplied: false,
       factorBreakdown: {'environment': 0.0},
-      factorExplanations: {'environment': 'CRITICAL — dissolved oxygen too low'},
+      factorExplanations: {
+        'environment': 'CRITICAL — dissolved oxygen too low'
+      },
     );
     const decision = FeedDecision(
       action: 'Stop Feeding',

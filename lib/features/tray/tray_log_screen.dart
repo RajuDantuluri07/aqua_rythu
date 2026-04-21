@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/enums/tray_status.dart';
+import '../../features/tray/enums/tray_status.dart';
 import 'tray_provider.dart';
 import 'tray_model.dart';
 import '../farm/farm_provider.dart';

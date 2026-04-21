@@ -4,7 +4,7 @@ import '../farm/farm_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
-import '../../core/engines/planning/feed_plan_constants.dart';
+import '../../systems/planning/feed_plan_constants.dart';
 import 'feed_schedule_provider.dart';
 class FeedScheduleScreen extends ConsumerStatefulWidget {
   final String pondId;

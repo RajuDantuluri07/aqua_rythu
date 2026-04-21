@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:aqua_rythu/core/constants/expected_abw_table.dart';
-import 'package:aqua_rythu/core/enums/tray_status.dart';
+import 'package:aqua_rythu/features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:aqua_rythu/features/growth/sampling_log.dart';
 import 'package:aqua_rythu/features/tray/tray_model.dart';

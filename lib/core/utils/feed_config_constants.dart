@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import '../enums/stocking_type.dart';
-import '../dto/feed_config_dto.dart';
+import '../../features/pond/enums/stocking_type.dart';
+import '../../features/feed/dto/feed_config_dto.dart';
 
 /// Configuration for feed calculation based on DOC and stocking type.
 /// Now supports remote configuration for scalability and A/B testing.
@@ -31,7 +31,8 @@ class FeedConfig {
       // Post-DOC-30: start from DOC-30 baseline, grow 0.08 kg/100K per day,
       // capped at +5.0 kg/100K to prevent overshoot at very late DOC.
       final baseAt30 = _baseAt30(type);
-      final extension = math.min((doc - 30) * _kExtendedIncrementPer100k, _kMaxExtensionPer100k);
+      final extension = math.min(
+          (doc - 30) * _kExtendedIncrementPer100k, _kMaxExtensionPer100k);
       return baseAt30 + extension;
     }
     switch (type) {

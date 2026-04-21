@@ -1,5 +1,5 @@
-import '../enums/tray_status.dart';
-import '../enums/stocking_type.dart';
+import '../../tray/enums/tray_status.dart';
+import '../../pond/enums/stocking_type.dart';
 
 class FeedInput {
   final int seedCount;

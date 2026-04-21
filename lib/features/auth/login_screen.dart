@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_provider.dart';
@@ -140,7 +139,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleLogin,
                     child: isLoading
-                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        ? const CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2)
                         : Text(_isLogin ? "LOGIN" : "SIGN UP"),
                   ),
                 ),
@@ -150,10 +150,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     TextButton(
                       onPressed: () => setState(() => _isLogin = !_isLogin),
-                      child: Text(_isLogin ? "Don't have an account? Sign Up" : "Already have an account? Login"),
+                      child: Text(_isLogin
+                          ? "Don't have an account? Sign Up"
+                          : "Already have an account? Login"),
                     ),
                     TextButton(
-                      onPressed: () => showDialog(context: context, builder: (_) => const ForgotPasswordDialog()),
+                      onPressed: () => showDialog(
+                          context: context,
+                          builder: (_) => const ForgotPasswordDialog()),
                       child: const Text("Forgot Password?"),
                     ),
                   ],
@@ -162,10 +166,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("By continuing, you agree to ", style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+                    const Text("By continuing, you agree to ",
+                        style: TextStyle(
+                            color: AppColors.textTertiary, fontSize: 12)),
                     TextButton(
                       onPressed: () {},
-                      child: const Text("TERMS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      child: const Text("TERMS",
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),

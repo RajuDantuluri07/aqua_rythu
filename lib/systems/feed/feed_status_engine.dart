@@ -1,6 +1,6 @@
 // Validates whether a feed action is safe before the farmer marks a round done.
 import 'engine_constants.dart';
-import '../../utils/time_provider.dart';
+import '../../../core/utils/time_provider.dart';
 //
 // Philosophy: Guide, don't restrict.
 //   ALLOW   → go ahead, all good
@@ -12,7 +12,7 @@ import '../../utils/time_provider.dart';
 //
 // Warning priority (P3-07): BLOCK > GAP > TRAY — one warning at a time.
 
-import '../../utils/logger.dart';
+import '../../../core/utils/logger.dart';
 
 enum FeedStatusCode { allow, warning, block }
 

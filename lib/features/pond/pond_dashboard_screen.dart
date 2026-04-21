@@ -9,7 +9,7 @@ import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
 import '../../features/tray/tray_provider.dart';
 import '../tray/tray_model.dart';
-import '../../core/enums/tray_status.dart';
+import '../../features/tray/enums/tray_status.dart';
 import '../farm/farm_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../feed/feed_history_provider.dart';
@@ -17,31 +17,32 @@ import '../growth/growth_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_timeline_card.dart';
-import '../feed/smart_feed_provider.dart';
-import '../water/water_test_screen.dart';
 import '../feed/feed_history_screen.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
 import '../farm/new_cycle_setup_screen.dart';
 import '../harvest/harvest_summary_screen.dart';
+import '../debug/debug_dashboard_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/core/theme/app_theme.dart';
-import 'package:aqua_rythu/core/engines/planning/feed_plan_constants.dart';
-import 'package:aqua_rythu/core/engines/feed/feed_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/tray/tray_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/pond/pond_value_engine.dart';
-import 'package:aqua_rythu/core/engines/feed/feed_status_engine.dart'
+import 'package:aqua_rythu/systems/planning/feed_plan_constants.dart';
+import 'package:aqua_rythu/systems/feed/feed_decision_engine.dart';
+import 'package:aqua_rythu/systems/tray/tray_decision_engine.dart';
+import 'package:aqua_rythu/systems/pond/pond_value_engine.dart';
+import 'package:aqua_rythu/systems/feed/feed_status_engine.dart'
     hide FeedDecision;
-import 'package:aqua_rythu/core/engines/feed/engine_constants.dart';
+import 'package:aqua_rythu/systems/feed/engine_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
 import 'package:aqua_rythu/core/language/app_localizations.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/config/app_config.dart';
-import '../debug/debug_dashboard_screen.dart';
 import 'package:aqua_rythu/features/home/alert_strip.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
 import 'package:aqua_rythu/features/home/home_view_model.dart';
+import 'package:aqua_rythu/features/feed/models/orchestrator_result.dart';
+import 'package:aqua_rythu/features/feed/smart_feed_provider.dart';
+import 'package:aqua_rythu/features/water/water_test_screen.dart';
 import 'package:aqua_rythu/features/home/kpi_row.dart';
 import 'package:aqua_rythu/features/home/feed_trend_card.dart';
 import 'package:aqua_rythu/features/home/home_builder.dart';
@@ -393,6 +394,60 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     if (result != null) {
       ref.read(pondDashboardProvider.notifier).logTray(round);
     }
+  }
+
+  /// Returns result from TrayLogScreen for success popup handling
+  Future<dynamic> openTrayWithResult(int round, bool isLocked) async {
+    if (isLocked) {
+      return null;
+    }
+    final selectedPond = ref.read(pondDashboardProvider).selectedPond;
+    final doc = ref.read(docProvider(selectedPond));
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TrayLogScreen(
+          pondId: selectedPond,
+          doc: doc,
+          round: round,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return null;
+    }
+
+    if (result != null) {
+      ref.read(pondDashboardProvider.notifier).logTray(round);
+    }
+    return result;
+  }
+
+  /// ✅ Large success popup with animation, similar to feed round card
+  void _showSuccessPopup({
+    required BuildContext context,
+    required String title,
+    required String message,
+    required IconData icon,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.4),
+      builder: (ctx) => _SuccessPopupDialog(
+        title: title,
+        message: message,
+        icon: icon,
+      ),
+    );
+    // Auto-dismiss after 2 seconds (longer for animation)
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   void _showAnchorFeedDialog(BuildContext ctx) {
@@ -1794,6 +1849,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                             round,
                             actualQty: actualQty,
                           );
+                      // ✅ SUCCESS POPUP: Show feed entry confirmation with updated value
+                      _showSuccessPopup(
+                        context: context,
+                        title: 'Feed Logged',
+                        message:
+                            'Round $round: ${actualQty.toStringAsFixed(2)} kg',
+                        icon: Icons.check_circle_rounded,
+                      );
                       // V2-01: ₹ delta snackbar — closes dopamine loop after every feed.
                       // Shows "+₹120 added to pond value" immediately after marking done.
                       final completedAfter = round;
@@ -1814,7 +1877,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                   : null,
               // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
               onLogTray: (isPendingTray || isTraySkipped)
-                  ? () => openTray(round, false)
+                  ? () async {
+                      final result = await openTrayWithResult(round, false);
+                      if (result != null) {
+                        // ✅ SUCCESS POPUP: Show tray logged confirmation
+                        _showSuccessPopup(
+                          context: context,
+                          title: 'Tray Logged',
+                          message: 'Round $round: Status recorded',
+                          icon: Icons.fact_check_rounded,
+                        );
+                      }
+                    }
                   : null,
               isNext: isNext,
               // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
@@ -3391,4 +3465,190 @@ class _PerfDivider extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 10),
         color: const Color(0xFFE2E8F0),
       );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUCCESS POPUP DIALOG — Animated, large card-style success confirmation
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SuccessPopupDialog extends StatefulWidget {
+  final String title;
+  final String message;
+  final IconData icon;
+
+  const _SuccessPopupDialog({
+    required this.title,
+    required this.message,
+    required this.icon,
+  });
+
+  @override
+  State<_SuccessPopupDialog> createState() => _SuccessPopupDialogState();
+}
+
+class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _checkAnimation;
+
+  static const Color _green = Color(0xFF16A34A);
+  static const Color _greenLight = Color(0xFFDCFCE7);
+  static const Color _greenBorder = Color(0xFF86EFAC);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    );
+
+    _checkAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.3, 1.0, curve: Curves.elasticOut),
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _greenBorder, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: _green.withOpacity(0.25),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Animated success icon with background
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [_greenLight, Colors.white],
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _greenBorder, width: 3),
+                ),
+                child: ScaleTransition(
+                  scale: _checkAnimation,
+                  child: Icon(
+                    widget.icon,
+                    color: _green,
+                    size: 40,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Success badge
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _greenLight,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _greenBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, color: _green, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'SUCCESS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: _green,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Title
+              Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1F2937),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Message with value highlight
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  widget.message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Progress indicator showing auto-dismiss
+              SizedBox(
+                width: 60,
+                height: 3,
+                child: LinearProgressIndicator(
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(_green.withOpacity(0.5)),
+                  backgroundColor: _greenLight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

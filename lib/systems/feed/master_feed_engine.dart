@@ -25,26 +25,26 @@
 // Sub-engines are pure helpers called only from here.
 // DB persistence lives in FeedService.
 
-import '../../enums/feed_stage.dart';
-import '../../enums/tray_status.dart';
-import '../../enums/stocking_type.dart';
-import '../../validators/feed_input_validator.dart';
-import '../../utils/logger.dart';
-import '../../utils/feed_config_constants.dart';
+import '../../../features/feed/enums/feed_stage.dart';
+import '../../../features/tray/enums/tray_status.dart';
+import '../../../features/pond/enums/stocking_type.dart';
+import '../../../core/validators/feed_input_validator.dart';
+import '../../../core/utils/logger.dart';
+import '../../../core/utils/feed_config_constants.dart';
 // import '../growth/fcr_engine.dart'; // ❌ DISABLED FOR V1
 import 'feed_decision_engine.dart'; // Used for FeedDecision result
 import 'feed_input_builder.dart';
 import 'feed_intelligence_engine.dart'; // Used for IntelligenceResult
 import 'feed_recommendation_engine.dart'; // Used for FeedRecommendation result
 // import 'smart_feed_engine_v2.dart'; // ❌ DISABLED FOR V1 LAUNCH
-import '../../models/feed_input.dart';
-import '../../models/correction_result.dart';
-import '../../models/feed_debug_info.dart';
-import '../../models/orchestrator_result.dart';
+import '../../../features/feed/models/feed_input.dart';
+import '../../../features/feed/models/correction_result.dart';
+import '../../../features/feed/models/feed_debug_info.dart';
+import '../../../features/feed/models/orchestrator_result.dart';
 import 'engine_constants.dart';
-export '../../models/correction_result.dart';
-export '../../models/feed_debug_info.dart';
-export '../../models/orchestrator_result.dart';
+export '../../../features/feed/models/correction_result.dart';
+export '../../../features/feed/models/feed_debug_info.dart';
+export '../../../features/feed/models/orchestrator_result.dart';
 
 // ── ABSOLUTE SAFETY CAPS ──────────────────────────────────────────────────────
 
@@ -188,7 +188,8 @@ class MasterFeedEngine {
     // legitimately needs up to 250 kg/day at late DOC — the fixed 50 kg cap
     // would silently underfeed by ~47 % at maximum stocking density.
     final double effectiveMaxFeed =
-        ((safeDensity / 100000.0) * kAbsoluteMaxFeed).clamp(kAbsoluteMaxFeed, 500.0);
+        ((safeDensity / 100000.0) * kAbsoluteMaxFeed)
+            .clamp(kAbsoluteMaxFeed, 500.0);
     final_ = final_.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
     if (final_.isNaN || final_.isInfinite) {
       final_ = adjustedBase.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
@@ -203,7 +204,8 @@ class MasterFeedEngine {
       baseFeed: double.parse(base.toStringAsFixed(3)),
       adjustedFeed: double.parse(adjustedBase.toStringAsFixed(3)),
       trayFactor: 1.0, // Tray logic removed from base compute
-      rawFeed: double.parse(adjustedBase.toStringAsFixed(3)), // No tray adjustment
+      rawFeed:
+          double.parse(adjustedBase.toStringAsFixed(3)), // No tray adjustment
       finalFeed: double.parse(final_.toStringAsFixed(3)),
       minFeed: double.parse(minFeed.toStringAsFixed(3)),
       maxFeed: double.parse(maxFeed.toStringAsFixed(3)),
@@ -299,7 +301,9 @@ class MasterFeedEngine {
       intelligenceFactor: 1.0, // ❌ DISABLED
       v2Factor: trayFactor, // Only tray factor in V1
       combinedFactor: trayFactor,
-      reasons: trayFactor != 1.0 ? ['Tray appetite adjustment: ${_factorToPercent(trayFactor)}'] : [],
+      reasons: trayFactor != 1.0
+          ? ['Tray appetite adjustment: ${_factorToPercent(trayFactor)}']
+          : [],
       alerts: const [],
       isCriticalStop: false,
       isSmartApplied: false,
@@ -389,6 +393,9 @@ class MasterFeedEngine {
   /// Use [FeedService.applyTrayAdjustment] or [FeedService.recalculateFeedPlan]
   /// when you also need to persist the result to feed_rounds.
   static Future<OrchestratorResult> orchestrateForPond(String pondId) async {
+    // 🔥 VERIFICATION LOG: Should print ONLY ONCE per pond load (via Controller cache)
+    AppLogger.info('🔥 FEED ENGINE CALLED: pond=$pondId');
+
     final input = await FeedInputBuilder.fromDB(pondId);
     return orchestrate(input);
   }
@@ -462,7 +469,8 @@ class MasterFeedEngine {
       factor = FeedEngineConstants.intelligenceLowFactor;
     }
 
-    return factor.clamp(FeedEngineConstants.minFeedFactor, FeedEngineConstants.maxFeedFactor);
+    return factor.clamp(
+        FeedEngineConstants.minFeedFactor, FeedEngineConstants.maxFeedFactor);
   }
 
   /// ❌ DISABLED FOR V1 LAUNCH
@@ -504,7 +512,8 @@ class MasterFeedEngine {
     }
 
     if ((growthFactor - 1.0).abs() > 0.01) {
-      final label = growthFactor >= 1.05 ? 'Good growth' : 'Below-expected growth';
+      final label =
+          growthFactor >= 1.05 ? 'Good growth' : 'Below-expected growth';
       reasons['growth'] = '$label → ${_factorToPercent(growthFactor)}';
     }
 
@@ -514,7 +523,8 @@ class MasterFeedEngine {
     }
 
     if ((fcrFactor - 1.0).abs() > 0.01) {
-      final label = fcrFactor > 1.0 ? 'Underfeeding detected' : 'Overfeeding detected';
+      final label =
+          fcrFactor > 1.0 ? 'Underfeeding detected' : 'Overfeeding detected';
       reasons['fcr'] = '$label → ${_factorToPercent(fcrFactor)}';
     }
 

@@ -17,7 +17,7 @@
 // This file is kept for backward compatibility only.
 // MasterFeedEngine.orchestrate() creates FeedDecision directly.
 
-import '../../enums/feed_stage.dart';
+import '../../../features/feed/enums/feed_stage.dart';
 import 'feed_intelligence_engine.dart';
 
 // ── DECISION MODEL ────────────────────────────────────────────────────────────

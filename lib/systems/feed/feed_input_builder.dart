@@ -1,9 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../enums/tray_status.dart';
-import '../../enums/stocking_type.dart';
-import '../../utils/doc_utils.dart';
-import '../../utils/time_provider.dart';
-import '../../models/feed_input.dart';
+import '../../../features/tray/enums/tray_status.dart';
+import '../../../features/pond/enums/stocking_type.dart';
+import '../../../core/utils/doc_utils.dart';
+import '../../../core/utils/time_provider.dart';
+import '../../../features/feed/models/feed_input.dart';
 
 class FeedInputBuilder {
   static final _supabase = Supabase.instance.client;

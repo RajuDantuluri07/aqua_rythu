@@ -1,4 +1,4 @@
-import '../models/feed_input.dart';
+import '../../features/feed/models/feed_input.dart';
 import '../utils/logger.dart';
 
 /// Validates FeedInput before pipeline processing.

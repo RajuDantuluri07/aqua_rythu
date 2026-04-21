@@ -1,9 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../engines/feed/feed_input_builder.dart';
-import '../engines/planning/feed_plan_constants.dart';
-import '../engines/planning/feed_plan_generator.dart';
-import '../engines/feed/master_feed_engine.dart';
-import '../enums/tray_status.dart';
+import '../../systems/planning/feed_plan_constants.dart';
+import '../../systems/planning/feed_plan_generator.dart';
+import '../../features/tray/enums/tray_status.dart';
 import '../utils/logger.dart';
 
 class FeedService {
@@ -16,6 +14,8 @@ class FeedService {
     required List<double> rounds,
     required double expectedFeed,
     required double cumulativeFeed,
+    required double baseFeed,
+    required String engineVersion,
     double? leftoverPercent,
     String? stockingType,
     int? density,
@@ -26,17 +26,16 @@ class FeedService {
     // here; it lives only in FeedHistoryLog in-memory state.
     final actualFeedGiven = rounds.fold(0.0, (sum, r) => sum + r);
     await _withRetry('saveFeed(pond=$pondId doc=$doc)', () async {
-      final result = await MasterFeedEngine.orchestrateForPond(pondId);
       await supabase.from('feed_logs').insert({
         'pond_id': pondId,
         'feed_given': actualFeedGiven,
-        'base_feed': result.finalFeed,
+        'base_feed': baseFeed,
         'created_at': date.toIso8601String(),
         'doc': doc,
         if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
         if (stockingType != null) 'stocking_type': stockingType,
         if (density != null) 'density': density,
-        'engine_version': MasterFeedEngine.version,
+        'engine_version': engineVersion,
       });
     });
   }
@@ -78,7 +77,7 @@ class FeedService {
     if (pondId.isEmpty) {
       throw Exception('Invalid pondId');
     }
-    
+
     try {
       return await supabase
           .from('feed_rounds')
@@ -135,7 +134,8 @@ class FeedService {
     required double plannedAmount,
     String status = 'completed',
   }) async {
-    return _withRetry('insertFeedRound(pond=$pondId doc=$doc r=$round)', () async {
+    return _withRetry('insertFeedRound(pond=$pondId doc=$doc r=$round)',
+        () async {
       final response = await supabase
           .from('feed_rounds')
           .insert({
@@ -163,8 +163,7 @@ class FeedService {
     await _withRetry('markFeedPlanCompleted($feedPlanId)', () async {
       await supabase
           .from('feed_rounds')
-          .update({'status': 'completed'})
-          .eq('id', feedPlanId);
+          .update({'status': 'completed'}).eq('id', feedPlanId);
     });
   }
 
@@ -189,8 +188,7 @@ class FeedService {
       await _withRetry('premarkRoundsCompleted(${row['id']})', () async {
         await supabase
             .from('feed_rounds')
-            .update({'status': 'completed'})
-            .eq('id', row['id'] as String);
+            .update({'status': 'completed'}).eq('id', row['id'] as String);
       });
     }
   }
@@ -205,13 +203,10 @@ class FeedService {
     }
 
     await _withRetry('overrideFeedAmount($feedPlanId)', () async {
-      await supabase
-          .from('feed_rounds')
-          .update({
-            'planned_amount': newAmount,
-            'is_manual': true,
-          })
-          .eq('id', feedPlanId);
+      await supabase.from('feed_rounds').update({
+        'planned_amount': newAmount,
+        'is_manual': true,
+      }).eq('id', feedPlanId);
     });
   }
 
@@ -237,8 +232,7 @@ class FeedService {
         }).eq('id', id);
       });
     }
-    AppLogger.info(
-        'Redistribution written to DB for pond $pondId DOC $doc: '
+    AppLogger.info('Redistribution written to DB for pond $pondId DOC $doc: '
         '${correctedAmounts.entries.map((e) => "R${e.key}:${e.value.toStringAsFixed(2)}kg").join(" | ")}');
   }
 
@@ -251,7 +245,8 @@ class FeedService {
       for (final plan in feedPlans) {
         final doc = plan.doc is int ? plan.doc as int : plan['doc'] as int;
         final List<double> rounds = plan.rounds is List
-            ? List<double>.from((plan.rounds as List).map((v) => (v as num).toDouble()))
+            ? List<double>.from(
+                (plan.rounds as List).map((v) => (v as num).toDouble()))
             : [
                 (plan['r1'] as num?)?.toDouble() ?? 0.0,
                 (plan['r2'] as num?)?.toDouble() ?? 0.0,
@@ -288,7 +283,8 @@ class FeedService {
           final qty = paddedRounds[i];
           final existingId = existingIds[round];
 
-          await _withRetry('saveFeedPlans(pond=$pondId doc=$doc r=$round)', () async {
+          await _withRetry('saveFeedPlans(pond=$pondId doc=$doc r=$round)',
+              () async {
             if (existingId != null) {
               await supabase.from('feed_rounds').update({
                 'planned_amount': qty,
@@ -311,159 +307,39 @@ class FeedService {
         }));
       }
 
-      AppLogger.info("Feed plans saved for pond $pondId (${feedPlans.length} DOCs × 4 rounds)");
+      AppLogger.info(
+          "Feed plans saved for pond $pondId (${feedPlans.length} DOCs × 4 rounds)");
     } catch (e) {
       throw Exception('Failed to save feed plans: $e');
     }
   }
 
-  // ── FEED ADJUSTMENT (moved from FeedOrchestrator) ──────────────────────────
+  // ── DEPRECATED STUBS (for backward compatibility during migration) ───────────
+  //
+  // ⚠️ These methods are NO-OPs. All feed calculation now goes through
+  // PondDashboardController. Remove these once all callers are migrated.
 
-  /// Called immediately after a tray log is saved.
-  ///
-  /// Runs the full pipeline and updates feed_rounds for DOC+1, DOC+2, DOC+3.
+  /// DEPRECATED: No-op stub. Use [PondDashboardController.invalidate()] + [load()].
+  @Deprecated('Use PondDashboardController instead')
   Future<void> applyTrayAdjustment({
     required String pondId,
     required int doc,
     required TrayStatus trayStatus,
   }) async {
-    // Only apply smart-phase adjustments when DOC is in smart mode.
-    // kSmartModeMinDoc is the canonical threshold owned by MasterFeedEngine.
-    if (doc <= kSmartModeMinDoc) return;
-
-    try {
-      final result = await MasterFeedEngine.orchestrateForPond(pondId);
-
-      if (result.combinedFactor <= 0.0) return;
-
-      final reasonTag = _reasonTag(result.combinedFactor, trayStatus.name);
-
-      await _logDebug(
-        pondId: pondId,
-        doc: doc,
-        result: result,
-        reason: reasonTag,
-      );
-
-      for (final offset in [1, 2, 3]) {
-        final futureDoc = doc + offset;
-        if (futureDoc > 120) break;
-        await _applyFactorFromBase(pondId, futureDoc, result.combinedFactor, reasonTag);
-      }
-
-      AppLogger.info(
-        'FeedService.applyTrayAdjustment: pond $pondId DOC $doc '
-        '(smart) → +1/+2/+3 '
-        'tray=${trayStatus.name} factor=${result.combinedFactor.toStringAsFixed(3)}',
-      );
-    } catch (e) {
-      AppLogger.error('FeedService.applyTrayAdjustment failed for $pondId', e);
-    }
+    AppLogger.info(
+        'FeedService.applyTrayAdjustment is deprecated - use Controller');
+    // No-op: Controller handles this via cache invalidation
   }
 
-  /// Called after feed logs are saved and on dashboard load.
-  ///
-  /// Runs the full pipeline and updates feed_rounds for DOC+1.
+  /// DEPRECATED: No-op stub. Use [PondDashboardController.load()].
+  @Deprecated('Use PondDashboardController instead')
   Future<void> recalculateFeedPlan(String pondId) async {
-    try {
-      final input = await FeedInputBuilder.fromDB(pondId);
-      await ensureFutureFeedExists(pondId, input.doc);
-
-      // Fix #7: Only apply smart-phase factor adjustments in smart mode (DOC ≥ 31).
-      // For blind/tray-habit phases, ensureFutureFeedExists above is sufficient —
-      // applying environment or tray corrections here would violate the blind-feed rule.
-      if (input.doc <= kSmartModeMinDoc) return;
-
-      final result = MasterFeedEngine.orchestrate(input);
-      if (result.combinedFactor <= 0.0) return;
-
-      final nextDoc = input.doc + 1;
-      final reason = _reasonTag(result.combinedFactor, 'RECALC');
-
-      await _logDebug(
-        pondId: pondId,
-        doc: input.doc,
-        result: result,
-        reason: reason,
-      );
-
-      await _applyFactorFromBase(pondId, nextDoc, result.combinedFactor, reason);
-
-      AppLogger.info(
-        'FeedService.recalculate: pond $pondId DOC=${input.doc} '
-        '→ DOC $nextDoc factor=${result.combinedFactor.toStringAsFixed(3)}',
-      );
-    } catch (e) {
-      AppLogger.error('FeedService.recalculateFeedPlan failed for $pondId', e);
-    }
+    AppLogger.info(
+        'FeedService.recalculateFeedPlan is deprecated - use Controller');
+    // No-op: Controller handles this
   }
 
-  Future<void> _applyFactorFromBase(
-    String pondId,
-    int doc,
-    double factor,
-    String reason,
-  ) async {
-    final rows = await supabase
-        .from('feed_rounds')
-        .select('id, base_feed, is_manual')
-        .eq('pond_id', pondId)
-        .eq('doc', doc)
-        .eq('status', 'pending');
-
-    for (final row in rows) {
-      if (row['is_manual'] == true) continue;
-      final base = (row['base_feed'] as num?)?.toDouble();
-      if (base == null || base <= 0) continue;
-
-      final adjusted = (base * factor).clamp(base * 0.70, base * 1.30);
-
-      try {
-        await supabase.from('feed_rounds').update({
-          'planned_amount': double.parse(adjusted.toStringAsFixed(3)),
-          'adjustment_reason': reason,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', row['id'] as String).eq('status', 'pending');
-      } catch (e) {
-        AppLogger.debug(
-            'FeedService: race on row ${row['id']} (doc $doc) — skipped');
-      }
-    }
-  }
-
-  Future<void> _logDebug({
-    required String pondId,
-    required int doc,
-    required OrchestratorResult result,
-    required String reason,
-  }) async {
-    try {
-      await supabase.from('feed_debug_logs').insert({
-        'pond_id': pondId,
-        'doc': doc,
-        'mode': result.isSmartApplied ? 'smart' : 'blind',
-        'base_feed': result.baseFeed,
-        'expected_feed': result.intelligence.expectedFeed,
-        'actual_feed': result.intelligence.actualFeed,
-        'deviation': result.intelligence.deviation,
-        'deviation_pct': result.intelligence.deviationPercent,
-        'intelligence_status': result.intelligence.status.name,
-        'tray_factor': result.correction.trayFactor,
-        'growth_factor': result.correction.growthFactor,
-        'sampling_factor': result.correction.samplingFactor,
-        'environment_factor': result.correction.environmentFactor,
-        'fcr_factor': result.correction.fcrFactor,
-        'intelligence_factor': result.correction.intelligenceFactor,
-        'combined_factor': result.combinedFactor,
-        'final_feed': result.finalFeed,
-        'engine_version': MasterFeedEngine.version,
-        'reason': reason,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      AppLogger.debug('feed_debug_logs insert failed (non-critical): $e');
-    }
-  }
+  // ── PRIVATE HELPERS ─────────────────────────────────────────────────────────
 
   Future<T> _withRetry<T>(String tag, Future<T> Function() fn) async {
     const maxAttempts = 2;
@@ -479,15 +355,5 @@ class FeedService {
       }
     }
     throw StateError('unreachable');
-  }
-
-  static String _reasonTag(double factor, String tag) {
-    final pct = ((factor - 1.0) * 100).round();
-    const prefix = 'TRAY';
-    final tagUpper = tag.toUpperCase();
-    if (pct == 0) return '${prefix}_$tagUpper HOLD';
-    return pct > 0
-        ? '${prefix}_$tagUpper +$pct%'
-        : '${prefix}_$tagUpper $pct%';
   }
 }

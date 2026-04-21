@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:aqua_rythu/core/engines/smart_feed_decision_engine.dart';
-import 'package:aqua_rythu/core/models/feed_input.dart';
-import 'package:aqua_rythu/core/models/feed_result.dart';
+import 'package:aqua_rythu/systems/smart_feed_decision_engine.dart';
+import 'package:aqua_rythu/features/feed/models/feed_input.dart';
+import 'package:aqua_rythu/features/feed/models/feed_result.dart';
 
 void main() {
   group('SmartFeedDecisionEngine', () {

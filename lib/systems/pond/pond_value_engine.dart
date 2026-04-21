@@ -1,4 +1,4 @@
-import '../../constants/expected_abw_table.dart';
+import '../../../core/constants/expected_abw_table.dart';
 import '../feed/engine_constants.dart';
 
 /// Pure Dart — no Flutter dependencies.

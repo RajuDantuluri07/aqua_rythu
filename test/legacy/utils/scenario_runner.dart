@@ -1,6 +1,6 @@
-import 'package:aqua_rythu/core/engines/feed_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/feed_intelligence_engine.dart';
-import 'package:aqua_rythu/core/enums/feed_stage.dart';
+import 'package:aqua_rythu/systems/feed_decision_engine.dart';
+import 'package:aqua_rythu/systems/feed_intelligence_engine.dart';
+import 'package:aqua_rythu/features/feed/enums/feed_stage.dart';
 import '../models/farm_scenario.dart';
 
 FeedDecision runScenario(FarmScenario scenario) {

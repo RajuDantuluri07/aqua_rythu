@@ -1,4 +1,4 @@
-import '../../utils/time_provider.dart';
+import '../../../core/utils/time_provider.dart';
 
 enum PondCycleState {
   waitForTray,

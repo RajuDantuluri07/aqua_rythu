@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:aqua_rythu/core/engines/feeding_engine_v1.dart';
-import 'package:aqua_rythu/core/engines/engine_constants.dart';
+import 'package:aqua_rythu/systems/feeding_engine_v1.dart';
+import 'package:aqua_rythu/systems/engine_constants.dart';
 
 void main() {
   group('FeedingEngineV1 Tests', () {

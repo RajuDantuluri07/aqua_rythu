@@ -1,6 +1,6 @@
-import 'package:aqua_rythu/core/engines/feed/feed_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/feed/feed_intelligence_engine.dart';
-import 'package:aqua_rythu/core/enums/feed_stage.dart';
+import 'package:aqua_rythu/systems/feed/feed_decision_engine.dart';
+import 'package:aqua_rythu/systems/feed/feed_intelligence_engine.dart';
+import 'package:aqua_rythu/features/feed/enums/feed_stage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

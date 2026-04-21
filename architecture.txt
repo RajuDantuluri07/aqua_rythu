@@ -1,0 +1,312 @@
+.
+├── README.md
+├── analysis_options.yaml
+├── android
+│   ├── app
+│   │   ├── build.gradle
+│   │   └── src
+│   │       ├── debug
+│   │       ├── main
+│   │       └── profile
+│   ├── aqua_rythu_android.iml
+│   ├── build.gradle
+│   ├── gradle
+│   │   └── wrapper
+│   │       ├── gradle-wrapper.jar
+│   │       └── gradle-wrapper.properties
+│   ├── gradle.properties
+│   ├── gradlew
+│   ├── gradlew.bat
+│   ├── key.properties
+│   ├── local.properties
+│   └── settings.gradle
+├── aqua_rythu.iml
+├── architecture.txt
+├── assets
+│   └── images
+│       ├── appicon.png
+│       ├── login.png
+│       ├── logo.png
+│       └── splash.png
+├── ios
+│   ├── Flutter
+│   │   ├── AppFrameworkInfo.plist
+│   │   ├── Debug.xcconfig
+│   │   ├── Generated.xcconfig
+│   │   ├── Release.xcconfig
+│   │   └── flutter_export_environment.sh
+│   ├── Runner
+│   │   ├── AppDelegate.swift
+│   │   ├── Assets.xcassets
+│   │   │   ├── AppIcon.appiconset
+│   │   │   └── LaunchImage.imageset
+│   │   ├── Base.lproj
+│   │   │   ├── LaunchScreen.storyboard
+│   │   │   └── Main.storyboard
+│   │   ├── GeneratedPluginRegistrant.h
+│   │   ├── GeneratedPluginRegistrant.m
+│   │   ├── Info.plist
+│   │   └── Runner-Bridging-Header.h
+│   ├── Runner.xcodeproj
+│   │   ├── project.pbxproj
+│   │   ├── project.xcworkspace
+│   │   │   ├── contents.xcworkspacedata
+│   │   │   └── xcshareddata
+│   │   └── xcshareddata
+│   │       └── xcschemes
+│   ├── Runner.xcworkspace
+│   │   ├── contents.xcworkspacedata
+│   │   └── xcshareddata
+│   │       ├── IDEWorkspaceChecks.plist
+│   │       └── WorkspaceSettings.xcsettings
+│   └── RunnerTests
+│       └── RunnerTests.swift
+├── lib
+│   ├── core
+│   │   ├── config
+│   │   │   └── app_config.dart
+│   │   ├── constants
+│   │   │   ├── app_constants.dart
+│   │   │   ├── app_images.dart
+│   │   │   └── expected_abw_table.dart
+│   │   ├── language
+│   │   │   ├── app_localizations.dart
+│   │   │   ├── language_provider.dart
+│   │   │   └── language_switcher.dart
+│   │   ├── repositories
+│   │   │   ├── feed_repository.dart
+│   │   │   ├── pond_repository.dart
+│   │   │   └── tray_repository.dart
+│   │   ├── services
+│   │   │   ├── dashboard_service.dart
+│   │   │   ├── farm_service.dart
+│   │   │   ├── feed_service.dart
+│   │   │   ├── pond_service.dart
+│   │   │   ├── sampling_service.dart
+│   │   │   ├── supplement_service.dart
+│   │   │   └── tray_service.dart
+│   │   ├── theme
+│   │   │   └── app_theme.dart
+│   │   ├── utils
+│   │   │   ├── doc_utils.dart
+│   │   │   ├── feed_config_constants.dart
+│   │   │   ├── logger.dart
+│   │   │   └── time_provider.dart
+│   │   └── validators
+│   │       └── feed_input_validator.dart
+│   ├── features
+│   │   ├── auth
+│   │   │   ├── auth_provider.dart
+│   │   │   ├── forgot_password_dialog.dart
+│   │   │   ├── login_screen.dart
+│   │   │   ├── otp_screen.dart
+│   │   │   └── splash_screen.dart
+│   │   ├── dashboard
+│   │   │   ├── dashboard_screen.dart
+│   │   │   └── farm_dashboard_provider.dart
+│   │   ├── debug
+│   │   │   ├── debug_dashboard_provider.dart
+│   │   │   ├── debug_dashboard_screen.dart
+│   │   │   ├── debug_feed_provider.dart
+│   │   │   ├── debug_feed_screen.dart
+│   │   │   ├── manual_simulation.dart
+│   │   │   ├── smart_feed_debug_provider.dart
+│   │   │   └── smart_feed_debug_screen.dart
+│   │   ├── farm
+│   │   │   ├── add_farm_screen.dart
+│   │   │   ├── edit_farm_dialog.dart
+│   │   │   ├── farm_provider.dart
+│   │   │   └── new_cycle_setup_screen.dart
+│   │   ├── feed
+│   │   │   ├── dto
+│   │   │   ├── enums
+│   │   │   ├── feed_hero_card.dart
+│   │   │   ├── feed_history_provider.dart
+│   │   │   ├── feed_history_screen.dart
+│   │   │   ├── feed_schedule_provider.dart
+│   │   │   ├── feed_schedule_screen.dart
+│   │   │   ├── feed_timeline_card.dart
+│   │   │   ├── models
+│   │   │   ├── operation_item.dart
+│   │   │   ├── smart_feed_provider.dart
+│   │   │   └── widgets
+│   │   ├── growth
+│   │   │   ├── growth_provider.dart
+│   │   │   ├── mortality_provider.dart
+│   │   │   ├── sampling_log.dart
+│   │   │   └── sampling_screen.dart
+│   │   ├── harvest
+│   │   │   ├── harvest_provider.dart
+│   │   │   ├── harvest_screen.dart
+│   │   │   └── harvest_summary_screen.dart
+│   │   ├── home
+│   │   │   ├── activity_timeline.dart
+│   │   │   ├── alert_strip.dart
+│   │   │   ├── feed_trend_card.dart
+│   │   │   ├── growth_status_card.dart
+│   │   │   ├── home_builder.dart
+│   │   │   ├── home_view_model.dart
+│   │   │   ├── kpi_row.dart
+│   │   │   ├── smart_insight_box.dart
+│   │   │   └── waste_insight_card.dart
+│   │   ├── pond
+│   │   │   ├── add_pond_screen.dart
+│   │   │   ├── edit_pond_screen.dart
+│   │   │   ├── enums
+│   │   │   ├── pond_dashboard_provider.dart
+│   │   │   ├── pond_dashboard_screen.dart
+│   │   │   ├── pond_model.dart
+│   │   │   └── widgets
+│   │   ├── profile
+│   │   │   ├── farm_settings_provider.dart
+│   │   │   ├── farm_settings_screen.dart
+│   │   │   ├── legal_screen.dart
+│   │   │   ├── profile_screen.dart
+│   │   │   └── user_provider.dart
+│   │   ├── supplements
+│   │   │   ├── screens
+│   │   │   ├── supplement_mix_screen.dart
+│   │   │   ├── supplement_provider.dart
+│   │   │   └── widgets
+│   │   ├── tray
+│   │   │   ├── enums
+│   │   │   ├── tray_log_screen.dart
+│   │   │   ├── tray_model.dart
+│   │   │   └── tray_provider.dart
+│   │   └── water
+│   │       ├── water_provider.dart
+│   │       └── water_test_screen.dart
+│   ├── main.dart
+│   ├── routes
+│   │   └── app_routes.dart
+│   ├── systems
+│   │   ├── feed
+│   │   │   ├── engine_constants.dart
+│   │   │   ├── feed_decision_engine.dart
+│   │   │   ├── feed_input_builder.dart
+│   │   │   ├── feed_intelligence_engine.dart
+│   │   │   ├── feed_orchestrator.dart
+│   │   │   ├── feed_recommendation_engine.dart
+│   │   │   ├── feed_status_engine.dart
+│   │   │   ├── master_feed_engine.dart
+│   │   │   └── smart_feed_engine_v2.dart
+│   │   ├── growth
+│   │   │   └── fcr_engine.dart
+│   │   ├── planning
+│   │   │   ├── feed_plan_constants.dart
+│   │   │   └── feed_plan_generator.dart
+│   │   ├── pond
+│   │   │   ├── pond_cycle_engine.dart
+│   │   │   └── pond_value_engine.dart
+│   │   ├── supplements
+│   │   │   ├── feed_mix_engine.dart
+│   │   │   └── water_task_engine.dart
+│   │   └── tray
+│   │       └── tray_decision_engine.dart
+│   └── widgets
+│       └── app_bottom_bar.dart
+├── linux
+│   ├── CMakeLists.txt
+│   ├── flutter
+│   │   ├── CMakeLists.txt
+│   │   ├── ephemeral
+│   │   ├── generated_plugin_registrant.cc
+│   │   ├── generated_plugin_registrant.h
+│   │   └── generated_plugins.cmake
+│   ├── main.cc
+│   ├── my_application.cc
+│   └── my_application.h
+├── macos
+│   ├── Flutter
+│   │   ├── Flutter-Debug.xcconfig
+│   │   ├── Flutter-Release.xcconfig
+│   │   ├── GeneratedPluginRegistrant.swift
+│   │   └── ephemeral
+│   │       ├── Flutter-Generated.xcconfig
+│   │       └── flutter_export_environment.sh
+│   ├── Runner
+│   │   ├── AppDelegate.swift
+│   │   ├── Assets.xcassets
+│   │   │   └── AppIcon.appiconset
+│   │   ├── Base.lproj
+│   │   │   └── MainMenu.xib
+│   │   ├── Configs
+│   │   │   ├── AppInfo.xcconfig
+│   │   │   ├── Debug.xcconfig
+│   │   │   ├── Release.xcconfig
+│   │   │   └── Warnings.xcconfig
+│   │   ├── DebugProfile.entitlements
+│   │   ├── Info.plist
+│   │   ├── MainFlutterWindow.swift
+│   │   └── Release.entitlements
+│   ├── Runner.xcodeproj
+│   │   ├── project.pbxproj
+│   │   ├── project.xcworkspace
+│   │   │   └── xcshareddata
+│   │   └── xcshareddata
+│   │       └── xcschemes
+│   ├── Runner.xcworkspace
+│   │   ├── contents.xcworkspacedata
+│   │   └── xcshareddata
+│   │       └── IDEWorkspaceChecks.plist
+│   └── RunnerTests
+│       └── RunnerTests.swift
+├── migrations
+│   ├── add_anchor_feed_to_ponds.sql
+│   ├── add_base_feed_to_feed_logs.sql
+│   ├── add_latest_sample_date_to_ponds.sql
+│   ├── add_sampling_factor_to_debug_logs.sql
+│   └── add_smart_feed_activation.sql
+├── pubspec.lock
+├── pubspec.yaml
+├── test
+│   ├── feed
+│   ├── feed_decision_engine_test.dart
+│   ├── feed_engine_v1_simplified_test.dart
+│   ├── feed_orchestrator_recommendation_integration_test.dart
+│   ├── legacy
+│   │   ├── biomass_feed_test.dart
+│   │   ├── doc_feed_test.dart
+│   │   ├── feed_calculation_test.dart
+│   │   ├── feed_decision_simulation_test.dart
+│   │   ├── feed_recommendation_engine_test.dart
+│   │   ├── models
+│   │   │   └── farm_scenario.dart
+│   │   ├── smart_feed_decision_engine_test.dart
+│   │   ├── smart_feed_test.dart
+│   │   └── utils
+│   │       └── scenario_runner.dart
+│   └── widget_test.dart
+├── web
+│   ├── favicon.png
+│   ├── icons
+│   │   ├── Icon-192.png
+│   │   ├── Icon-512.png
+│   │   ├── Icon-maskable-192.png
+│   │   └── Icon-maskable-512.png
+│   ├── index.html
+│   └── manifest.json
+└── windows
+    ├── CMakeLists.txt
+    ├── flutter
+    │   ├── CMakeLists.txt
+    │   ├── ephemeral
+    │   ├── generated_plugin_registrant.cc
+    │   ├── generated_plugin_registrant.h
+    │   └── generated_plugins.cmake
+    └── runner
+        ├── CMakeLists.txt
+        ├── Runner.rc
+        ├── flutter_window.cpp
+        ├── flutter_window.h
+        ├── main.cpp
+        ├── resource.h
+        ├── resources
+        │   └── app_icon.ico
+        ├── runner.exe.manifest
+        ├── utils.cpp
+        ├── utils.h
+        ├── win32_window.cpp
+        └── win32_window.h
+
+100 directories, 210 files

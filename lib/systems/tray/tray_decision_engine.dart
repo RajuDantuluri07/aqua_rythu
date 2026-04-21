@@ -1,4 +1,4 @@
-import '../../enums/tray_status.dart';
+import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/tray/tray_model.dart';
 
 /// Result returned by [TrayDecisionEngine.evaluate].

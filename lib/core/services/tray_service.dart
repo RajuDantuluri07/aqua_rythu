@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../enums/tray_status.dart';
+import '../../features/tray/enums/tray_status.dart';
 import '../utils/logger.dart';
 import 'feed_service.dart';
 

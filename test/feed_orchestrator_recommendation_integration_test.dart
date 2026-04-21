@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:aqua_rythu/core/engines/feed/feed_orchestrator.dart';
-import 'package:aqua_rythu/core/engines/feed/feed_recommendation_engine.dart';
-import 'package:aqua_rythu/core/models/feed_input.dart';
-import 'package:aqua_rythu/core/enums/tray_status.dart';
-import 'package:aqua_rythu/core/enums/stocking_type.dart';
+import 'package:aqua_rythu/systems/feed/feed_orchestrator.dart';
+import 'package:aqua_rythu/systems/feed/feed_recommendation_engine.dart';
+import 'package:aqua_rythu/features/feed/models/feed_input.dart';
+import 'package:aqua_rythu/features/tray/enums/tray_status.dart';
+import 'package:aqua_rythu/features/pond/enums/stocking_type.dart';
 
 void main() {
   group('FeedOrchestrator V1 Simplified (Tray-only)', () {

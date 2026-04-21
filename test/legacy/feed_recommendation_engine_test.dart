@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:aqua_rythu/core/engines/feed_decision_engine.dart';
-import 'package:aqua_rythu/core/engines/feed_recommendation_engine.dart';
+import 'package:aqua_rythu/systems/feed_decision_engine.dart';
+import 'package:aqua_rythu/systems/feed_recommendation_engine.dart';
 import 'package:aqua_rythu/core/utils/time_provider.dart';
 
 void main() {

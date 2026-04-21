@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_constants.dart';
 import '../feed/master_feed_engine.dart';
-import '../../enums/stocking_type.dart';
-import '../../utils/logger.dart';
+import '../../../features/pond/enums/stocking_type.dart';
+import '../../../core/utils/logger.dart';
 
 final supabase = Supabase.instance.client;
 
