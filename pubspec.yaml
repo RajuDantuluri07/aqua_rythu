@@ -15,9 +15,10 @@ dependencies:
   supabase_flutter: ^2.5.0
   cupertino_icons: ^1.0.6
   sms_autofill: ^2.4.1
-  flutter_riverpod: ^2.6.1     
+  flutter_riverpod: ^2.6.1
   intl: ^0.19.0
   shared_preferences: ^2.3.3
+  lottie: ^3.1.0   # 👈 ADD HERE
 
 dev_dependencies:
   flutter_test:
@@ -30,3 +31,4 @@ flutter:
     - assets/images/logo.png
     - assets/images/appicon.png
     - assets/images/splash.png
+    - assets/animations/

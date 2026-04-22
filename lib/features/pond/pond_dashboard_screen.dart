@@ -4,6 +4,7 @@ import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lottie/lottie.dart';
 import '../feed/feed_schedule_screen.dart';
 import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
@@ -425,12 +426,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     return result;
   }
 
-  /// ✅ Large success popup with animation, similar to feed round card
+  /// ✅ Large success popup with Lottie checkmark animation
   void _showSuccessPopup({
     required BuildContext context,
     required String title,
     required String message,
-    required IconData icon,
   }) {
     showDialog(
       context: context,
@@ -439,11 +439,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       builder: (ctx) => _SuccessPopupDialog(
         title: title,
         message: message,
-        icon: icon,
       ),
     );
-    // Auto-dismiss after 2 seconds (longer for animation)
-    Future.delayed(const Duration(milliseconds: 2000), () {
+    // Auto-dismiss after 2.5 seconds (longer for Lottie animation)
+    Future.delayed(const Duration(milliseconds: 2500), () {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
@@ -3474,12 +3473,10 @@ class _PerfDivider extends StatelessWidget {
 class _SuccessPopupDialog extends StatefulWidget {
   final String title;
   final String message;
-  final IconData icon;
 
   const _SuccessPopupDialog({
     required this.title,
     required this.message,
-    required this.icon,
   });
 
   @override
@@ -3490,7 +3487,6 @@ class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _checkAnimation;
 
   static const Color _green = Color(0xFF16A34A);
   static const Color _greenLight = Color(0xFFDCFCE7);
@@ -3500,18 +3496,13 @@ class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
 
     _scaleAnimation = CurvedAnimation(
       parent: _controller,
       curve: Curves.elasticOut,
-    );
-
-    _checkAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.3, 1.0, curve: Curves.elasticOut),
     );
 
     _controller.forward();
@@ -3554,29 +3545,14 @@ class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Animated success icon with background
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [_greenLight, Colors.white],
-                  ),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _greenBorder, width: 3),
-                ),
-                child: ScaleTransition(
-                  scale: _checkAnimation,
-                  child: Icon(
-                    widget.icon,
-                    color: _green,
-                    size: 40,
-                  ),
-                ),
+              // Lottie success animation
+              Lottie.asset(
+                'assets/lottie/success_checkmark.json',
+                width: 120,
+                height: 120,
+                repeat: false,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               // Success badge
               Container(
                 padding:
