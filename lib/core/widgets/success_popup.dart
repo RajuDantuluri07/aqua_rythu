@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
 
-/// Success popup with Lottie checkmark animation.
+/// Success popup with lightweight animated icon (no external dependencies).
 /// Auto-dismisses after 1.5 seconds per UX spec.
 ///
 /// Usage:
@@ -46,8 +45,6 @@ class _SuccessPopupState extends State<SuccessPopup> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -60,14 +57,34 @@ class _SuccessPopupState extends State<SuccessPopup> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Lottie animation - fast, clean, < 1.5s duration
-            Lottie.asset(
-              'assets/animations/success.json',
-              width: widget.animationSize,
-              height: widget.animationSize,
-              repeat: false,
+            // Animated success icon (lightweight, no Lottie)
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.elasticOut,
+              builder: (context, scale, child) {
+                return Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.green.withOpacity(0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.green,
+                      size: 40,
+                    ),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
               widget.message,
               style: const TextStyle(

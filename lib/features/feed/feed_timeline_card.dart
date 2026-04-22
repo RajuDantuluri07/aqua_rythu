@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../systems/feed/feed_decision_engine.dart';
 import '../../features/tray/enums/tray_status.dart';
 
@@ -16,9 +17,12 @@ FeedMode feedModeFromDoc(int doc) {
 
 String feedModeLabel(FeedMode mode) {
   switch (mode) {
-    case FeedMode.starter: return 'Starter Mode — follow basic feeding';
-    case FeedMode.guided:  return 'Guided Mode — improving accuracy';
-    case FeedMode.smart:   return 'Smart Mode — AI optimized feeding';
+    case FeedMode.starter:
+      return 'Starter Mode — follow basic feeding';
+    case FeedMode.guided:
+      return 'Guided Mode — improving accuracy';
+    case FeedMode.smart:
+      return 'Smart Mode — AI optimized feeding';
   }
 }
 
@@ -41,6 +45,7 @@ class FeedTimelineCard extends StatefulWidget {
   final String? adjustmentReason;
   final bool isNext;
   final bool isSmartFeed;
+
   /// True when the tray check was auto-skipped (farmer moved to next round
   /// without logging). Shows ⚠️ skipped banner + "Update Now" CTA.
   final bool isTraySkipped;
@@ -203,33 +208,34 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   bool get _isOverdue =>
       widget.nextFeedAt != null && _timeRemaining.inMinutes < -30;
 
-  static const _green      = Color(0xFF16A34A);
+  static const _green = Color(0xFF16A34A);
   static const _greenLight = Color(0xFF22C55E);
-  static const _greenBg    = Color(0xFFF0FDF4);
-  static const _greenBorder= Color(0xFFBBF7D0);
-  static const _amber      = Color(0xFFD97706);
-  static const _amberBg    = Color(0xFFFFFBEB);
-  static const _amberBorder= Color(0xFFFDE68A);
-  static const _red        = Color(0xFFDC2626);
-  static const _blue       = Color(0xFF2563EB);
-  static const _purple     = Color(0xFF7C3AED);
-  static const _slate100   = Color(0xFFF1F5F9);
-  static const _slate200   = Color(0xFFE2E8F0);
-  static const _slate300   = Color(0xFFCBD5E1);
-  static const _slate400   = Color(0xFF94A3B8);
-  static const _slate500   = Color(0xFF64748B);
-  static const _ink        = Color(0xFF0F172A);
+  static const _greenBg = Color(0xFFF0FDF4);
+  static const _greenBorder = Color(0xFFBBF7D0);
+  static const _amber = Color(0xFFD97706);
+  static const _amberBg = Color(0xFFFFFBEB);
+  static const _amberBorder = Color(0xFFFDE68A);
+  static const _red = Color(0xFFDC2626);
+  static const _blue = Color(0xFF2563EB);
+  static const _purple = Color(0xFF7C3AED);
+  static const _slate100 = Color(0xFFF1F5F9);
+  static const _slate200 = Color(0xFFE2E8F0);
+  static const _slate300 = Color(0xFFCBD5E1);
+  static const _slate400 = Color(0xFF94A3B8);
+  static const _slate500 = Color(0xFF64748B);
+  static const _ink = Color(0xFF0F172A);
 
   @override
   Widget build(BuildContext context) {
     assert(() {
-      debugPrint('🎯 Feed card rebuild | round: ${widget.round} | state: ${widget.state.name}');
+      debugPrint(
+          '🎯 Feed card rebuild | round: ${widget.round} | state: ${widget.state.name}');
       return true;
     }());
-    final isDone    = widget.state == FeedRoundState.done;
+    final isDone = widget.state == FeedRoundState.done;
     final isCurrent = widget.state == FeedRoundState.current;
 
-    if (isDone)    return _smartDoneCard();
+    if (isDone) return _smartDoneCard();
     if (isCurrent) return _smartCurrentCard();
     return _upcomingCard();
   }
@@ -239,7 +245,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   // ═══════════════════════════════════════════════════════════════════
 
   Widget _smartDoneCard() {
-    final hasTray = widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
+    final hasTray =
+        widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
     final hasSupplements = widget.supplements.isNotEmpty;
 
     return Container(
@@ -275,7 +282,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                           ),
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: _green.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(4),
@@ -315,7 +323,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                             onTap: () => _showEditDialog(context),
                             child: const Padding(
                               padding: EdgeInsets.only(right: 6),
-                              child: Icon(Icons.edit_rounded, size: 14, color: _slate400),
+                              child: Icon(Icons.edit_rounded,
+                                  size: 14, color: _slate400),
                             ),
                           ),
                         Text(
@@ -329,7 +338,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: _green,
                         borderRadius: BorderRadius.circular(4),
@@ -417,7 +427,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                     children: widget.supplements.map((s) {
                       final parts = _parseSupplementString(s);
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _purple.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(6),
@@ -483,10 +494,14 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               padding: EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle_outline_rounded, size: 14, color: _green),
+                  Icon(Icons.check_circle_outline_rounded,
+                      size: 14, color: _green),
                   SizedBox(width: 6),
                   Text('Thanks! This helps improve recommendations.',
-                      style: TextStyle(fontSize: 11, color: _green, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: _green,
+                          fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -510,7 +525,10 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: borderColor, width: 2.5),
         boxShadow: [
-          BoxShadow(color: borderColor.withOpacity(0.22), blurRadius: 16, offset: const Offset(0, 6)),
+          BoxShadow(
+              color: borderColor.withOpacity(0.22),
+              blurRadius: 16,
+              offset: const Offset(0, 6)),
         ],
       ),
       child: Padding(
@@ -532,7 +550,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: _green.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
@@ -556,7 +575,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             const SizedBox(height: 3),
             Text(
               feedModeLabel(widget.feedMode),
-              style: const TextStyle(fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
             ),
             if (widget.feedMode == FeedMode.smart) ...[
               const SizedBox(height: 2),
@@ -564,7 +584,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 widget.anchorFeedKg != null
                     ? 'Smart feed based on tray response'
                     : 'Estimated feed based on growth curve',
-                style: const TextStyle(fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                    fontSize: 9, color: _slate400, fontWeight: FontWeight.w500),
               ),
             ],
             // Feeding progress
@@ -582,7 +603,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             const SizedBox(height: 16),
 
             // Feed quantity display — anchor mode vs standard
-            if (widget.anchorFeedKg != null && widget.feedMode == FeedMode.smart) ...[
+            if (widget.anchorFeedKg != null &&
+                widget.feedMode == FeedMode.smart) ...[
               // TASK 8: Base feed (farmer anchor) + adjusted feed (tray-based)
               _anchorFeedRow(
                 label: 'Base Feed',
@@ -597,7 +619,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 kg: widget.recommendedFeedKg,
                 color: _ink,
                 isBold: true,
-                onEdit: widget.onEdit != null ? () => _showEditDialog(context) : null,
+                onEdit: widget.onEdit != null
+                    ? () => _showEditDialog(context)
+                    : null,
               ),
             ] else ...[
               // Standard display
@@ -641,7 +665,10 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   SizedBox(width: 4),
                   Text(
                     'Adjusted for safety',
-                    style: TextStyle(fontSize: 10, color: _amber, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: _amber,
+                        fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -651,25 +678,41 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             const SizedBox(height: 10),
             _simpleStatusLine(),
 
-            // Confirm Feed Button
+            // Confirm Feed Button — Enhanced for farmer accessibility
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: widget.onMarkDone,
+              height: 52, // Larger touch target for farmers
+              child: ElevatedButton.icon(
+                onPressed: widget.onMarkDone != null
+                    ? () {
+                        HapticFeedback.mediumImpact(); // Tactile feedback
+                        widget.onMarkDone!();
+                      }
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _green,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  disabledBackgroundColor: _slate300,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 2,
+                  shadowColor: _green.withOpacity(0.4),
                 ),
-                child: const Text(
+                icon: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                label: const Text(
                   "Confirm Feed",
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
@@ -866,13 +909,17 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     final Color color;
     final String label;
     if (_isOverdue) {
-      color = _red; label = 'Feed Now';
+      color = _red;
+      label = 'Feed Now';
     } else if (mins <= 30) {
-      color = _red; label = 'Due Soon';
+      color = _red;
+      label = 'Due Soon';
     } else if (mins <= 60) {
-      color = _amber; label = 'Upcoming';
+      color = _amber;
+      label = 'Upcoming';
     } else {
-      color = _green; label = 'Safe';
+      color = _green;
+      label = 'Safe';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -912,13 +959,16 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   //   Guided/Smart normal → reason + impact + insight (if available)
   List<Widget> _buildBodySignals() {
     final bool isCritical = _isOverdue ||
-        (widget.correctionPercent != null && widget.correctionPercent!.abs() > 20);
-    final bool hasMajorIssue = (widget.leftoverPercent != null && widget.leftoverPercent! > 20) ||
-        (widget.correctionPercent != null && widget.correctionPercent!.abs() > 10);
+        (widget.correctionPercent != null &&
+            widget.correctionPercent!.abs() > 20);
+    final bool hasMajorIssue =
+        (widget.leftoverPercent != null && widget.leftoverPercent! > 20) ||
+            (widget.correctionPercent != null &&
+                widget.correctionPercent!.abs() > 10);
 
     // T11 gate: AI insight only for Guided (limited) and Smart modes
-    final bool insightAllowed = widget.insight != null &&
-        widget.feedMode != FeedMode.starter;
+    final bool insightAllowed =
+        widget.insight != null && widget.feedMode != FeedMode.starter;
 
     if (isCritical && insightAllowed) {
       // Critical: show insight only — urgency badge already in header covers the 2nd signal
@@ -953,7 +1003,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         children: [
           const Text(
             'Was this recommendation accurate?',
-            style: TextStyle(fontSize: 11, color: _slate500, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                fontSize: 11, color: _slate500, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
           GestureDetector(
@@ -968,7 +1019,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: _green.withOpacity(0.3)),
               ),
-              child: const Icon(Icons.thumb_up_rounded, size: 16, color: _green),
+              child:
+                  const Icon(Icons.thumb_up_rounded, size: 16, color: _green),
             ),
           ),
           const SizedBox(width: 8),
@@ -984,7 +1036,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: _red.withOpacity(0.3)),
               ),
-              child: const Icon(Icons.thumb_down_rounded, size: 16, color: _red),
+              child:
+                  const Icon(Icons.thumb_down_rounded, size: 16, color: _red),
             ),
           ),
         ],
@@ -999,16 +1052,19 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     final String impact;
     final Color impactColor;
 
-    if (widget.adjustmentReason != null && widget.adjustmentReason!.isNotEmpty) {
+    if (widget.adjustmentReason != null &&
+        widget.adjustmentReason!.isNotEmpty) {
       reason = widget.adjustmentReason!;
       impact = 'Check tray result after feeding';
       impactColor = _slate400;
-    } else if (widget.correctionPercent != null && widget.correctionPercent! < -2) {
+    } else if (widget.correctionPercent != null &&
+        widget.correctionPercent! < -2) {
       final pct = widget.correctionPercent!.abs().round();
       reason = 'Reduced by $pct% — tray showed leftover';
       impact = 'Will help bring FCR down';
       impactColor = _green;
-    } else if (widget.correctionPercent != null && widget.correctionPercent! > 2) {
+    } else if (widget.correctionPercent != null &&
+        widget.correctionPercent! > 2) {
       final pct = widget.correctionPercent!.round();
       reason = 'Increased by $pct% — good consumption';
       impact = 'Good for growth this week';
@@ -1033,7 +1089,10 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             Flexible(
               child: Text(
                 reason,
-                style: const TextStyle(fontSize: 11, color: _slate500, fontStyle: FontStyle.italic),
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: _slate500,
+                    fontStyle: FontStyle.italic),
               ),
             ),
           ],
@@ -1043,7 +1102,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
           padding: const EdgeInsets.only(left: 17),
           child: Text(
             '→ $impact',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: impactColor),
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700, color: impactColor),
           ),
         ),
       ],
@@ -1197,13 +1257,15 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: _slate300, width: 1.5),
           foregroundColor: _slate500,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: _isSubmitting
             ? const SizedBox(
                 height: 20,
                 width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: _slate400),
+                child:
+                    CircularProgressIndicator(strokeWidth: 2, color: _slate400),
               )
             : const Text(
                 "Feed Early Anyway",
@@ -1251,14 +1313,19 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                       if (widget.isNext) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: _blue.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
                             "NEXT",
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _blue, letterSpacing: 0.4),
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: _blue,
+                                letterSpacing: 0.4),
                           ),
                         ),
                       ],
@@ -1345,10 +1412,15 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       final row = <Widget>[];
       row.add(Expanded(child: _supplementGridCell(sups[i])));
       if (i + 1 < sups.length) {
-        row.add(Container(width: 1, height: 40, color: _slate200, margin: const EdgeInsets.symmetric(horizontal: 8)));
+        row.add(Container(
+            width: 1,
+            height: 40,
+            color: _slate200,
+            margin: const EdgeInsets.symmetric(horizontal: 8)));
         row.add(Expanded(child: _supplementGridCell(sups[i + 1])));
       }
-      rows.add(Row(crossAxisAlignment: CrossAxisAlignment.start, children: row));
+      rows.add(
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: row));
       if (i + 2 < sups.length) rows.add(const SizedBox(height: 8));
     }
 
@@ -1384,17 +1456,23 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   String _trayLabel(TrayStatus s) {
     switch (s) {
-      case TrayStatus.empty:   return 'EMPTY';
-      case TrayStatus.partial: return 'HALF';
-      case TrayStatus.full:    return 'FULL';
+      case TrayStatus.empty:
+        return 'EMPTY';
+      case TrayStatus.partial:
+        return 'HALF';
+      case TrayStatus.full:
+        return 'FULL';
     }
   }
 
   Color _trayColor(TrayStatus s) {
     switch (s) {
-      case TrayStatus.empty:   return _green;
-      case TrayStatus.partial: return _amber;
-      case TrayStatus.full:    return _red;
+      case TrayStatus.empty:
+        return _green;
+      case TrayStatus.partial:
+        return _amber;
+      case TrayStatus.full:
+        return _red;
     }
   }
 
@@ -1415,18 +1493,21 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
           backgroundColor: const Color(0xFF16A34A),
           disabledBackgroundColor: const Color(0xFF16A34A).withOpacity(0.5),
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: _isSubmitting
             ? const SizedBox(
                 height: 22,
                 width: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.5, color: Colors.white),
               )
             : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle_rounded, size: 20, color: Colors.white),
+                  Icon(Icons.check_circle_rounded,
+                      size: 20, color: Colors.white),
                   SizedBox(width: 10),
                   Text(
                     "MARK AS FED",
@@ -1502,20 +1583,34 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     );
   }
 
-  // Log tray button
+  // Log tray button — Enhanced with haptic feedback
   Widget _logTrayButton() {
-    final hasTray = widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
+    final hasTray =
+        widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
     return SizedBox(
       width: double.infinity,
+      height: 48, // Larger touch target
       child: OutlinedButton.icon(
-        onPressed: widget.onLogTray,
-        icon: const Icon(Icons.checklist_rounded, size: 16),
-        label: Text(hasTray ? "Update Tray Check" : "Log Tray Check"),
+        onPressed: widget.onLogTray != null
+            ? () {
+                HapticFeedback.lightImpact(); // Tactile feedback
+                widget.onLogTray!();
+              }
+            : null,
+        icon: Icon(
+          hasTray ? Icons.fact_check_rounded : Icons.checklist_rounded,
+          size: 20,
+        ),
+        label: Text(
+          hasTray ? "Update Tray Check" : "Log Tray Check",
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: _amber, width: 1.5),
           foregroundColor: _amber,
           padding: const EdgeInsets.symmetric(vertical: 11),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
     );
@@ -1538,13 +1633,16 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _stepBtn(icon: Icons.remove, onTap: () => setDlg(() {
-                    editAmount = (editAmount - 0.5).clamp(0.0, 500.0);
-                  })),
+                  _stepBtn(
+                      icon: Icons.remove,
+                      onTap: () => setDlg(() {
+                            editAmount = (editAmount - 0.5).clamp(0.0, 500.0);
+                          })),
                   const SizedBox(width: 20),
                   GestureDetector(
                     onTap: () async {
-                      final ctrl = TextEditingController(text: editAmount.toStringAsFixed(1));
+                      final ctrl = TextEditingController(
+                          text: editAmount.toStringAsFixed(1));
                       await showDialog(
                         context: ctx,
                         builder: (_) => AlertDialog(
@@ -1552,16 +1650,22 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                           content: TextField(
                             controller: ctrl,
                             autofocus: true,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(suffix: Text("kg"), border: OutlineInputBorder()),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: const InputDecoration(
+                                suffix: Text("kg"),
+                                border: OutlineInputBorder()),
                           ),
                           actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+                            TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text("Cancel")),
                             ElevatedButton(
                               onPressed: () {
                                 final v = double.tryParse(ctrl.text);
                                 if (v != null && v >= 0 && v <= 500) {
-                                  setDlg(() => editAmount = double.parse(v.toStringAsFixed(1)));
+                                  setDlg(() => editAmount =
+                                      double.parse(v.toStringAsFixed(1)));
                                 }
                                 Navigator.pop(ctx);
                               },
@@ -1575,30 +1679,41 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                       children: [
                         Text(
                           "${editAmount.toStringAsFixed(1)} kg",
-                          style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: _ink),
+                          style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w800,
+                              color: _ink),
                         ),
-                        const Text("tap to type", style: TextStyle(fontSize: 10, color: _slate400)),
+                        const Text("tap to type",
+                            style: TextStyle(fontSize: 10, color: _slate400)),
                       ],
                     ),
                   ),
                   const SizedBox(width: 20),
-                  _stepBtn(icon: Icons.add, onTap: () => setDlg(() {
-                    editAmount = (editAmount + 0.5).clamp(0.0, 500.0);
-                  })),
+                  _stepBtn(
+                      icon: Icons.add,
+                      onTap: () => setDlg(() {
+                            editAmount = (editAmount + 0.5).clamp(0.0, 500.0);
+                          })),
                 ],
               ),
               const SizedBox(height: 8),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Cancel")),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 widget.onEdit?.call(editAmount);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A)),
-              child: const Text("Save", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A)),
+              child: const Text("Save",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -1612,7 +1727,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       child: Container(
         width: 44,
         height: 44,
-        decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(
+            color: _slate100, borderRadius: BorderRadius.circular(10)),
         child: Icon(icon, size: 22, color: _ink),
       ),
     );
@@ -1622,8 +1738,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 // ── Timeline dot helpers ──────────────────────────────────────────────────────
 
 Widget buildTimelineDot(FeedRoundState state, {bool isPendingTray = false}) {
-  const green    = Color(0xFF16A34A);
-  const amber    = Color(0xFFD97706);
+  const green = Color(0xFF16A34A);
+  const amber = Color(0xFFD97706);
   const slate300 = Color(0xFFCBD5E1);
 
   switch (state) {
@@ -1631,7 +1747,8 @@ Widget buildTimelineDot(FeedRoundState state, {bool isPendingTray = false}) {
       return Container(
         width: 24,
         height: 24,
-        decoration: BoxDecoration(color: isPendingTray ? amber : green, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+            color: isPendingTray ? amber : green, shape: BoxShape.circle),
         child: const Icon(Icons.check, color: Colors.white, size: 14),
       );
     case FeedRoundState.current:
@@ -1647,7 +1764,8 @@ Widget buildTimelineDot(FeedRoundState state, {bool isPendingTray = false}) {
           child: Container(
             width: 12,
             height: 12,
-            decoration: const BoxDecoration(color: green, shape: BoxShape.circle),
+            decoration:
+                const BoxDecoration(color: green, shape: BoxShape.circle),
           ),
         ),
       );

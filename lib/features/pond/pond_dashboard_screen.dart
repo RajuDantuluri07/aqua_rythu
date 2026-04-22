@@ -3,8 +3,8 @@ import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lottie/lottie.dart';
 import '../feed/feed_schedule_screen.dart';
 import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
@@ -426,23 +426,31 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     return result;
   }
 
-  /// ✅ Large success popup with Lottie checkmark animation
+  /// ✅ Large success popup with animated icon + haptic feedback
   void _showSuccessPopup({
     required BuildContext context,
     required String title,
     required String message,
+    bool isHighImpact = false,
   }) {
+    // Haptic feedback for success action
+    HapticFeedback.mediumImpact();
+    if (isHighImpact) {
+      HapticFeedback.heavyImpact();
+    }
+
     showDialog(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.4),
+      barrierColor: Colors.black.withOpacity(0.5),
       builder: (ctx) => _SuccessPopupDialog(
         title: title,
         message: message,
+        isHighImpact: isHighImpact,
       ),
     );
-    // Auto-dismiss after 2.5 seconds (longer for Lottie animation)
-    Future.delayed(const Duration(milliseconds: 2500), () {
+    // Auto-dismiss after 1.5 seconds (quick feedback)
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
@@ -1854,7 +1862,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                         title: 'Feed Logged',
                         message:
                             'Round $round: ${actualQty.toStringAsFixed(2)} kg',
-                        icon: Icons.check_circle_rounded,
                       );
                       // V2-01: ₹ delta snackbar — closes dopamine loop after every feed.
                       // Shows "+₹120 added to pond value" immediately after marking done.
@@ -1884,7 +1891,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                           context: context,
                           title: 'Tray Logged',
                           message: 'Round $round: Status recorded',
-                          icon: Icons.fact_check_rounded,
                         );
                       }
                     }
@@ -3473,10 +3479,12 @@ class _PerfDivider extends StatelessWidget {
 class _SuccessPopupDialog extends StatefulWidget {
   final String title;
   final String message;
+  final bool isHighImpact;
 
   const _SuccessPopupDialog({
     required this.title,
     required this.message,
+    this.isHighImpact = false,
   });
 
   @override
@@ -3484,9 +3492,11 @@ class _SuccessPopupDialog extends StatefulWidget {
 }
 
 class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _controller;
+  late AnimationController _pulseController;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _pulseAnimation;
 
   static const Color _green = Color(0xFF16A34A);
   static const Color _greenLight = Color(0xFFDCFCE7);
@@ -3500,17 +3510,33 @@ class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
       vsync: this,
     );
 
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
     _scaleAnimation = CurvedAnimation(
       parent: _controller,
       curve: Curves.elasticOut,
     );
 
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
     _controller.forward();
+    if (widget.isHighImpact) {
+      _pulseController.repeat(reverse: true);
+    }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -3545,12 +3571,45 @@ class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Lottie success animation
-              Lottie.asset(
-                'assets/lottie/success_checkmark.json',
-                width: 120,
-                height: 120,
-                repeat: false,
+              // Animated success icon with optional pulse for high-impact events
+              AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: widget.isHighImpact ? _pulseAnimation.value : 1.0,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.elasticOut,
+                      builder: (context, scale, child) {
+                        return Transform.scale(
+                          scale: scale,
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: _greenLight,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: _greenBorder, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _green.withOpacity(
+                                      widget.isHighImpact ? 0.4 : 0.2),
+                                  blurRadius: widget.isHighImpact ? 20 : 12,
+                                  spreadRadius: widget.isHighImpact ? 4 : 2,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.check_circle_rounded,
+                              color: _green,
+                              size: widget.isHighImpact ? 56 : 48,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               // Success badge
