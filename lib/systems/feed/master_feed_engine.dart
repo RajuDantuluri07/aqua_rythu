@@ -29,9 +29,14 @@ import '../../../features/feed/enums/feed_stage.dart';
 import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/validators/feed_input_validator.dart';
-import '../../../core/utils/logger.dart';
-import '../../../core/utils/feed_config_constants.dart';
-// import '../growth/fcr_engine.dart'; // ❌ DISABLED FOR V1
+import 'package:aqua_rythu/core/utils/logger.dart';
+import 'package:aqua_rythu/core/services/feed_safety_service.dart';
+import '../tray/tray_decision_engine.dart';
+import 'feed_input.dart';
+import 'orchestrator_result.dart';
+import '../../../core/services/app_config_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+// import '../growth/fcr_engine.dart'; // DISABLED FOR V1
 import 'feed_decision_engine.dart'; // Used for FeedDecision result
 import 'feed_input_builder.dart';
 import 'feed_intelligence_engine.dart'; // Used for IntelligenceResult
@@ -232,10 +237,40 @@ class MasterFeedEngine {
   ///
   /// Pure — no DB writes. Use [orchestrateForPond] when the caller only has
   /// a pondId and needs DB state fetched first.
-  static OrchestratorResult orchestrate(FeedInput input) {
+  static OrchestratorResult orchestrate(
+    FeedInput input, {
+    // Optional admin config override for testing/future use
+    FeedEngineConfig? adminConfigOverride,
+  }) {
     FeedInputValidator.validate(input);
 
-    // ── STEP 0: Critical DO safety — enforced for ALL DOC ─────────────────
+    // ── STEP 0: Admin Panel Controls (with safe defaults) ─────────────────────
+    // For synchronous operation, use safe defaults. Real admin controls applied
+    // in orchestrateForPond which can be async.
+    final feedEngineConfig = adminConfigOverride ??
+        const FeedEngineConfig(
+          smartFeedEnabled: true,
+          blindFeedDocLimit: 30,
+          globalFeedMultiplier: 1.0,
+          feedKillSwitch: false,
+        );
+
+    // Check kill switch - if enabled, stop all feed recommendations
+    if (feedEngineConfig.feedKillSwitch) {
+      AppLogger.warn(
+        '[MasterFeedEngine] FEED KILL SWITCH ACTIVATED - stopping all feed recommendations',
+      );
+      return OrchestratorResult.stopFeed(
+        reason: 'Feed kill switch activated by admin',
+        engineVersion: version,
+        doc: input.doc,
+      );
+    }
+
+    // Check smart feed enabled - if disabled, force blind feeding
+    final bool forceBlindFeeding = !feedEngineConfig.smartFeedEnabled;
+
+    // ── STEP 1: Critical DO safety — enforced for ALL DOC ─────────────────
     if (input.dissolvedOxygen < 3.5) {
       AppLogger.error(
         '[MasterFeedEngine] Critical DO (${input.dissolvedOxygen} mg/L) '
@@ -259,10 +294,15 @@ class MasterFeedEngine {
         : stage1Debug.finalFeed;
 
     // ── STEP 2: Tray Factor (simple & deterministic) ───────────────────────
-    final trayFactor = _simpleTrayFactor(input.trayStatuses);
+    // Force blind feeding if smart feed is disabled
+    final trayFactor =
+        forceBlindFeeding ? 1.0 : _simpleTrayFactor(input.trayStatuses);
 
     // ── STEP 3: Apply factor ──────────────────────────────────────────────
     double feed = baseFeed * trayFactor;
+
+    // ── STEP 3.5: Apply Global Multiplier from Admin Panel ───────────────────
+    feed = feed * feedEngineConfig.globalFeedMultiplier;
 
     // ── STEP 4: Safety Clamp (prevent spikes — ±30% from baseFeed) ────────
     final minFeed = baseFeed * FeedEngineConstants.minFeedFactor; // 0.7
@@ -276,7 +316,15 @@ class MasterFeedEngine {
             : 'Feed reduction capped at -30%'
         : null;
 
-    final finalFeed = double.parse(feed.toStringAsFixed(3));
+    // Apply feed safety clamping before final calculation
+    final safetyResult = FeedSafetyService().validateFeedCalculation(
+      calculatedFeed: double.parse(feed.toStringAsFixed(3)),
+      pondId:
+          'pond-${input.doc}', // Use DOC as identifier since pondId not available
+      calculationType: 'master_feed_engine',
+    );
+
+    final finalFeed = safetyResult.safeAmount;
 
     // ── STEP 5: Build minimal result objects for backward compatibility ────
     final feedStage = FeedStageResolver.resolve(
@@ -388,7 +436,7 @@ class MasterFeedEngine {
     );
   }
 
-  /// Fetch pond state from DB, then run the full pipeline.
+  /// Fetch pond state from DB, then run the full pipeline with admin controls.
   ///
   /// Use [FeedService.applyTrayAdjustment] or [FeedService.recalculateFeedPlan]
   /// when you also need to persist the result to feed_rounds.
@@ -396,8 +444,24 @@ class MasterFeedEngine {
     // 🔥 VERIFICATION LOG: Should print ONLY ONCE per pond load (via Controller cache)
     AppLogger.info('🔥 FEED ENGINE CALLED: pond=$pondId');
 
+    // ── STEP 0: Load Admin Config ─────────────────────────────────────────
+    final appConfigService = AppConfigService(Supabase.instance.client);
+    final feedEngineConfig = await appConfigService.getFeedEngineConfig();
+
+    // Check kill switch - if enabled, stop all feed recommendations
+    if (feedEngineConfig.feedKillSwitch) {
+      AppLogger.warn(
+        '[MasterFeedEngine] FEED KILL SWITCH ACTIVATED - stopping all feed recommendations',
+      );
+      return OrchestratorResult.stopFeed(
+        reason: 'Feed kill switch activated by admin',
+        engineVersion: version,
+        doc: 0, // We don't know DOC yet
+      );
+    }
+
     final input = await FeedInputBuilder.fromDB(pondId);
-    return orchestrate(input);
+    return orchestrate(input, adminConfigOverride: feedEngineConfig);
   }
 
   // ── PRIVATE HELPERS ───────────────────────────────────────────────────────

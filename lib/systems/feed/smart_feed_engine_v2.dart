@@ -114,22 +114,23 @@ class SmartFeedV2Result {
 
   /// Flat map used by the debug dashboard.
   Map<String, dynamic> toDebugMap() => {
-        'baseFeed':      _fmt(baseFeed),
-        'trayFactor':    _fmt(trayFactor),
-        'growthFactor':  _fmt(growthFactor),
-        'waterFactor':   _fmt(waterFactor),
-        'docFactor':     _fmt(docFactor),
-        'rawProduct':    _fmt(rawProduct),
-        'correctedFeed':     _fmt(correctedFeed),
-        'adjustment%':   '${adjustmentPercent.toStringAsFixed(1)}%',
+        'baseFeed': _fmt(baseFeed),
+        'trayFactor': _fmt(trayFactor),
+        'growthFactor': _fmt(growthFactor),
+        'waterFactor': _fmt(waterFactor),
+        'docFactor': _fmt(docFactor),
+        'rawProduct': _fmt(rawProduct),
+        'correctedFeed': _fmt(correctedFeed),
+        'adjustment%': '${adjustmentPercent.toStringAsFixed(1)}%',
         'isCriticalStop': isCriticalStop,
-        'wasClamped':    wasClamped,
+        'wasClamped': wasClamped,
         'trayLeftover%': trayLeftoverUsed?.toStringAsFixed(1) ?? 'n/a',
-        'abwUsed':       abwUsed?.toStringAsFixed(2) ?? 'n/a',
-        'expectedAbw':   _fmt(expectedAbw),
+        'abwUsed': abwUsed?.toStringAsFixed(2) ?? 'n/a',
+        'expectedAbw': _fmt(expectedAbw),
         'primaryReason': primaryReason,
-        'confidence':    '${(confidence * 100).toStringAsFixed(0)}% ($confidenceLabel)',
-        'reasons':       reasons.join(' | '),
+        'confidence':
+            '${(confidence * 100).toStringAsFixed(0)}% ($confidenceLabel)',
+        'reasons': reasons.join(' | '),
       };
 
   static String _fmt(double v) => v.toStringAsFixed(3);
@@ -240,7 +241,8 @@ class SmartFeedEngineV2 {
     // ── 4. DOC factor ───────────────────────────────────────────────────────
     final docFactor = getDocFactor(doc);
     if (docFactor != 1.0) {
-      reasons.add('DOC $doc: stage adjustment ×${docFactor.toStringAsFixed(2)}');
+      reasons
+          .add('DOC $doc: stage adjustment ×${docFactor.toStringAsFixed(2)}');
     }
 
     // ── 5. Combine factors & clamp ──────────────────────────────────────────
@@ -262,16 +264,14 @@ class SmartFeedEngineV2 {
 
     // ── 6. Confidence score (data availability) ─────────────────────────────
     double confidence = 1.0;
-    if (abw == null)        confidence -= 0.3; // no growth signal
-    if (trayData == null)   confidence -= 0.3; // no appetite signal
-    if (sampleAgeDays > 5)  confidence -= 0.2; // stale sample attenuates signal
+    if (abw == null) confidence -= 0.3; // no growth signal
+    if (trayData == null) confidence -= 0.3; // no appetite signal
+    if (sampleAgeDays > 5) confidence -= 0.2; // stale sample attenuates signal
     confidence = confidence.clamp(0.0, 1.0);
 
     // ── 7. Primary reason for farmer UI ────────────────────────────────────
     // Skip "no data" entries (index 0 or 1) as primary — prefer factor reasons.
-    final factorReasons = reasons
-        .where((r) => !r.startsWith('No '))
-        .toList();
+    final factorReasons = reasons.where((r) => !r.startsWith('No ')).toList();
     final primaryReason =
         factorReasons.isNotEmpty ? factorReasons.first : 'Feed optimal';
 
@@ -323,8 +323,8 @@ class SmartFeedEngineV2 {
   /// [leftoverPct] must be in [0, 100].
   static double getTrayFactor(double leftoverPct) {
     assert(leftoverPct >= 0 && leftoverPct <= 100);
-    if (leftoverPct <= 0)  return 1.15;
-    if (leftoverPct < 10)  return 1.10;
+    if (leftoverPct <= 0) return 1.15;
+    if (leftoverPct < 10) return 1.10;
     if (leftoverPct <= 20) return 1.00;
     if (leftoverPct <= 50) return 0.85;
     return 0.70;
@@ -350,7 +350,8 @@ class SmartFeedEngineV2 {
     required double expectedAbw,
   }) {
     if (abw == null || abw <= 0 || expectedAbw <= 0) {
-      return const GrowthFactorResult(factor: 1.0, reason: 'No ABW data', abwUsed: null);
+      return const GrowthFactorResult(
+          factor: 1.0, reason: 'No ABW data', abwUsed: null);
     }
     if (sampleAgeDays > 7) {
       return GrowthFactorResult(
@@ -406,7 +407,8 @@ class SmartFeedEngineV2 {
       return WaterFactorResult(
         factor: 0.0,
         isCriticalStop: true,
-        reason: 'CRITICAL: DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L < $_kCriticalDO — stop feeding',
+        reason:
+            'CRITICAL: DO ${dissolvedOxygen.toStringAsFixed(1)} mg/L < $_kCriticalDO — stop feeding',
       );
     }
 
@@ -478,7 +480,7 @@ class SmartFeedEngineV2 {
     final adj = factor >= 1.0
         ? '+${((factor - 1) * 100).toStringAsFixed(0)}%'
         : '${((factor - 1) * 100).toStringAsFixed(0)}%';
-    return 'Tray ${pctStr}% leftover → $adj';
+    return 'Tray $pctStr% leftover → $adj';
   }
 
   static double _samplingWeight(int ageDays) {

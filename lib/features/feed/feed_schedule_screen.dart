@@ -6,6 +6,7 @@ import '../../core/utils/logger.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import '../../systems/planning/feed_plan_constants.dart';
 import 'feed_schedule_provider.dart';
+
 class FeedScheduleScreen extends ConsumerStatefulWidget {
   final String pondId;
   const FeedScheduleScreen({super.key, required this.pondId});
@@ -19,7 +20,9 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+      await ref
+          .read(feedScheduleProvider.notifier)
+          .loadFeedSchedule(widget.pondId);
 
       // Auto-generate if feed_rounds is empty for this pond
       if (!mounted) return;
@@ -27,7 +30,9 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
         try {
           await PondService().generateFeedSchedule(widget.pondId);
           if (!mounted) return;
-          await ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+          await ref
+              .read(feedScheduleProvider.notifier)
+              .loadFeedSchedule(widget.pondId);
         } catch (e) {
           AppLogger.error('Feed schedule auto-generate failed', e);
         }
@@ -42,7 +47,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     final currentDoc = ref.watch(docProvider(widget.pondId));
 
     // Task 3: Add debug prints
-    AppLogger.debug("📦 Available farms: ${farmState.farms.map((f) => f.name).join(', ')}");
+    AppLogger.debug(
+        "📦 Available farms: ${farmState.farms.map((f) => f.name).join(', ')}");
     AppLogger.debug("🎯 Looking for pondId: ${widget.pondId}");
 
     Pond? pond; // Task 1: Declare pond as nullable outside the loop
@@ -53,7 +59,10 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
         break;
       } catch (e, stack) {
         // Task 1: Log error and ensure pond is null if not found in this farm
-        AppLogger.error("❌ Pond not found in farm ${farm.name}: ${widget.pondId}", e, stack);
+        AppLogger.error(
+            "❌ Pond not found in farm ${farm.name}: ${widget.pondId}",
+            e,
+            stack);
         // If the pond is not found in the current farm, `pond` remains null (or its value from a previous iteration).
         // The loop will continue to check other farms. If no farm contains the pond,
         // `pond` will be null after the loop completes.
@@ -64,7 +73,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     String docRange = "DOC N/A";
     if (feedScheduleState.days.isNotEmpty) {
       final minDoc = feedScheduleState.days.first.doc;
-      final maxDoc = feedScheduleState.days.last.doc; // Assuming days are sorted by DOC
+      final maxDoc =
+          feedScheduleState.days.last.doc; // Assuming days are sorted by DOC
       docRange = "DOC $minDoc–$maxDoc";
     }
 
@@ -75,7 +85,9 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
         appBar: AppBar(title: const Text("Feed Schedule")),
         body: Center(
           // Show loading if feed schedule is still loading, otherwise indicate pond not found.
-          child: Text(feedScheduleState.isLoading ? "Loading pond data..." : "Pond data not found."),
+          child: Text(feedScheduleState.isLoading
+              ? "Loading pond data..."
+              : "Pond data not found."),
         ),
       );
     }
@@ -112,7 +124,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.info_outline, color: Color(0xFF22C55E), size: 24),
+            icon: const Icon(Icons.info_outline,
+                color: Color(0xFF22C55E), size: 24),
             onPressed: () {},
           ),
         ],
@@ -141,7 +154,9 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () {
-                          ref.read(feedScheduleProvider.notifier).loadFeedSchedule(widget.pondId);
+                          ref
+                              .read(feedScheduleProvider.notifier)
+                              .loadFeedSchedule(widget.pondId);
                         },
                         child: const Text("Retry"),
                       ),
@@ -192,10 +207,15 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                                 ],
                               ),
                               child: Column(
-                                children: feedScheduleState.days.asMap().entries.map((entry) {
+                                children: feedScheduleState.days
+                                    .asMap()
+                                    .entries
+                                    .map((entry) {
                                   final config = getFeedConfig(entry.value.doc);
                                   final activeIndices = <int>{
-                                    for (int i = 0; i < config.splits.length; i++)
+                                    for (int i = 0;
+                                        i < config.splits.length;
+                                        i++)
                                       if (config.splits[i] > 0) i
                                   };
                                   return _FeedRow(
@@ -211,9 +231,14 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                             const SizedBox(height: 16),
                             // Recalculate summary total from all day rounds to ensure UI consistency
                             _buildTotalSummaryCard(
-                              feedScheduleState.days.fold(0.0, (sum, day) => sum + day.rounds.fold(0.0, (s, r) => s + r)),
+                              feedScheduleState.days.fold(
+                                  0.0,
+                                  (sum, day) =>
+                                      sum +
+                                      day.rounds.fold(0.0, (s, r) => s + r)),
                             ),
-                            const SizedBox(height: 100), // Space for save button
+                            const SizedBox(
+                                height: 100), // Space for save button
                           ],
                         ),
                       ),
@@ -236,13 +261,26 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
       ),
       child: const Row(
         children: [
-          Expanded(flex: 2, child: _HeaderCell("DOC", align: TextAlign.center, isWhite: true)),
-          Expanded(flex: 3, child: _HeaderCell("R1", align: TextAlign.center, isWhite: true)),
-          Expanded(flex: 3, child: _HeaderCell("R2", align: TextAlign.center, isWhite: true)),
-          Expanded(flex: 3, child: _HeaderCell("R3", align: TextAlign.center, isWhite: true)),
-          Expanded(flex: 3, child: _HeaderCell("R4", align: TextAlign.center, isWhite: true)),
           Expanded(
-              flex: 3, child: _HeaderCell("TOTAL (kg)", align: TextAlign.right, isWhite: true)),
+              flex: 2,
+              child:
+                  _HeaderCell("DOC", align: TextAlign.center, isWhite: true)),
+          Expanded(
+              flex: 3,
+              child: _HeaderCell("R1", align: TextAlign.center, isWhite: true)),
+          Expanded(
+              flex: 3,
+              child: _HeaderCell("R2", align: TextAlign.center, isWhite: true)),
+          Expanded(
+              flex: 3,
+              child: _HeaderCell("R3", align: TextAlign.center, isWhite: true)),
+          Expanded(
+              flex: 3,
+              child: _HeaderCell("R4", align: TextAlign.center, isWhite: true)),
+          Expanded(
+              flex: 3,
+              child: _HeaderCell("TOTAL (kg)",
+                  align: TextAlign.right, isWhite: true)),
         ],
       ),
     );
@@ -274,7 +312,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
               color: Colors.white.withOpacity(0.25),
               borderRadius: AppRadius.rs,
             ),
-            child: const Icon(Icons.bar_chart_rounded, color: Colors.white, size: 26),
+            child: const Icon(Icons.bar_chart_rounded,
+                color: Colors.white, size: 26),
           ),
           AppSpacing.wBase,
           const Column(
@@ -304,7 +343,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     );
   }
 
-  Widget _buildSaveButton(BuildContext context, FeedScheduleState feedScheduleState) {
+  Widget _buildSaveButton(
+      BuildContext context, FeedScheduleState feedScheduleState) {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.only(
@@ -324,7 +364,8 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Feed cannot be zero — set at least one round per day'),
+                        content: Text(
+                            'Feed cannot be zero — set at least one round per day'),
                         backgroundColor: Colors.red,
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -333,7 +374,9 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                   return;
                 }
                 try {
-                  await ref.read(feedScheduleProvider.notifier).saveFeedSchedule(widget.pondId);
+                  await ref
+                      .read(feedScheduleProvider.notifier)
+                      .saveFeedSchedule(widget.pondId);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -355,10 +398,14 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
                   }
                 }
               },
-              icon: const Icon(Icons.save_rounded, color: Colors.white, size: 22),
+              icon:
+                  const Icon(Icons.save_rounded, color: Colors.white, size: 22),
               label: const Text(
                 "Save Changes",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
@@ -375,7 +422,8 @@ class _HeaderCell extends StatelessWidget {
   final String label;
   final TextAlign align;
   final bool isWhite;
-  const _HeaderCell(this.label, {this.align = TextAlign.center, this.isWhite = false});
+  const _HeaderCell(this.label,
+      {this.align = TextAlign.center, this.isWhite = false});
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +445,7 @@ class _FeedRow extends ConsumerStatefulWidget {
   final FeedDayPlan day;
   final int index;
   final bool isToday;
+
   /// Which round indices (0-based) are active for this DOC.
   final Set<int> activeRoundIndices;
   const _FeedRow({
@@ -440,7 +489,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     }
   }
 
-  void _onChanged(int index) {
+  Future<void> _onChanged(int index) async {
     var val = double.tryParse(_controllers[index].text) ?? 0;
     // Block negatives
     if (val < 0) {
@@ -450,14 +499,13 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
           TextSelection.collapsed(offset: _controllers[index].text.length);
     }
 
-    final error = ref
+    final error = await ref
         .read(feedScheduleProvider.notifier)
-        .updateFeed(widget.index, index, val);
+        .updateFeed(widget.pondId, widget.index, index, val);
 
     if (error != null) {
       // Over-limit: revert field and show error
-      _controllers[index].text =
-          widget.day.rounds[index].toStringAsFixed(1);
+      _controllers[index].text = widget.day.rounds[index].toStringAsFixed(1);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(error),
@@ -470,9 +518,8 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     }
 
     // Show redistribution hint when auto-rounds will be updated
-    final willRedistribute =
-        (val == 0 || !widget.day.isRoundManual[index]) &&
-            widget.day.activeRounds > 1;
+    final willRedistribute = (val == 0 || !widget.day.isRoundManual[index]) &&
+        widget.day.activeRounds > 1;
     if (willRedistribute && mounted) {
       setState(() => _showRedistributionHint = true);
       Future.delayed(const Duration(seconds: 3), () {
@@ -606,8 +653,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
         if (_showRedistributionHint)
           Container(
             width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             decoration: const BoxDecoration(
               color: Color(0xFFFFF7ED),
               border: Border(

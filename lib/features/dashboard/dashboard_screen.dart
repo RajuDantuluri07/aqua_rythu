@@ -8,6 +8,10 @@ import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:aqua_rythu/features/growth/growth_provider.dart';
 import 'package:aqua_rythu/features/growth/sampling_log.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
+import '../common/banner_widget.dart';
+import '../farm/farm_provider.dart';
+import '../admin/logo_tap_detector.dart';
+import '../../routes/app_routes.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _bg = Color(0xFFF5F7FA);
@@ -587,16 +591,18 @@ class _Header extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Farm icon
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: _green.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
+          // Farm icon with hidden admin access
+          LogoTapDetector(
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: _green.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.agriculture_rounded,
+                  color: _green, size: 22),
             ),
-            child:
-                const Icon(Icons.agriculture_rounded, color: _green, size: 22),
           ),
           const SizedBox(width: 10),
 

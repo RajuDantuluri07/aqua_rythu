@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_constants.dart';
-import '../../systems/planning/feed_plan_generator.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../utils/logger.dart';
 
@@ -29,6 +28,8 @@ class FeedService {
       await supabase.from('feed_logs').insert({
         'pond_id': pondId,
         'feed_given': actualFeedGiven,
+        'feed_quantity': actualFeedGiven, // For inventory auto-deduction
+        'feed_type': 'feed', // Default feed type for inventory
         'base_feed': baseFeed,
         'created_at': date.toIso8601String(),
         'doc': doc,
@@ -355,5 +356,29 @@ class FeedService {
       }
     }
     throw StateError('unreachable');
+  }
+
+  /// Save individual feed round for atomic updates
+  Future<void> saveFeedRound({
+    required String pondId,
+    required int doc,
+    required int round,
+    required double amount,
+    required bool isManual,
+  }) async {
+    await _withRetry('saveFeedRound(pond=$pondId doc=$doc round=$round)',
+        () async {
+      await supabase.from('feed_logs').insert({
+        'pond_id': pondId,
+        'feed_given': amount,
+        'feed_quantity': amount, // For inventory auto-deduction
+        'feed_type': 'feed', // Default feed type for inventory
+        'created_at': DateTime.now().toIso8601String(),
+        'doc': doc,
+        'round': round,
+        'is_manual': isManual,
+        'engine_version': 'v1',
+      });
+    });
   }
 }

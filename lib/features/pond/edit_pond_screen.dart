@@ -4,7 +4,8 @@ import '../farm/farm_provider.dart';
 import 'package:intl/intl.dart';
 
 class EditPondScreen extends ConsumerStatefulWidget {
-  const EditPondScreen({super.key});
+  final String? pondId;
+  const EditPondScreen({super.key, this.pondId});
 
   @override
   ConsumerState<EditPondScreen> createState() => _EditPondScreenState();
@@ -194,12 +195,16 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
             onPressed: () async {
               if (_farmId != null) {
                 try {
-                  await ref.read(farmProvider.notifier).deletePond(_farmId!, pondId);
+                  await ref
+                      .read(farmProvider.notifier)
+                      .deletePond(_farmId!, pondId);
                 } catch (e) {
                   if (context.mounted) {
                     Navigator.pop(context); // Close dialog
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Failed to delete pond. Please try again.")),
+                      const SnackBar(
+                          content:
+                              Text("Failed to delete pond. Please try again.")),
                     );
                   }
                   return;

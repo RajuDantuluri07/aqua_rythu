@@ -9,7 +9,8 @@ import 'features/profile/farm_settings_provider.dart';
 import 'features/profile/user_provider.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/splash_screen.dart';
-import 'features/pond/pond_dashboard_screen.dart';
+import '../features/pond/pond_dashboard_screen.dart';
+import '../features/home/home_screen.dart';
 import 'features/auth/auth_provider.dart';
 import 'core/config/app_config.dart';
 import 'core/language/language_provider.dart';
@@ -96,7 +97,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     }
 
     if (authState.isAuthenticated) {
-      return const PondDashboardScreen();
+      return const HomeScreen();
     }
 
     return const LoginScreen();

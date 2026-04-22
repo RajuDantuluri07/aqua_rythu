@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aqua_rythu/systems/feed/feed_orchestrator.dart';
-import 'package:aqua_rythu/systems/feed/feed_recommendation_engine.dart';
 import 'package:aqua_rythu/features/feed/models/feed_input.dart';
 import 'package:aqua_rythu/features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/features/pond/enums/stocking_type.dart';
@@ -32,10 +31,10 @@ void main() {
       );
 
       final result = FeedOrchestrator.compute(input);
-      
+
       // ✅ V1 SIMPLIFIED: Always "Maintain Feeding" (decision engine disabled)
       expect(result.decision.action, equals('Maintain Feeding'));
-      
+
       // ✅ Feed is deterministic (tray only, no intake-based adjustment)
       expect(result.finalFeed, greaterThan(0.0));
     });
@@ -49,7 +48,8 @@ void main() {
         abw: null,
         stockingType: StockingType.nursery,
         feedingScore: 3.0,
-        intakePercent: 95.0, // High intake (was triggering Increase in old logic)
+        intakePercent:
+            95.0, // High intake (was triggering Increase in old logic)
         dissolvedOxygen: 6.0,
         temperature: 28.0,
         phChange: 0.0,
@@ -68,10 +68,10 @@ void main() {
       );
 
       final result = FeedOrchestrator.compute(input);
-      
+
       // ✅ V1 SIMPLIFIED: Always "Maintain Feeding"
       expect(result.decision.action, equals('Maintain Feeding'));
-      
+
       // ✅ But feed is increased via tray factor (1.1)
       expect(result.correction.trayFactor, equals(1.1));
       expect(result.finalFeed, greaterThan(result.baseFeed));
@@ -105,4 +105,3 @@ void main() {
     });
   });
 }
-

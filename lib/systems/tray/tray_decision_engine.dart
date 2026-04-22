@@ -123,12 +123,11 @@ class TrayDecisionEngine {
       );
     }
 
-    final validLogs = allTrayLogs
-        .where((l) => !l.isSkipped && l.trays.isNotEmpty)
-        .toList();
+    final validLogs =
+        allTrayLogs.where((l) => !l.isSkipped && l.trays.isNotEmpty).toList();
 
     if (validLogs.isEmpty) {
-      return TrayDecisionResult(
+      return const TrayDecisionResult(
         action: 'MAINTAIN',
         percentage: 0,
         avgScore: 0,
@@ -148,7 +147,8 @@ class TrayDecisionEngine {
         percentage: 0,
         avgScore: 0,
         roundsUsed: roundsUsed,
-        reason: 'Not enough tray data yet ($totalTrays tray reads) — follow schedule',
+        reason:
+            'Not enough tray data yet ($totalTrays tray reads) — follow schedule',
       );
     }
 
@@ -200,7 +200,8 @@ class TrayDecisionEngine {
       reason = '$roundsUsed $roundWord with feed left '
           '($fullCount/$totalCount trays full) — reducing feed';
     } else {
-      reason = 'Mixed tray response across $roundsUsed $roundWord — stable feed';
+      reason =
+          'Mixed tray response across $roundsUsed $roundWord — stable feed';
     }
 
     return TrayDecisionResult(
