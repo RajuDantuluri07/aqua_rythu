@@ -49,24 +49,28 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
           .eq('pond_id', pondId)
           .order('created_at', ascending: false);
 
-      final entries = (data as List).map((row) => HarvestEntry(
-        id: row['id'].toString(),
-        pondId: pondId,
-        date: row['date'] != null
-            ? DateTime.parse(row['date'])
-            : DateTime.parse(row['created_at']),
-        doc: row['doc'] ?? 1,
-        quantity: (row['quantity'] as num?)?.toDouble() ?? 0,
-        countPerKg: row['count_per_kg'] ?? 0,
-        pricePerKg: (row['price'] as num?)?.toDouble() ?? 0,
-        expenses: (row['expenses'] as num?)?.toDouble() ?? 0,
-        notes: row['notes'] ?? '',
-        type: row['harvest_type'] ?? 'partial',
-      )).toList();
+      final entries = (data as List)
+          .map((row) => HarvestEntry(
+                id: row['id'].toString(),
+                pondId: pondId,
+                date: row['date'] != null
+                    ? DateTime.parse(row['date'])
+                    : DateTime.parse(row['created_at']),
+                doc: row['doc'] ?? 1,
+                quantity: (row['quantity'] as num?)?.toDouble() ?? 0,
+                countPerKg: row['count_per_kg'] ?? 0,
+                pricePerKg: (row['price'] as num?)?.toDouble() ?? 0,
+                expenses: (row['expenses'] as num?)?.toDouble() ?? 0,
+                notes: row['notes'] ?? '',
+                type: row['harvest_type'] ?? 'partial',
+              ))
+          .toList();
 
       state = entries;
-    } catch (e) {
-      AppLogger.error('Failed to load harvests', e);
+    } catch (e, stackTrace) {
+      AppLogger.error(
+          'Failed to load harvests for pond $pondId', e, stackTrace);
+      state = []; // Reset to empty state on error
     }
   }
 
@@ -87,8 +91,10 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
         'date': entry.date.toIso8601String().split('T')[0],
         'count_per_kg': entry.countPerKg,
       });
-    } catch (e) {
-      AppLogger.error('Failed to save harvest', e);
+    } catch (e, stackTrace) {
+      AppLogger.error('Failed to save harvest for pond $pondId', e, stackTrace);
+      // Revert optimistic update on error
+      state = state.where((h) => h.date != entry.date).toList();
     }
   }
 

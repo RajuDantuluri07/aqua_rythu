@@ -378,6 +378,12 @@ class AppConfigService {
     return _cachedDebugConfig!;
   }
 
+  /// Get admin security configuration
+  Future<Map<String, dynamic>> getAdminSecurityConfig() async {
+    final data = await _getConfig('admin_security');
+    return data ?? <String, dynamic>{};
+  }
+
   // Update methods for admin panel
   Future<void> updateFeedEngineConfig(FeedEngineConfig config) async {
     await _updateConfig('feed_engine', config.toJson());

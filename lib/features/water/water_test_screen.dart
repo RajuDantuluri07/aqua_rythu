@@ -409,7 +409,9 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _fullHeaderRow(),
-                          ...logs.take(10).map((log) => _fullLogRow(log, farmSettings)),
+                          ...logs
+                              .take(10)
+                              .map((log) => _fullLogRow(log, farmSettings)),
                         ],
                       ),
                     ),

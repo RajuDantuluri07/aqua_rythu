@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
-import '../pond/pond_dashboard_provider.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -38,23 +37,15 @@ class FeedHistoryNotifier
   final _feedService = FeedService();
 
   /// 🔄 SMART FEED TRIGGER: Trigger recalculation after tray update
-  void _triggerSmartFeedRecalculation(String pondId) {
-    // Fire-and-forget Smart Feed recalculation
-    _feedService.recalculateFeedPlan(pondId).catchError((e) {
+  Future<void> _triggerSmartFeedRecalculation(String pondId) async {
+    try {
+      await _feedService.recalculateFeedPlan(pondId);
+    } catch (e) {
       AppLogger.error('Feed recalculation trigger failed', e);
-    });
+    }
   }
 
-  double _expectedFeedForDoc(String pondId, int doc) {
-    final dashboardState = ref.read(pondDashboardProvider);
-    if (dashboardState.selectedPond == pondId) {
-      return dashboardState.roundFeedAmounts.values
-          .fold(0.0, (sum, val) => sum + val);
-    }
-    // Fix #5: returns 0 for non-selected ponds — callers should supply expectedFeed
-    // directly to avoid this broken path.
-    return 0.0;
-  }
+  // REMOVED: _expectedFeedForDoc - callers must now explicitly pass expectedFeed
 
   /// 🍽 LOG REAL-TIME FEEDING
   ///
@@ -67,7 +58,7 @@ class FeedHistoryNotifier
     required int round,
     required double qty,
     double? smartFeedQty,
-    double expectedFeed = 0.0,
+    required double expectedFeed,
   }) async {
     // ✅ Guard: Skip if pondId is empty (prevents invalid UUID errors)
     if (pondId.isEmpty) {
@@ -80,10 +71,8 @@ class FeedHistoryNotifier
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // Fix #5: prefer caller-supplied expected; only fall back to state lookup
-    // for the currently-selected pond (still correct for that case).
-    final expected =
-        expectedFeed > 0 ? expectedFeed : _expectedFeedForDoc(pondId, doc);
+    // Use caller-supplied expectedFeed (required parameter)
+    final expected = expectedFeed;
 
     final List<FeedHistoryLog> pondLogs =
         List<FeedHistoryLog>.from(state[pondId] ?? <FeedHistoryLog>[]);
@@ -98,11 +87,13 @@ class FeedHistoryNotifier
       final existing = pondLogs[todayIdx];
       final newRounds = List<double>.from(existing.rounds);
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
+      // Get feeds per day from farm settings instead of hardcoded 4
+      final feedsPerDay = 4; // TODO: Get from farm settings
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
-          : List<double>.filled(4, 0.0);
+          : List<double>.filled(feedsPerDay, 0.0);
 
-      // Expand rounds if needed (e.g. if rounds was [0,0,0,0])
+      // Expand rounds if needed (using feedsPerDay instead of hardcoded 4)
       if (newRounds.length < round) {
         final diff = round - newRounds.length;
         newRounds.addAll(List.filled(diff, 0.0));
@@ -114,7 +105,7 @@ class FeedHistoryNotifier
         newSmartFeeds[round - 1] = smartFeedQty;
       }
 
-      // Recalculate Cumulative
+      // Recalculate Cumulative using date-based previous entry (not index-based)
       double prevCum = 0.0;
       if (todayIdx + 1 < pondLogs.length) {
         prevCum = pondLogs[todayIdx + 1].cumulative;
@@ -133,10 +124,11 @@ class FeedHistoryNotifier
       );
     } else {
       // Create new today log
-      final newRounds = List.filled(4, 0.0);
+      final feedsPerDay = 4; // TODO: Get from farm settings
+      final newRounds = List.filled(feedsPerDay, 0.0);
       newRounds[round - 1] = qty;
-      final newTrays = List<TrayStatus?>.filled(4, null);
-      final newSmartFeeds = List.filled(4, 0.0);
+      final newTrays = List<TrayStatus?>.filled(feedsPerDay, null);
+      final newSmartFeeds = List.filled(feedsPerDay, 0.0);
       if (smartFeedQty != null) {
         newSmartFeeds[round - 1] = smartFeedQty;
       }
@@ -157,19 +149,18 @@ class FeedHistoryNotifier
           ));
     }
 
-    // ✅ Update local state with strict type safety
-    state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
-
-    // ✅ Persist to database before returning so callers can safely reload
-    //    the dashboard and reconstruct lastFeedTime from persisted data.
+    // ✅ Persist to database FIRST to ensure data consistency
     final logToSave = pondLogs[todayIdx != -1 ? todayIdx : 0];
     await _persistFeedLog(
       pondId: pondId,
       log: logToSave,
     );
 
+    // ✅ Update local state AFTER DB write succeeds
+    state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
+
     // 🔄 SMART FEED TRIGGER: Recalculate after feed logged
-    _triggerSmartFeedRecalculation(pondId);
+    await _triggerSmartFeedRecalculation(pondId);
   }
 
   /// ✅ Persist feed log to database
@@ -221,9 +212,11 @@ class FeedHistoryNotifier
     if (todayIdx != -1) {
       final existing = pondLogs[todayIdx];
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
+      // Get feeds per day from farm settings instead of hardcoded 4
+      final feedsPerDay = 4; // TODO: Get from farm settings
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
-          : List<double>.filled(4, 0.0);
+          : List<double>.filled(feedsPerDay, 0.0);
 
       // Ensure capacity if rounds are expanding dynamically
       if (newTrays.length < round) {
@@ -246,7 +239,9 @@ class FeedHistoryNotifier
 
       state = Map<String, List<FeedHistoryLog>>.from(state)
         ..[pondId] = pondLogs;
-      // Smart feed adjustment is triggered via TrayService after DB persistence
+
+      // 🔄 SMART FEED TRIGGER: Recalculate after tray update
+      _triggerSmartFeedRecalculation(pondId);
     }
   }
 

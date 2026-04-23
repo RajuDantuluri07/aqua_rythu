@@ -6,7 +6,8 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
   final ExpenseService _expenseService;
   final String cropId;
 
-  ExpenseNotifier(this._expenseService, this.cropId) : super(const AsyncValue.loading()) {
+  ExpenseNotifier(this._expenseService, this.cropId)
+      : super(const AsyncValue.loading()) {
     loadExpenses();
   }
 
@@ -22,6 +23,7 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
 
   Future<void> addExpense({
     required String farmId,
+    String? pondId,
     required ExpenseCategory category,
     required double amount,
     String? notes,
@@ -31,12 +33,37 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
       await _expenseService.createExpense(
         farmId: farmId,
         cropId: cropId,
+        pondId: pondId,
         category: category,
         amount: amount,
         notes: notes,
         date: date,
       );
-      
+
+      // Refresh the expenses list
+      await loadExpenses();
+    } catch (e) {
+      // Let the UI handle the error
+      rethrow;
+    }
+  }
+
+  Future<void> updateExpense({
+    required String expenseId,
+    ExpenseCategory? category,
+    double? amount,
+    String? notes,
+    DateTime? date,
+  }) async {
+    try {
+      await _expenseService.updateExpense(
+        expenseId: expenseId,
+        category: category,
+        amount: amount,
+        notes: notes,
+        date: date,
+      );
+
       // Refresh the expenses list
       await loadExpenses();
     } catch (e) {
@@ -48,7 +75,7 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
   Future<void> deleteExpense(String expenseId) async {
     try {
       await _expenseService.deleteExpense(expenseId);
-      
+
       // Refresh the expenses list
       await loadExpenses();
     } catch (e) {
@@ -58,11 +85,12 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
   }
 }
 
-class ExpenseSummaryNotifier extends StateNotifier<AsyncValue<Map<String, dynamic>>> {
+class ExpenseSummaryNotifier
+    extends StateNotifier<AsyncValue<Map<String, dynamic>>> {
   final ExpenseService _expenseService;
   final String cropId;
 
-  ExpenseSummaryNotifier(this._expenseService, this.cropId) 
+  ExpenseSummaryNotifier(this._expenseService, this.cropId)
       : super(const AsyncValue.loading()) {
     loadSummary();
   }
@@ -86,6 +114,18 @@ class ExpenseSummaryNotifier extends StateNotifier<AsyncValue<Map<String, dynami
     }
   }
 
+  Future<List<Expense>> getIndividualExpenses({DateTime? date}) async {
+    try {
+      return await _expenseService.getExpenses(
+        cropId: cropId,
+        startDate: date,
+        endDate: date,
+      );
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<void> refresh() async {
     await loadSummary();
   }
@@ -96,14 +136,16 @@ final expenseServiceProvider = Provider<ExpenseService>((ref) {
   return ExpenseService();
 });
 
-final expensesProvider = StateNotifierProvider.family<ExpenseNotifier, AsyncValue<List<Expense>>, String>(
+final expensesProvider = StateNotifierProvider.family<ExpenseNotifier,
+    AsyncValue<List<Expense>>, String>(
   (ref, cropId) {
     final expenseService = ref.watch(expenseServiceProvider);
     return ExpenseNotifier(expenseService, cropId);
   },
 );
 
-final expenseSummaryProvider = StateNotifierProvider.family<ExpenseSummaryNotifier, AsyncValue<Map<String, dynamic>>, String>(
+final expenseSummaryProvider = StateNotifierProvider.family<
+    ExpenseSummaryNotifier, AsyncValue<Map<String, dynamic>>, String>(
   (ref, cropId) {
     final expenseService = ref.watch(expenseServiceProvider);
     return ExpenseSummaryNotifier(expenseService, cropId);

@@ -6,6 +6,9 @@ import '../../../core/utils/logger.dart';
 
 final supabase = Supabase.instance.client;
 
+// Global lock set to prevent concurrent feed plan generation for the same pond
+final Set<String> _feedPlanLocks = <String>{};
+
 /// Generates a feeding schedule for a range of DOCs (1–120).
 ///
 /// Uses [MasterFeedEngine.compute] as the single source of truth.
@@ -23,66 +26,83 @@ Future<void> generateFeedPlan({
   if (startDoc > endDoc) return;
   final clampedEnd = endDoc.clamp(startDoc, 120);
 
-  AppLogger.info(
-      'Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd '
-      'type=$stockingType density=$stockingCount');
-
-  final existingRows = await supabase
-      .from('feed_rounds')
-      .select('doc')
-      .eq('pond_id', pondId)
-      .gte('doc', startDoc)
-      .lte('doc', clampedEnd);
-
-  final existingDocs = <int>{
-    for (final row in existingRows) row['doc'] as int,
-  };
-
-  final batch = <Map<String, dynamic>>[];
-
-  for (int doc = startDoc; doc <= clampedEnd; doc++) {
-    if (existingDocs.contains(doc)) continue;
-
-    final stockingTypeEnum = stockingType == 'hatchery'
-        ? StockingType.hatchery
-        : StockingType.nursery;
-    final totalFeed = MasterFeedEngine.compute(
-      doc: doc,
-      stockingType: stockingTypeEnum,
-      density: stockingCount,
-    );
-
-    final feedType = getFeedType(doc);
-    final config = getFeedConfig(doc);
-
-    for (int round = 1; round <= 4; round++) {
-      final roundFeed = config.quantityForRound(round - 1, totalFeed);
-      batch.add({
-        'pond_id': pondId,
-        'doc': doc,
-        'round': round,
-        'planned_amount': roundFeed,
-        'base_feed': roundFeed,
-        'feed_type': feedType,
-        'status': 'pending',
-      });
-    }
+  // Acquire lock to prevent concurrent feed plan generation for the same pond
+  final lockKey = '${pondId}_${startDoc}_${endDoc}';
+  if (_feedPlanLocks.contains(lockKey)) {
+    AppLogger.warn(
+        'Feed plan generation already in progress for pond $pondId (DOC $startDoc-$endDoc)');
+    return;
   }
 
-  if (batch.isNotEmpty) {
-    try {
-      // Upsert instead of insert so concurrent auto-recovery calls are safe.
-      // The unique constraint on (pond_id, doc, round) means the second call
-      // simply no-ops on conflicts rather than throwing a duplicate key error.
-      await supabase
-          .from('feed_rounds')
-          .upsert(batch, onConflict: 'pond_id,doc,round', ignoreDuplicates: true);
-      AppLogger.info(
-          'Upserted ${batch.length} feed rounds for pond $pondId '
-          '(DOC $startDoc–$clampedEnd)');
-    } catch (e) {
-      AppLogger.error('Feed plan upsert failed for pond $pondId', e);
+  _feedPlanLocks.add(lockKey);
+  try {
+    AppLogger.info(
+        'Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd '
+        'type=$stockingType density=$stockingCount');
+
+    final existingRows = await supabase
+        .from('feed_rounds')
+        .select('doc')
+        .eq('pond_id', pondId)
+        .gte('doc', startDoc)
+        .lte('doc', clampedEnd);
+
+    final existingDocs = <int>{
+      for (final row in existingRows) row['doc'] as int,
+    };
+
+    final batch = <Map<String, dynamic>>[];
+
+    for (int doc = startDoc; doc <= clampedEnd; doc++) {
+      if (existingDocs.contains(doc)) continue;
+
+      final stockingTypeEnum = stockingType == 'hatchery'
+          ? StockingType.hatchery
+          : StockingType.nursery;
+      final totalFeed = MasterFeedEngine.compute(
+        doc: doc,
+        stockingType: stockingTypeEnum,
+        density: stockingCount,
+      );
+
+      final feedType = getFeedType(doc);
+      final config = getFeedConfig(doc);
+
+      for (int round = 1; round <= 4; round++) {
+        final roundFeed = config.quantityForRound(round - 1, totalFeed);
+        batch.add({
+          'pond_id': pondId,
+          'doc': doc,
+          'round': round,
+          'planned_amount': roundFeed,
+          'base_feed': roundFeed,
+          'feed_type': feedType,
+          'status': 'pending',
+        });
+      }
     }
+
+    if (batch.isNotEmpty) {
+      try {
+        // Upsert instead of insert so concurrent auto-recovery calls are safe.
+        // The unique constraint on (pond_id, doc, round) means the second call
+        // simply no-ops on conflicts rather than throwing a duplicate key error.
+        await supabase.from('feed_rounds').upsert(batch,
+            onConflict: 'pond_id,doc,round', ignoreDuplicates: true);
+        AppLogger.info('Upserted ${batch.length} feed rounds for pond $pondId '
+            '(DOC $startDoc–$clampedEnd)');
+      } catch (e) {
+        AppLogger.error('Feed plan upsert failed for pond $pondId', e);
+        rethrow; // Re-throw to be caught by outer try block
+      }
+    }
+  } catch (e) {
+    AppLogger.error('Feed plan generation failed for pond $pondId', e);
+  } finally {
+    // Always release the lock
+    _feedPlanLocks.remove(lockKey);
+    AppLogger.debug(
+        'Released feed plan lock for pond $pondId (DOC $startDoc-$endDoc)');
   }
 }
 
@@ -93,6 +113,16 @@ Future<void> generateFeedPlan({
 /// feed is computed dynamically on demand, never pre-generated here.
 /// Call this on dashboard load and after tray/feed events.
 Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
+  final lockKey = '${pondId}_ensure_future_feed_${currentDoc}';
+
+  // Prevent concurrent future feed generation for the same pond
+  if (_feedPlanLocks.contains(lockKey)) {
+    AppLogger.warn(
+        'ensureFutureFeedExists already in progress for pond $pondId (DOC $currentDoc)');
+    return;
+  }
+
+  _feedPlanLocks.add(lockKey);
   try {
     final tomorrow = currentDoc + 1;
     // Never pre-generate beyond the blind/tray-habit phase.
@@ -137,5 +167,10 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
         'for pond $pondId');
   } catch (e) {
     AppLogger.error('ensureFutureFeedExists failed for pond $pondId', e);
+  } finally {
+    // Always release the lock
+    _feedPlanLocks.remove(lockKey);
+    AppLogger.debug(
+        'Released ensureFutureFeedExists lock for pond $pondId (DOC $currentDoc)');
   }
 }

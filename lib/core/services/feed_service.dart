@@ -2,9 +2,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_constants.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../utils/logger.dart';
+import 'inventory_service.dart';
 
 class FeedService {
   final supabase = Supabase.instance.client;
+  final _inventoryService = InventoryService();
 
   Future<void> saveFeed({
     required String pondId,
@@ -24,6 +26,10 @@ class FeedService {
     // NOTE: cumulativeFeed (all-time since stocking) is intentionally NOT stored
     // here; it lives only in FeedHistoryLog in-memory state.
     final actualFeedGiven = rounds.fold(0.0, (sum, r) => sum + r);
+
+    // Check inventory stock before feeding (warning only, don't block)
+    await _checkInventoryStock(pondId, actualFeedGiven);
+
     await _withRetry('saveFeed(pond=$pondId doc=$doc)', () async {
       await supabase.from('feed_logs').insert({
         'pond_id': pondId,
@@ -39,6 +45,40 @@ class FeedService {
         'engine_version': engineVersion,
       });
     });
+  }
+
+  /// Check inventory stock and log warnings for negative/low stock
+  Future<void> _checkInventoryStock(String pondId, double feedAmount) async {
+    try {
+      // Get feed item for this pond
+      final feedItem = await _inventoryService.getFeedItemForCrop(pondId);
+      if (feedItem == null) return; // No inventory setup, skip check
+
+      // Get current stock
+      final stock = await _inventoryService.getInventoryStock(pondId, null);
+      final feedStock = stock.firstWhere(
+        (item) => item['category'] == 'feed' && item['is_auto_tracked'] == true,
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (feedStock.isEmpty) return;
+
+      final currentStock =
+          (feedStock['expected_stock'] as num?)?.toDouble() ?? 0.0;
+      final newStock = currentStock - feedAmount;
+
+      // Log warnings
+      if (newStock < 0) {
+        AppLogger.warn(
+            'NEGATIVE STOCK WARNING: Pond $pondId feeding ${feedAmount}kg will result in ${newStock.toStringAsFixed(1)}kg stock');
+      } else if (newStock <= 20.0) {
+        AppLogger.info(
+            'LOW STOCK WARNING: Pond $pondId has ${newStock.toStringAsFixed(1)}kg stock remaining after feeding');
+      }
+    } catch (e) {
+      // Don't fail feeding if stock check fails, just log the error
+      AppLogger.error('Failed to check inventory stock: $e');
+    }
   }
 
   /// Fetch all logged feed entries for a pond, oldest first.
@@ -245,14 +285,14 @@ class FeedService {
     try {
       for (final plan in feedPlans) {
         final doc = plan.doc is int ? plan.doc as int : plan['doc'] as int;
-        final List<double> rounds = plan.rounds is List
+        final List<double> amounts = plan['rounds'] != null
             ? List<double>.from(
                 (plan.rounds as List).map((v) => (v as num).toDouble()))
             : [
-                (plan['r1'] as num?)?.toDouble() ?? 0.0,
-                (plan['r2'] as num?)?.toDouble() ?? 0.0,
-                (plan['r3'] as num?)?.toDouble() ?? 0.0,
-                (plan['r4'] as num?)?.toDouble() ?? 0.0,
+                _validateFeedAmount(plan['r1'], 'r1', pondId, doc),
+                _validateFeedAmount(plan['r2'], 'r2', pondId, doc),
+                _validateFeedAmount(plan['r3'], 'r3', pondId, doc),
+                _validateFeedAmount(plan['r4'], 'r4', pondId, doc),
               ];
 
         // Enforce config constraints: inactive rounds for this DOC are always 0.
@@ -260,9 +300,9 @@ class FeedService {
         // that have no scheduled time for the given DOC.
         final config = getFeedConfig(doc);
         final paddedRounds = List<double>.generate(4, (i) {
-          if (i >= rounds.length) return 0.0;
+          if (i >= amounts.length) return 0.0;
           if (i >= config.splits.length || config.splits[i] == 0.0) return 0.0;
-          return rounds[i];
+          return amounts[i];
         });
 
         // Fetch existing row IDs for this doc (to update vs insert)
@@ -380,5 +420,29 @@ class FeedService {
         'engine_version': 'v1',
       });
     });
+  }
+
+  /// Validate feed amount and fail loudly if invalid
+  static double _validateFeedAmount(
+      dynamic value, String roundName, String pondId, int doc) {
+    if (value == null) {
+      throw ArgumentError(
+          'Missing feed amount for $roundName in pond $pondId, DOC $doc');
+    }
+
+    final amount = (value as num).toDouble();
+
+    if (amount < 0) {
+      throw ArgumentError(
+          'Invalid negative feed amount $amount for $roundName in pond $pondId, DOC $doc');
+    }
+
+    if (amount > 1000) {
+      // Sanity check - no round should exceed 1000kg
+      AppLogger.warn(
+          'Very high feed amount $amount for $roundName in pond $pondId, DOC $doc');
+    }
+
+    return amount;
   }
 }

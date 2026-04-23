@@ -1,9 +1,11 @@
+import 'dart:async';
 import '../../../systems/feed/master_feed_engine.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/services/feed_service.dart';
 import '../../../core/services/pond_service.dart';
 import '../../../systems/planning/feed_plan_generator.dart';
 import '../../../systems/planning/feed_plan_constants.dart';
+import '../../../features/feed/models/orchestrator_result.dart';
 
 /// ===========================================
 /// POND VIEW STATE - Immutable state snapshot
@@ -33,7 +35,13 @@ class PondViewState {
 
   double get totalFeed =>
       roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
-  double get finalFeed => feedResult?.finalFeed ?? 0.0;
+  double get finalFeed {
+    if (feedResult == null) {
+      throw StateError('Feed result not available - call loadPondData() first');
+    }
+    return feedResult!.finalFeed;
+  }
+
   bool get isStopFeeding => feedResult?.decision.action == 'Stop Feeding';
 }
 
@@ -68,8 +76,8 @@ class PondDashboardController {
   /// Cached orchestrator results keyed by 'pondId:doc' for feed computation caching
   final Map<String, OrchestratorResult> _orchestratorCache = {};
 
-  /// Tracks which pondIds are currently loading to prevent double calls
-  final Set<String> _loadingPonds = {};
+  /// Tracks which pondId:doc combinations are currently loading to prevent double calls
+  final Set<String> _loadingKeys = {};
 
   String _cacheKey(String pondId, int doc) => '$pondId:$doc';
 
@@ -92,21 +100,8 @@ class PondDashboardController {
       );
     }
 
-    // DOUBLE CALL PROTECTION: Prevent concurrent loads for same pond
-    if (_loadingPonds.contains(pondId)) {
-      AppLogger.info(
-          'Controller: Load already in progress for pond=$pondId, skipping');
-      // Return cached state if available, otherwise loading state
-      final existing = _viewStateCache[_cacheKey(pondId, knownDoc ?? 0)];
-      if (existing != null) return existing;
-      return PondViewState(
-        pondId: pondId,
-        doc: knownDoc ?? 0,
-        isLoading: true,
-      );
-    }
-
-    _loadingPonds.add(pondId);
+    int doc;
+    late String loadKey;
 
     try {
       // Fetch pond data
@@ -120,39 +115,62 @@ class PondDashboardController {
       }
 
       // Calculate DOC
-      final doc = knownDoc ?? _calculateDoc(pond.stockingDate);
-      final cacheKey = _cacheKey(pondId, doc);
+      doc = knownDoc ?? _calculateDoc(pond.stockingDate);
+      loadKey = _cacheKey(pondId, doc);
+
+      // DOUBLE CALL PROTECTION: Prevent concurrent loads for same pond+doc
+      if (_loadingKeys.contains(loadKey)) {
+        AppLogger.info(
+            'Controller: Load already in progress for pond=$pondId doc=$doc, skipping');
+        // Return cached state if available, otherwise loading state
+        final existing = _viewStateCache[loadKey];
+        if (existing != null) return existing;
+        return PondViewState(
+          pondId: pondId,
+          doc: doc,
+          isLoading: true,
+        );
+      }
+
+      _loadingKeys.add(loadKey);
+
+      final cacheKey = loadKey;
 
       // Check cache first (but not if we're force reloading)
       final cached = _viewStateCache[cacheKey];
       if (cached != null && !cached.isLoading) {
         AppLogger.info(
             'Controller: Using cached state for pond=$pondId doc=$doc');
-        _loadingPonds.remove(pondId);
+        _loadingKeys.remove(loadKey);
         return cached;
       }
 
       // Load today's feed rounds from DB
       final feedData = await _loadFeedRounds(pondId, doc, null);
 
-      // Run feed engine (smart mode only for DOC >= 31)
+      // Run feed engine for ALL DOC (not just DOC >= 31)
       OrchestratorResult? feedResult;
+      feedResult = await _computeFeed(pondId, doc);
+      // Inject smart recommendation for pending rounds (only if smart mode)
       if (doc >= 31) {
-        feedResult = await _computeFeed(pondId, doc);
-        // Inject smart recommendation for pending rounds
-        _injectSmartFeed(feedData, feedResult, doc);
+        _injectSmartFeed(pondId, feedData, feedResult, doc);
       }
 
       // Check for auto-recovery (blind mode schedule regeneration)
+      // Only run if DB truly empty (not just amounts map empty)
       bool didAutoRecover = false;
       if (feedData.amounts.isEmpty && doc < 31) {
-        didAutoRecover = await _regenerateBlindSchedule(
-            pondId, doc, pond.seedCount, pond.area, pond.stockingDate);
-        if (didAutoRecover) {
-          final recovered = await _loadFeedRounds(pondId, doc, null);
-          feedData.amounts.addAll(recovered.amounts);
-          feedData.statuses.addAll(recovered.statuses);
-          feedData.ids.addAll(recovered.ids);
+        // Verify DB is truly empty by checking feed rounds directly
+        final dbRounds = await _feedService.getFeedRounds(pondId, doc);
+        if (dbRounds.isEmpty) {
+          didAutoRecover = await _regenerateBlindSchedule(
+              pondId, doc, pond.seedCount, pond.area, pond.stockingDate);
+          if (didAutoRecover) {
+            final recovered = await _loadFeedRounds(pondId, doc, null);
+            feedData.amounts.addAll(recovered.amounts);
+            feedData.statuses.addAll(recovered.statuses);
+            feedData.ids.addAll(recovered.ids);
+          }
         }
       }
 
@@ -181,7 +199,7 @@ class PondDashboardController {
       );
     } finally {
       // Always remove from loading set to allow future loads
-      _loadingPonds.remove(pondId);
+      _loadingKeys.remove(loadKey);
     }
   }
 
@@ -202,10 +220,30 @@ class PondDashboardController {
       AppLogger.info(
           'Controller: Computed feed for pond=$pondId doc=$doc final=${result.finalFeed.toStringAsFixed(3)}kg');
       return result;
-    } catch (e) {
+    } on ArgumentError catch (e) {
+      // Validation errors - missing required data
       AppLogger.error(
-          'Controller: Feed computation failed for pond=$pondId', e);
-      rethrow;
+          'Controller: Feed validation failed for pond=$pondId doc=$doc - ${e.message}');
+      // Return safe fallback result
+      return _createSafeFallbackResult(
+          pondId, doc, 'Validation error: ${e.message}');
+    } on StateError catch (e) {
+      // State errors - missing dependencies
+      AppLogger.error(
+          'Controller: Feed state error for pond=$pondId doc=$doc - ${e.message}');
+      return _createSafeFallbackResult(
+          pondId, doc, 'State error: ${e.message}');
+    } on TimeoutException catch (e) {
+      // Timeout errors
+      AppLogger.error(
+          'Controller: Feed computation timeout for pond=$pondId doc=$doc', e);
+      return _createSafeFallbackResult(pondId, doc, 'Computation timeout');
+    } catch (e) {
+      // Unexpected errors
+      AppLogger.error(
+          'Controller: Unexpected feed computation error for pond=$pondId doc=$doc',
+          e);
+      return _createSafeFallbackResult(pondId, doc, 'Unexpected error');
     }
   }
 
@@ -231,9 +269,28 @@ class PondDashboardController {
 
       for (final row in rows) {
         final round = row['round'] as int;
-        final amount = (row['planned_amount'] as num?)?.toDouble() ?? 0.0;
-        final status = row['status'] as String? ?? 'pending';
+
+        // Validate required fields
+        if (row['planned_amount'] == null) {
+          AppLogger.error(
+              'Missing planned_amount for round $round in pond $pondId');
+          continue; // Skip invalid row
+        }
+        if (row['status'] == null) {
+          AppLogger.error('Missing status for round $round in pond $pondId');
+          continue; // Skip invalid row
+        }
+
+        final amount = (row['planned_amount'] as num).toDouble();
+        final status = row['status'] as String;
         final id = row['id'] as String? ?? '';
+
+        // Validate amount
+        if (amount < 0) {
+          AppLogger.error(
+              'Invalid negative amount $amount for round $round in pond $pondId');
+          continue; // Skip invalid row
+        }
 
         amounts[round] = amount;
         statuses[round] = status;
@@ -251,6 +308,7 @@ class PondDashboardController {
   /// SMART FEED INJECTION
   /// ===========================================
   void _injectSmartFeed(
+    String pondId,
     ({
       Map<int, double> amounts,
       Map<int, String> statuses,
@@ -266,12 +324,21 @@ class PondDashboardController {
             : result.finalFeed;
 
     // Inject amount for the NEXT pending round only
-    for (int r = 1; r <= 4; r++) {
+    final totalRounds = config.splits.length;
+    for (int r = 1; r <= totalRounds; r++) {
       final alreadyDone = feedData.statuses[r] == 'completed';
       final isActive = r - 1 < config.splits.length && config.splits[r - 1] > 0;
 
       if (!alreadyDone && isActive) {
-        if ((feedData.amounts[r] ?? 0.0) == 0.0) {
+        // Check if amount exists and is valid
+        final currentAmount = feedData.amounts[r];
+        if (currentAmount == null || currentAmount == 0.0) {
+          // Validate safeFinalFeed before using
+          if (safeFinalFeed <= 0) {
+            AppLogger.error(
+                'Invalid safeFinalFeed $safeFinalFeed for round $r in pond $pondId');
+            continue;
+          }
           feedData.amounts[r] = double.parse(
             (safeFinalFeed * config.splits[r - 1]).toStringAsFixed(3),
           );
@@ -344,7 +411,7 @@ class PondDashboardController {
   void clearCache() {
     _viewStateCache.clear();
     _orchestratorCache.clear();
-    _loadingPonds.clear();
+    _loadingKeys.clear();
     AppLogger.info('Controller: All caches cleared');
   }
 
@@ -357,6 +424,17 @@ class PondDashboardController {
         DateTime(stockingDate.year, stockingDate.month, stockingDate.day);
     final today = DateTime(now.year, now.month, now.day);
     return today.difference(start).inDays + 1;
+  }
+
+  /// Create a safe fallback result when feed computation fails
+  OrchestratorResult _createSafeFallbackResult(
+      String pondId, int doc, String reason) {
+    // Use the stopFeed constructor with minimal parameters
+    return OrchestratorResult.stopFeed(
+      reason: reason,
+      engineVersion: 'v1_fallback',
+      doc: doc,
+    );
   }
 }
 

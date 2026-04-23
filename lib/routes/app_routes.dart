@@ -9,12 +9,13 @@ import '../features/dashboard/dashboard_screen.dart';
 import '../features/pond/pond_dashboard_screen.dart';
 import '../features/feed/feed_schedule_screen.dart';
 import '../features/home/home_screen.dart';
-import '../features/admin/admin_screen.dart';
-import '../features/admin/admin_route_guard.dart';
 import '../features/inventory/inventory_setup_screen.dart';
 import '../features/inventory/inventory_dashboard_screen.dart';
 import '../features/expense/expense_summary_screen.dart';
 import '../features/expense/add_expense_screen.dart';
+// Admin module removed temporarily
+// import '../features/admin/admin_passcode_screen.dart';
+// import '../features/admin/admin_dashboard_screen.dart';
 
 class AppRoutes {
   static const login = '/login';
@@ -26,11 +27,12 @@ class AppRoutes {
   static const pondDashboard = '/pond-dashboard';
   static const feedSchedule = '/feed-schedule';
   static const home = '/home';
-  static const admin = '/admin';
   static const inventorySetup = '/inventory_setup';
   static const inventoryDashboard = '/inventory_dashboard';
   static const expenseSummary = '/expense-summary';
   static const addExpense = '/add-expense';
+  static const adminPasscode = '/admin/passcode';
+  static const adminDashboard = '/admin/dashboard';
 
   static Map<String, Widget Function(BuildContext)> routes = {
     login: (context) => const LoginScreen(),
@@ -50,9 +52,6 @@ class AppRoutes {
       return FeedScheduleScreen(pondId: pondId);
     },
     home: (context) => const HomeScreen(),
-    admin: (context) => const AdminRouteGuard(
-          child: AdminScreen(),
-        ),
     inventorySetup: (context) => const InventorySetupScreen(),
     inventoryDashboard: (context) => const InventoryDashboardScreen(),
     expenseSummary: (context) {
@@ -85,5 +84,8 @@ class AppRoutes {
         farmId: args['farmId']!,
       );
     },
+    // Admin routes removed temporarily
+    // adminPasscode: (context) => const AdminPasscodeScreen(),
+    // adminDashboard: (context) => const AdminDashboardScreen(),
   };
 }

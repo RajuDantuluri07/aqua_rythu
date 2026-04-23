@@ -12,10 +12,10 @@ class FarmHealthIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = healthScore >= 90 
-        ? const Color(0xFF006A3A) 
-        : healthScore >= 70 
-            ? const Color(0xFFFFC107) 
+    final color = healthScore >= 90
+        ? const Color(0xFF006A3A)
+        : healthScore >= 70
+            ? const Color(0xFFFFC107)
             : const Color(0xFFE53935);
 
     return Container(
@@ -36,17 +36,22 @@ class FarmHealthIndicator extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Farm health status',
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF3E4A40),
-              letterSpacing: 1.2,
+          Flexible(
+            child: Text(
+              'Farm health status',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF3E4A40),
+                letterSpacing: 1.2,
+              ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               SizedBox(
@@ -58,7 +63,7 @@ class FarmHealthIndicator extends StatelessWidget {
                       width: 48,
                       height: 48,
                       child: CircularProgressIndicator(
-                        value: healthScore / 100,
+                        value: (healthScore.clamp(0, 100)) / 100,
                         strokeWidth: 4,
                         backgroundColor: const Color(0xFFBFEEC9),
                         valueColor: AlwaysStoppedAnimation<Color>(color),
@@ -77,27 +82,36 @@ class FarmHealthIndicator extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      status,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A1C1C),
+                    Flexible(
+                      child: Text(
+                        status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A1C1C),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      healthScore >= 90 ? 'Healthy' : 'Needs Attention',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: color,
-                        letterSpacing: 1.2,
+                    Flexible(
+                      child: Text(
+                        healthScore >= 90 ? 'Healthy' : 'Needs Attention',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
                   ],

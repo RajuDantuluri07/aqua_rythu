@@ -21,12 +21,18 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
   void initState() {
     super.initState();
     final settings = ref.read(farmSettingsProvider);
-    feedPriceController = TextEditingController(text: settings.feedPrice.toString());
-    blindDaysController = TextEditingController(text: settings.blindFeedingDays.toString());
-    jumpThresholdController = TextEditingController(text: settings.feedJumpThreshold.toString());
-    tray30Controller = TextEditingController(text: settings.trayCalibration30_60.toString());
-    tray60Controller = TextEditingController(text: settings.trayCalibration60_90.toString());
-    tray90Controller = TextEditingController(text: settings.trayCalibration90Plus.toString());
+    feedPriceController =
+        TextEditingController(text: settings.feedPrice.toString());
+    blindDaysController =
+        TextEditingController(text: settings.blindFeedingDays.toString());
+    jumpThresholdController =
+        TextEditingController(text: settings.feedJumpThreshold.toString());
+    tray30Controller =
+        TextEditingController(text: settings.trayCalibration30_60.toString());
+    tray60Controller =
+        TextEditingController(text: settings.trayCalibration60_90.toString());
+    tray90Controller =
+        TextEditingController(text: settings.trayCalibration90Plus.toString());
   }
 
   @override
@@ -43,26 +49,32 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
   void _save() async {
     try {
       final settings = ref.read(farmSettingsProvider);
-      
+
       // Parse and validate numeric inputs
-      final feedPrice = double.tryParse(feedPriceController.text) ?? settings.feedPrice;
-      final blindDays = int.tryParse(blindDaysController.text) ?? settings.blindFeedingDays;
-      final jumpThreshold = int.tryParse(jumpThresholdController.text) ?? settings.feedJumpThreshold;
-      final tray30 = double.tryParse(tray30Controller.text) ?? settings.trayCalibration30_60;
-      final tray60 = double.tryParse(tray60Controller.text) ?? settings.trayCalibration60_90;
-      final tray90 = double.tryParse(tray90Controller.text) ?? settings.trayCalibration90Plus;
+      final feedPrice =
+          double.tryParse(feedPriceController.text) ?? settings.feedPrice;
+      final blindDays =
+          int.tryParse(blindDaysController.text) ?? settings.blindFeedingDays;
+      final jumpThreshold = int.tryParse(jumpThresholdController.text) ??
+          settings.feedJumpThreshold;
+      final tray30 = double.tryParse(tray30Controller.text) ??
+          settings.trayCalibration30_60;
+      final tray60 = double.tryParse(tray60Controller.text) ??
+          settings.trayCalibration60_90;
+      final tray90 = double.tryParse(tray90Controller.text) ??
+          settings.trayCalibration90Plus;
 
       await ref.read(farmSettingsProvider.notifier).saveAllSettings(
-        farmType: settings.farmType,
-        feedsPerDay: settings.feedsPerDay,
-        feedPrice: feedPrice,
-        blindFeedingDays: blindDays,
-        feedJumpThreshold: jumpThreshold,
-        feedTimes: settings.feedTimes,
-        trayCalibration30_60: tray30,
-        trayCalibration60_90: tray60,
-        trayCalibration90Plus: tray90,
-      );
+            farmType: settings.farmType,
+            feedsPerDay: settings.feedsPerDay,
+            feedPrice: feedPrice,
+            blindFeedingDays: blindDays,
+            feedJumpThreshold: jumpThreshold,
+            feedTimes: settings.feedTimes,
+            trayCalibration30_60: tray30,
+            trayCalibration60_90: tray60,
+            trayCalibration90Plus: tray90,
+          );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Settings saved successfully")),
@@ -70,7 +82,7 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error saving settings: $e"),
+          content: Text("Error saving settings"),
           backgroundColor: Colors.red,
         ),
       );
@@ -90,11 +102,14 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           /// GENERAL
-          const Text("GENERAL", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text("GENERAL",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
 
           const SizedBox(height: 10),
 
-          _dropdown("Farm Type", settings.farmType, ["Semi-Intensive", "Intensive"], (v) {
+          _dropdown(
+              "Farm Type", settings.farmType, ["Semi-Intensive", "Intensive"],
+              (v) {
             if (v != null) {
               ref.read(farmSettingsProvider.notifier).setFarmType(v);
             }
@@ -125,7 +140,8 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
           const SizedBox(height: 20),
 
           /// FEED TIMES
-          const Text("FEED TIMES", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text("FEED TIMES",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
 
           const SizedBox(height: 10),
 
@@ -168,7 +184,10 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
           const SizedBox(height: 16),
           Text(
             "Settings are automatically applied to feed calculations and water quality monitoring.",
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+            style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic),
             textAlign: TextAlign.center,
           ),
         ],
@@ -197,7 +216,8 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
         ),
       ],
@@ -218,7 +238,8 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
         ),
       ],
@@ -249,4 +270,3 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
     );
   }
 }
-

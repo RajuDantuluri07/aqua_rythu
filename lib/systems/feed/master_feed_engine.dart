@@ -31,22 +31,18 @@ import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/validators/feed_input_validator.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/services/feed_safety_service.dart';
-import '../tray/tray_decision_engine.dart';
-import 'feed_input.dart';
-import 'orchestrator_result.dart';
 import '../../../core/services/app_config_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // import '../growth/fcr_engine.dart'; // DISABLED FOR V1
-import 'feed_decision_engine.dart'; // Used for FeedDecision result
 import 'feed_input_builder.dart';
-import 'feed_intelligence_engine.dart'; // Used for IntelligenceResult
-import 'feed_recommendation_engine.dart'; // Used for FeedRecommendation result
-// import 'smart_feed_engine_v2.dart'; // ❌ DISABLED FOR V1 LAUNCH
+// import 'smart_feed_engine_v2.dart'; // DISABLED FOR V1 LAUNCH
 import '../../../features/feed/models/feed_input.dart';
 import '../../../features/feed/models/correction_result.dart';
 import '../../../features/feed/models/feed_debug_info.dart';
 import '../../../features/feed/models/orchestrator_result.dart';
 import 'engine_constants.dart';
+import 'feed_calculations.dart';
+import 'feed_models.dart';
 export '../../../features/feed/models/correction_result.dart';
 export '../../../features/feed/models/feed_debug_info.dart';
 export '../../../features/feed/models/orchestrator_result.dart';
@@ -62,6 +58,21 @@ const double kAbsoluteMaxFeed = 50.0;
 /// Minimum DOC for smart-mode corrections (SmartFeedEngineV2, FCR, intelligence).
 /// DOC ≤ this value = blind phase; DOC > this value = smart phase.
 const int kSmartModeMinDoc = 30;
+
+// ── VALIDATION MODEL ───────────────────────────────────────────────────────────
+
+/// Result of critical input validation
+class ValidationResult {
+  final bool isValid;
+  final String reason;
+
+  const ValidationResult({required this.isValid, required this.reason});
+
+  factory ValidationResult.valid() =>
+      const ValidationResult(isValid: true, reason: '');
+  factory ValidationResult.invalid(String reason) =>
+      ValidationResult(isValid: false, reason: reason);
+}
 
 // ── DEBUG MODEL ───────────────────────────────────────────────────────────────
 
@@ -168,17 +179,42 @@ class MasterFeedEngine {
     required StockingType stockingType,
     required int density,
   }) {
+    // ── STEP 0: ZERO SHRIMP SAFETY CHECK ───────────────────────────────────
+    if (density <= 0) {
+      AppLogger.error(
+        '[MasterFeedEngine] ZERO SHRIMP COUNT DETECTED: density=$density. '
+        'Feed calculation STOPPED. No minimum feed override applied.',
+      );
+      return FeedDebugData(
+        doc: doc,
+        stockingType: stockingType,
+        density: density,
+        baseFeed: 0.0,
+        adjustedFeed: 0.0,
+        trayFactor: 1.0,
+        rawFeed: 0.0,
+        finalFeed: 0.0,
+        minFeed: 0.0,
+        maxFeed: 0.0,
+        isClamped: false,
+        leftover: null,
+        trayActive: false,
+        trayStatusReason: 'Zero shrimp count - feeding stopped',
+        wasInputClamped: false,
+      );
+    }
+
     // ── Step 0: Validation ────────────────────────────────────────────────
     final int validatedDoc = doc < 1 ? 1 : doc;
-    final int validatedDensity = density <= 0 ? 100000 : density;
+    final int validatedDensity = density;
 
     // ── Step 0b: Input clamping ───────────────────────────────────────────
-    final int safeDoc = validatedDoc.clamp(1, FeedConfig.maxDoc);
+    final int safeDoc = validatedDoc.clamp(1, 120); // Extended to 120 DOC
     final int safeDensity = validatedDensity.clamp(1000, 1000000);
     final bool wasInputClamped = doc != safeDoc || density != safeDensity;
 
     // ── Step 1: Base feed (kg per 100 K shrimp) ───────────────────────────
-    final double base = FeedConfig.baseFeedPer100k(safeDoc, stockingType);
+    final double base = docFeedCurve(safeDoc);
 
     // ── Step 2: Density scaling ───────────────────────────────────────────
     final double adjustedBase = base * (safeDensity / 100000);
@@ -206,14 +242,15 @@ class MasterFeedEngine {
       doc: safeDoc,
       stockingType: stockingType,
       density: safeDensity,
-      baseFeed: double.parse(base.toStringAsFixed(3)),
-      adjustedFeed: double.parse(adjustedBase.toStringAsFixed(3)),
+      baseFeed: double.tryParse(base.toStringAsFixed(3)) ?? base,
+      adjustedFeed:
+          double.tryParse(adjustedBase.toStringAsFixed(3)) ?? adjustedBase,
       trayFactor: 1.0, // Tray logic removed from base compute
-      rawFeed:
-          double.parse(adjustedBase.toStringAsFixed(3)), // No tray adjustment
-      finalFeed: double.parse(final_.toStringAsFixed(3)),
-      minFeed: double.parse(minFeed.toStringAsFixed(3)),
-      maxFeed: double.parse(maxFeed.toStringAsFixed(3)),
+      rawFeed: double.tryParse(adjustedBase.toStringAsFixed(3)) ??
+          adjustedBase, // No tray adjustment
+      finalFeed: double.tryParse(final_.toStringAsFixed(3)) ?? final_,
+      minFeed: double.tryParse(minFeed.toStringAsFixed(3)) ?? minFeed,
+      maxFeed: double.tryParse(maxFeed.toStringAsFixed(3)) ?? maxFeed,
       isClamped: clamped,
       leftover: null, // Tray logic removed from base compute
       trayActive: false, // Tray logic removed from base compute
@@ -242,6 +279,20 @@ class MasterFeedEngine {
     // Optional admin config override for testing/future use
     FeedEngineConfig? adminConfigOverride,
   }) {
+    // ── STEP 0: CRITICAL DATA VALIDATION ───────────────────────────────────
+    final ValidationResult validation = _validateCriticalInputs(input);
+    if (!validation.isValid) {
+      AppLogger.error(
+        '[MasterFeedEngine] CRITICAL DATA VALIDATION FAILED: ${validation.reason}. '
+        'Feed calculation STOPPED.',
+      );
+      return OrchestratorResult.stopFeed(
+        reason: validation.reason,
+        engineVersion: version,
+        doc: input.doc,
+      );
+    }
+
     FeedInputValidator.validate(input);
 
     // ── STEP 0: Admin Panel Controls (with safe defaults) ─────────────────────
@@ -293,12 +344,24 @@ class MasterFeedEngine {
         ? input.anchorFeed!
         : stage1Debug.finalFeed;
 
-    // ── STEP 2: Tray Factor (simple & deterministic) ───────────────────────
-    // Force blind feeding if smart feed is disabled
-    final trayFactor =
-        forceBlindFeeding ? 1.0 : _simpleTrayFactor(input.trayStatuses);
+    // ── STEP 2: DOC Rule Enforcement ───────────────────────────────────────
+    final bool isBlindPhase = input.doc <= 30;
 
-    // ── STEP 3: Apply factor ──────────────────────────────────────────────
+    // Smart feeding activates when: DOC > 30 (sampling removed)
+    final bool shouldUseSmartFeeding = !isBlindPhase && input.doc > 30;
+
+    // Force blind feeding if admin disabled smart feed
+    final bool useBlindFeeding = forceBlindFeeding || !shouldUseSmartFeeding;
+
+    // ── STEP 3: Factor Pipeline ───────────────────────────────────────────────
+    double trayFactor = 1.0;
+
+    if (!useBlindFeeding) {
+      // Smart mode: apply tray factor ONLY
+      trayFactor = calculateTrayFactor(input.trayStatuses);
+    }
+
+    // ── STEP 4: Apply Tray Factor Only ───────────────────────────────────────
     double feed = baseFeed * trayFactor;
 
     // ── STEP 3.5: Apply Global Multiplier from Admin Panel ───────────────────
@@ -318,9 +381,8 @@ class MasterFeedEngine {
 
     // Apply feed safety clamping before final calculation
     final safetyResult = FeedSafetyService().validateFeedCalculation(
-      calculatedFeed: double.parse(feed.toStringAsFixed(3)),
-      pondId:
-          'pond-${input.doc}', // Use DOC as identifier since pondId not available
+      calculatedFeed: double.tryParse(feed.toStringAsFixed(3)) ?? feed,
+      pondId: input.pondId,
       calculationType: 'master_feed_engine',
     );
 
@@ -338,36 +400,17 @@ class MasterFeedEngine {
       status: FeedStatus.onTrack,
     );
 
-    // Minimal correction result (all factors = 1.0 except tray)
+    // Updated correction result with tray factor only
     final correction = CorrectionResult(
-      finalFeed: finalFeed,
+      baseFeed: baseFeed,
       trayFactor: trayFactor,
-      growthFactor: 1.0, // ❌ DISABLED
-      samplingFactor: 1.0,
-      environmentFactor: 1.0, // ❌ DISABLED (DO already checked)
-      fcrFactor: 1.0, // ❌ DISABLED
-      intelligenceFactor: 1.0, // ❌ DISABLED
-      v2Factor: trayFactor, // Only tray factor in V1
-      combinedFactor: trayFactor,
-      reasons: trayFactor != 1.0
-          ? ['Tray appetite adjustment: ${_factorToPercent(trayFactor)}']
-          : [],
+      finalFeed: finalFeed,
+      safetyStatus: finalFeed > 0 ? 'normal' : 'stopped',
+      reasons: _buildFactorReasons(trayFactor, useBlindFeeding),
       alerts: const [],
       isCriticalStop: false,
-      isSmartApplied: false,
-      factorBreakdown: {'tray': trayFactor},
-      factorExplanations: trayFactor != 1.0
-          ? {
-              'tray': trayFactor >= 1.10
-                  ? 'Clean tray — good appetite'
-                  : trayFactor >= 1.05
-                      ? 'Light leftover — acceptable'
-                      : trayFactor <= 0.70
-                          ? 'High leftover — reduce feeding'
-                          : 'Moderate leftover — stable',
-            }
-          : {},
-      wasCombinedClamped: wasClamped,
+      isSmartApplied: !useBlindFeeding,
+      wasClamped: wasClamped,
       clampReason: clampReason,
     );
 
@@ -385,10 +428,11 @@ class MasterFeedEngine {
     );
 
     // Minimal recommendation
+    final feedsPerDay = input.feedsPerDay ?? 4;
     final recommendation = FeedRecommendation(
-      nextFeedKg: finalFeed / 5, // Rough 5 feeds per day
+      nextFeedKg: finalFeed / feedsPerDay,
       nextFeedTime: DateTime.now().add(const Duration(hours: 4)),
-      instruction: 'Feed ${(finalFeed / 5).toStringAsFixed(1)} kg',
+      instruction: 'Feed ${(finalFeed / feedsPerDay).toStringAsFixed(1)} kg',
     );
 
     AppLogger.info(
@@ -501,102 +545,81 @@ class MasterFeedEngine {
     }
 
     if (full > empty) {
-      return 0.85; // More full trays — reduce feeding
+      return 0.92; // More full trays — reduce feeding (less aggressive)
     } else if (empty > full) {
-      return 1.1; // More empty trays — increase feeding
+      return 1.05; // More empty trays — increase feeding (less aggressive)
     } else {
       return 1.0; // Balanced — no adjustment
     }
   }
 
-  /// Convert factor to human-readable percentage change.
-  /// Used for UI display.
+  /// Build list of factor reasons for UI display
+  static List<String> _buildFactorReasons(
+      double trayFactor, bool useBlindFeeding) {
+    final reasons = <String>[];
 
-  /// ❌ DISABLED FOR V1 LAUNCH
-  /// Intelligence factor calculation — no longer used
-  /// Replaced by simple tray-only logic
-  static double _intelligenceFactor(IntelligenceResult intel) {
-    if (!intel.hasActualData) return 1.0;
-
-    final deviation = intel.deviationPercent;
-    if (deviation == null) return 1.0;
-
-    double factor = 1.0;
-
-    if (deviation > FeedEngineConstants.intelligenceHighThreshold) {
-      factor = FeedEngineConstants.intelligenceHighFactor;
-    } else if (deviation > FeedEngineConstants.intelligenceLowThreshold) {
-      factor = FeedEngineConstants.intelligenceMediumFactor;
-    } else if (deviation < -FeedEngineConstants.intelligenceHighThreshold) {
-      factor = FeedEngineConstants.intelligenceVeryLowFactor;
-    } else if (deviation < -FeedEngineConstants.intelligenceLowThreshold) {
-      factor = FeedEngineConstants.intelligenceLowFactor;
+    if (useBlindFeeding) {
+      reasons.add('Blind feeding phase (DOC ≤ 30) - no adjustments');
+      return reasons;
     }
 
-    return factor.clamp(
-        FeedEngineConstants.minFeedFactor, FeedEngineConstants.maxFeedFactor);
-  }
-
-  /// ❌ DISABLED FOR V1 LAUNCH
-  /// Old multi-factor explanation builder — no longer used
-  /// Replaced by simple tray-only logic
-
-  /// ❌ DISABLED FOR V1 LAUNCH
-  /// Old multi-factor explanation builder — no longer used
-  /// Replaced by simple tray-only logic
-  static String _factorToPercent(double factor) {
-    final pct = ((factor - 1.0) * 100).round();
-    if (pct > 0) return '+$pct%';
-    if (pct < 0) return '$pct%';
-    return '0%';
-  }
-
-  /// ❌ DISABLED FOR V1 LAUNCH
-  /// Old multi-factor explanation builder — no longer used
-  /// Replaced by simple tray-only logic
-  static Map<String, String> _buildFactorExplanations({
-    required double trayFactor,
-    required double growthFactor,
-    required double waterFactor,
-    required double fcrFactor,
-    required double intelligenceFactor,
-    required String intelligenceLabel,
-  }) {
-    final reasons = <String, String>{};
-
-    if ((trayFactor - 1.0).abs() > 0.01) {
-      final label = trayFactor >= 1.10
-          ? 'Clean tray — shrimp eating well'
-          : trayFactor >= 1.05
-              ? 'Light leftover — good appetite'
-              : trayFactor <= 0.70
-                  ? 'Very high leftover'
-                  : 'Moderate leftover';
-      reasons['tray'] = '$label → ${_factorToPercent(trayFactor)}';
-    }
-
-    if ((growthFactor - 1.0).abs() > 0.01) {
-      final label =
-          growthFactor >= 1.05 ? 'Good growth' : 'Below-expected growth';
-      reasons['growth'] = '$label → ${_factorToPercent(growthFactor)}';
-    }
-
-    if (waterFactor < 1.0) {
-      final label = waterFactor <= 0.80 ? 'High water risk' : 'Water stress';
-      reasons['environment'] = '$label → ${_factorToPercent(waterFactor)}';
-    }
-
-    if ((fcrFactor - 1.0).abs() > 0.01) {
-      final label =
-          fcrFactor > 1.0 ? 'Underfeeding detected' : 'Overfeeding detected';
-      reasons['fcr'] = '$label → ${_factorToPercent(fcrFactor)}';
-    }
-
-    if ((intelligenceFactor - 1.0).abs() > 0.01) {
-      reasons['intelligence'] =
-          'Feed deviation ($intelligenceLabel) → ${_factorToPercent(intelligenceFactor)}';
+    if (trayFactor != 1.0) {
+      reasons.add('Tray appetite adjustment: ${factorToPercent(trayFactor)}');
     }
 
     return reasons;
+  }
+
+  /// Build factor explanations for UI display
+  static Map<String, String> _buildFactorExplanations(double trayFactor) {
+    final explanations = <String, String>{};
+
+    if (trayFactor != 1.0) {
+      if (trayFactor >= 1.10) {
+        explanations['tray'] = 'Clean trays — good appetite';
+      } else if (trayFactor >= 1.05) {
+        explanations['tray'] = 'Light leftover — acceptable';
+      } else if (trayFactor <= 0.85) {
+        explanations['tray'] = 'High leftover — reduce feeding';
+      } else {
+        explanations['tray'] = 'Moderate leftover — stable';
+      }
+    }
+
+    return explanations;
+  }
+
+  /// Validate critical inputs that must stop feed calculation if invalid
+  static ValidationResult _validateCriticalInputs(FeedInput input) {
+    // ── ZERO SHRIMP CHECK ────────────────────────────────────────────────
+    if (input.seedCount <= 0) {
+      return ValidationResult.invalid(
+        'ZERO SHRIMP COUNT: seedCount=${input.seedCount}. Cannot calculate feed.',
+      );
+    }
+
+    // ── DOC VALIDATION ───────────────────────────────────────────────────
+    if (input.doc < 1) {
+      return ValidationResult.invalid(
+        'INVALID DOC: doc=${input.doc}. Must be >= 1.',
+      );
+    }
+
+    // ── CRITICAL WATER QUALITY CHECK ─────────────────────────────────────
+    if (input.dissolvedOxygen < 2.0) {
+      return ValidationResult.invalid(
+        'CRITICAL DO: dissolvedOxygen=${input.dissolvedOxygen} mg/L. Below safe threshold.',
+      );
+    }
+
+    // ── EXTREME AMMONIA CHECK ────────────────────────────────────────────
+    if (input.ammonia > 2.0) {
+      return ValidationResult.invalid(
+        'CRITICAL AMMONIA: ammonia=${input.ammonia} ppm. Above safe threshold.',
+      );
+    }
+
+    // All critical inputs valid
+    return ValidationResult.valid();
   }
 }

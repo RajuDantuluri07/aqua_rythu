@@ -28,7 +28,7 @@ class PondValue {
 class PondValueEngine {
   // Default market price per kg for L. vannamei.
   // Pulled from FeedEngineConstants so both engines share one tunable value.
-  static const double _defaultPricePerKg = FeedEngineConstants.harvestPricePerKg;
+  static double _defaultPricePerKg = FeedEngineConstants.harvestPricePerKg;
 
   /// Calculate pond value.
   ///
@@ -67,8 +67,10 @@ class PondValueEngine {
     double factor = 1.0;
     if (fedToday) factor += 0.01;
     if (missedFeed) factor -= 0.02;
-    if (traySignal == 'full') factor -= 0.02; // overfeeding → FCR risk, feed wasted
-    if (traySignal == 'empty') factor += 0.01; // shrimp eating well → biomass growing
+    if (traySignal == 'full')
+      factor -= 0.02; // overfeeding → FCR risk, feed wasted
+    if (traySignal == 'empty')
+      factor += 0.01; // shrimp eating well → biomass growing
 
     final double finalValue = baseValue * factor;
     final double delta = finalValue * 0.01; // +1% per feeding event
@@ -79,10 +81,10 @@ class PondValueEngine {
     // arithmetic protection only — real output never leaves [50, 90].
     // Comment corrected; SSOT updated to match.
     int confidence = 60; // base
-    if (doc > 30) confidence += 10;        // pond age signal
+    if (doc > 30) confidence += 10; // pond age signal
     if (feedingConsistent) confidence += 10; // ≥3-day streak
-    if (hasTrayData) confidence += 10;     // tray signal present
-    if (missingLogs) confidence -= 10;     // today's data absent
+    if (hasTrayData) confidence += 10; // tray signal present
+    if (missingLogs) confidence -= 10; // today's data absent
     // Effective range: min=50 (base - penalty), max=90 (base + all bonuses)
     confidence = confidence.clamp(0, 100);
 

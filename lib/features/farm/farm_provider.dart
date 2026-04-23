@@ -18,18 +18,21 @@ class Pond {
   final int plSize;
   final int numTrays;
   final PondStatus status;
-  final double? currentAbw;        // Latest sampled average body weight
-  final DateTime? latestSampleDate; // When the last sample was taken (for freshness check)
-  final bool isSmartFeedEnabled;   // Smart Feed activation status
+  final double? currentAbw; // Latest sampled average body weight
+  final DateTime?
+      latestSampleDate; // When the last sample was taken (for freshness check)
+  final bool isSmartFeedEnabled; // Smart Feed activation status
 
   // Feed round config
-  final int initialFeedRounds;    // Rounds for DOC 1–7 (default 2)
-  final int postWeekFeedRounds;   // Rounds for DOC 8+  (default 4)
-  final bool isCustomFeedPlan;    // If true, use above values; else use default DOC logic
+  final int initialFeedRounds; // Rounds for DOC 1–7 (default 2)
+  final int postWeekFeedRounds; // Rounds for DOC 8+  (default 4)
+  final bool
+      isCustomFeedPlan; // If true, use above values; else use default DOC logic
 
   // Anchor feed (DOC > 30): farmer-set baseline, adjusted by tray response
   final double? anchorFeed;
   final bool isAnchorInitialized;
+  final double? fcr;
 
   Pond({
     required this.id,
@@ -48,6 +51,7 @@ class Pond {
     this.isCustomFeedPlan = false,
     this.anchorFeed,
     this.isAnchorInitialized = false,
+    this.fcr = null,
   });
 
   /// Returns how many feed rounds apply for the given DOC, respecting
@@ -106,6 +110,13 @@ class Pond {
     return calculateDocFromStockingDate(stockingDate, now: now);
   }
 
+  /// Computed today's feed amount based on feed history
+  /// This is the single source of truth for today's feed data
+  double? get todayFeed {
+    // This will be computed from feed history in the home screen
+    // Returning null here indicates computation is needed
+    return null;
+  }
 }
 
 class Farm {
@@ -154,7 +165,7 @@ class FarmState {
 class FarmNotifier extends StateNotifier<FarmState> {
   FarmNotifier()
       : super(FarmState(
-          farms: [],  // ✅ CLEANED: Empty list - will load from Supabase
+          farms: [], // ✅ CLEANED: Empty list - will load from Supabase
           selectedId: '',
         ));
 
@@ -172,7 +183,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
 
     try {
       final data = await FarmService().getFarmsWithPonds();
-      
+
       final loadedFarms = <Farm>[];
       for (final f in data) {
         try {
@@ -184,13 +195,18 @@ class FarmNotifier extends StateNotifier<FarmState> {
                 name: p['name'] ?? '',
                 area: (p['area'] as num?)?.toDouble() ?? 0.0,
                 stockingDate: p['stocking_date'] != null
-                    ? DateTime.tryParse(p['stocking_date'] as String) ?? DateTime.now()
+                    ? DateTime.tryParse(p['stocking_date'] as String) ??
+                        DateTime.now()
                     : DateTime.now(),
                 seedCount: p['seed_count'] ?? 100000,
                 plSize: p['pl_size'] ?? 10,
                 numTrays: p['num_trays'] ?? 4,
-                status: p['status'] == 'completed' ? PondStatus.completed : PondStatus.active,
-                currentAbw: p['current_abw'] != null ? (p['current_abw'] as num).toDouble() : null,
+                status: p['status'] == 'completed'
+                    ? PondStatus.completed
+                    : PondStatus.active,
+                currentAbw: p['current_abw'] != null
+                    ? (p['current_abw'] as num).toDouble()
+                    : null,
                 latestSampleDate: p['latest_sample_date'] != null
                     ? DateTime.tryParse(p['latest_sample_date'] as String)
                     : null,
@@ -198,7 +214,9 @@ class FarmNotifier extends StateNotifier<FarmState> {
                 initialFeedRounds: p['initial_feed_rounds'] ?? 2,
                 postWeekFeedRounds: p['post_week_feed_rounds'] ?? 4,
                 isCustomFeedPlan: p['is_custom_feed_plan'] ?? false,
-                anchorFeed: p['anchor_feed'] != null ? (p['anchor_feed'] as num).toDouble() : null,
+                anchorFeed: p['anchor_feed'] != null
+                    ? (p['anchor_feed'] as num).toDouble()
+                    : null,
                 isAnchorInitialized: p['is_anchor_initialized'] ?? false,
               ));
             } catch (e) {
@@ -218,7 +236,8 @@ class FarmNotifier extends StateNotifier<FarmState> {
 
       state = state.copyWith(
         farms: loadedFarms,
-        selectedId: setAsSelectedId ?? (loadedFarms.isNotEmpty ? loadedFarms.first.id : ''),
+        selectedId: setAsSelectedId ??
+            (loadedFarms.isNotEmpty ? loadedFarms.first.id : ''),
       );
     } catch (e) {
       AppLogger.error("Error loading farms", e);
@@ -379,6 +398,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
       }).toList(),
     );
   }
+
   void updateFarm({
     required String farmId,
     required String name,
@@ -402,7 +422,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
   void deleteFarm(String farmId) {
     final updatedFarms = state.farms.where((f) => f.id != farmId).toList();
     final newSelectedId = updatedFarms.isNotEmpty ? updatedFarms.first.id : '';
-    
+
     state = state.copyWith(
       farms: updatedFarms,
       selectedId: newSelectedId,
@@ -415,7 +435,8 @@ class FarmNotifier extends StateNotifier<FarmState> {
     FeedService().recalculateFeedPlan(pondId).catchError((e) {
       AppLogger.error('Feed recalculation trigger failed', e);
     });
-  }}
+  }
+}
 
 final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
   return FarmNotifier();
@@ -425,7 +446,8 @@ final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
 /// to ensure DOC increments automatically at midnight.
 final currentDateProvider = Provider<DateTime>((ref) {
   // Rebuild this provider every hour
-  final timer = Timer.periodic(const Duration(hours: 1), (_) => ref.invalidateSelf());
+  final timer =
+      Timer.periodic(const Duration(hours: 1), (_) => ref.invalidateSelf());
   ref.onDispose(() => timer.cancel());
   return DateTime.now();
 });

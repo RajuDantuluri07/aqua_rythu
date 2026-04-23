@@ -9,12 +9,135 @@ import '../farm/farm_provider.dart';
 import '../farm/edit_farm_dialog.dart';
 import 'user_provider.dart';
 import 'package:aqua_rythu/core/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/admin_security_service.dart';
+// Admin provider removed temporarily
+// import '../admin/admin_provider.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  void _handleAboutClick() {
+    _showAboutDialog();
+  }
+
+  void _navigateToAdminAccess() {
+    Navigator.of(context).pushNamed(AppRoutes.adminPasscode);
+  }
+
+  void _showAboutDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('About AquaRythu'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('AquaRythu - Smart Shrimp Farming'),
+            SizedBox(height: 8),
+            Text('Version: 1.0.0'),
+            SizedBox(height: 8),
+            Text('© 2024 AquaRythu Technologies'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAdminPasscodeDialog() {
+    final TextEditingController passcodeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Admin Access'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter admin passcode:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passcodeController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              decoration: const InputDecoration(
+                hintText: '4-digit passcode',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final passcode = passcodeController.text.trim();
+              Navigator.of(dialogContext).pop();
+
+              if (passcode.isEmpty) return;
+
+              try {
+                final adminService = AdminSecurityService();
+                final isValid =
+                    await adminService.validateAdminAccess(passcode);
+
+                if (mounted) {
+                  if (isValid) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Admin access granted! Session active for 15 minutes.'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Invalid passcode'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error occurred'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final farmState = ref.watch(farmProvider);
     final userProfile = ref.watch(userProvider);
 
@@ -38,7 +161,8 @@ class ProfileScreen extends ConsumerWidget {
                     CircleAvatar(
                       radius: 40,
                       backgroundImage: NetworkImage(
-                        userProfile.profileImageUrl ?? "https://i.pravatar.cc/150?img=3",
+                        userProfile.profileImageUrl ??
+                            "https://i.pravatar.cc/150?img=3",
                       ),
                     ),
                     Positioned(
@@ -125,6 +249,21 @@ class ProfileScreen extends ConsumerWidget {
                 _menuTile(Icons.notifications, "Notification Preferences"),
                 _menuTile(Icons.language, "App Language"),
 
+                // Admin Access - Only show for admin users
+                Consumer(
+                  builder: (context, ref, child) {
+                    // Admin functionality disabled temporarily
+                    final isAdmin = false; // ref.watch(isAdminProvider);
+                    if (!isAdmin) return const SizedBox.shrink();
+
+                    return _menuTile(
+                      Icons.admin_panel_settings,
+                      "Admin Control Panel",
+                      onTap: _navigateToAdminAccess,
+                    );
+                  },
+                ),
+
                 const SizedBox(height: 20),
 
                 // LEGAL
@@ -135,16 +274,21 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
 
                 _menuTile(Icons.description, "Terms & Conditions", onTap: () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => LegalScreen.termsAndConditions(),
-                  ));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LegalScreen.termsAndConditions(),
+                      ));
                 }),
                 _menuTile(Icons.privacy_tip, "Privacy Policy", onTap: () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => LegalScreen.privacyPolicy(),
-                  ));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LegalScreen.privacyPolicy(),
+                      ));
                 }),
-                _menuTile(Icons.info, "About AquaRythu"),
+                _menuTile(Icons.info, "About AquaRythu",
+                    onTap: _handleAboutClick),
 
                 const SizedBox(height: 20),
               ],
@@ -278,14 +422,17 @@ class ProfileScreen extends ConsumerWidget {
                             try {
                               final farmService = FarmService();
                               await farmService.deleteFarm(farm.id);
-                              
+
                               // Update local state
-                              ref.read(farmProvider.notifier).deleteFarm(farm.id);
+                              ref
+                                  .read(farmProvider.notifier)
+                                  .deleteFarm(farm.id);
 
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: const Text("Farm deleted successfully"),
+                                  content:
+                                      const Text("Farm deleted successfully"),
                                   behavior: SnackBarBehavior.floating,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
@@ -330,7 +477,8 @@ class ProfileScreen extends ConsumerWidget {
                   value: 'delete',
                   child: Row(
                     children: [
-                      Icon(Icons.delete_outline, size: 18, color: Color(0xFFE53935)),
+                      Icon(Icons.delete_outline,
+                          size: 18, color: Color(0xFFE53935)),
                       SizedBox(width: 10),
                       Text(
                         'Delete Farm',

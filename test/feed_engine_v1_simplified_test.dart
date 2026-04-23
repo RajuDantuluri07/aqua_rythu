@@ -42,26 +42,28 @@ void main() {
         lastFcr: null,
         actualFeedYesterday: 5.0,
         lastFeedTime: DateTime.now().subtract(const Duration(minutes: 30)),
+        pondId: 'test-pond-1',
+        feedsPerDay: 4,
       );
 
       final result = FeedOrchestrator.compute(input);
 
-      // ✅ Feed must be > 0
+      // Feed must be > 0
       expect(result.finalFeed, greaterThan(0.0));
 
-      // ✅ No advanced factors applied
+      // No advanced factors applied
       expect(result.correction.growthFactor, equals(1.0));
       expect(result.correction.fcrFactor, equals(1.0));
       expect(result.correction.intelligenceFactor, equals(1.0));
       expect(result.correction.environmentFactor, equals(1.0));
 
-      // ✅ Tray factor should be 1.0 (no tray data)
+      // Tray factor should be 1.0 (no tray data)
       expect(result.correction.trayFactor, equals(1.0));
 
-      // ✅ Smart not applied
+      // Smart not applied
       expect(result.correction.isSmartApplied, isFalse);
 
-      // ✅ Output is deterministic (run again → same result)
+      // Output is deterministic (run again → same result)
       final result2 = FeedOrchestrator.compute(input);
       expect(result2.finalFeed, equals(result.finalFeed));
     });
@@ -89,20 +91,22 @@ void main() {
         lastFcr: 1.5,
         actualFeedYesterday: 12.0,
         lastFeedTime: DateTime.now().subtract(const Duration(hours: 2)),
+        pondId: 'test-pond-2',
+        feedsPerDay: 4,
       );
 
       final result = FeedOrchestrator.compute(input);
 
-      // ✅ Feed must be > 0
+      // Feed must be > 0
       expect(result.finalFeed, greaterThan(0.0));
 
-      // ✅ Tray factor = 1.0 (no data)
+      // Tray factor = 1.0 (no data)
       expect(result.correction.trayFactor, equals(1.0));
 
-      // ✅ Combined factor = 1.0
+      // Combined factor = 1.0
       expect(result.correction.combinedFactor, equals(1.0));
 
-      // ✅ Final feed = base feed (no adjustments)
+      // Final feed = base feed (no adjustments)
       expect(result.finalFeed, equals(result.baseFeed));
     });
 
@@ -132,22 +136,26 @@ void main() {
         recentTrayLeftoverPct: const [],
         lastFcr: 1.4,
         actualFeedYesterday: 20.0,
-        lastFeedTime: DateTime.now().subtract(const Duration(hours: 1, minutes: 30)),
+        lastFeedTime:
+            DateTime.now().subtract(const Duration(hours: 1, minutes: 30)),
+        pondId: 'test-pond-3',
+        feedsPerDay: 4,
       );
 
       final result = FeedOrchestrator.compute(input);
 
-      // ✅ Feed > 0 (never 0)
+      // Feed > 0 (never 0)
       expect(result.finalFeed, greaterThan(0.0));
 
-      // ✅ Tray factor = 0.85 (more full than empty)
+      // Tray factor = 0.85 (more full than empty)
       expect(result.correction.trayFactor, equals(0.85));
 
-      // ✅ Feed is reduced (final < base)
+      // Feed is reduced (final < base)
       expect(result.finalFeed, lessThan(result.baseFeed));
 
-      // ✅ Reduction is ~15%
-      final reductionPct = ((result.baseFeed - result.finalFeed) / result.baseFeed * 100);
+      // Reduction is ~15%
+      final reductionPct =
+          ((result.baseFeed - result.finalFeed) / result.baseFeed * 100);
       expect(reductionPct, closeTo(15.0, 5.0)); // ±5% tolerance
     });
 
@@ -178,11 +186,13 @@ void main() {
         lastFcr: 1.2,
         actualFeedYesterday: 25.0,
         lastFeedTime: DateTime.now().subtract(const Duration(hours: 1)),
+        pondId: 'test-pond-4',
+        feedsPerDay: 4,
       );
 
       final result = FeedOrchestrator.compute(input);
 
-      // ✅ Feed > 0
+      // Feed > 0
       expect(result.finalFeed, greaterThan(0.0));
 
       // ✅ Tray factor = 1.1 (more empty than full)
@@ -192,7 +202,8 @@ void main() {
       expect(result.finalFeed, greaterThan(result.baseFeed));
 
       // ✅ Increase is ~10%
-      final increasePct = ((result.finalFeed - result.baseFeed) / result.baseFeed * 100);
+      final increasePct =
+          ((result.finalFeed - result.baseFeed) / result.baseFeed * 100);
       expect(increasePct, closeTo(10.0, 5.0)); // ±5% tolerance
     });
 
@@ -204,7 +215,7 @@ void main() {
       //
       // This test uses a trick: we set lastFcr high to trigger old FCR logic
       // (which is disabled), but the base safety clamp should still work.
-      
+
       // First, compute base feed for DOC 50
       final debugData = MasterFeedEngine.computeWithDebug(
         doc: 50,
@@ -231,6 +242,8 @@ void main() {
         lastFcr: 1.0,
         actualFeedYesterday: baseFeed * 2.5, // Simulate huge spike input
         lastFeedTime: DateTime.now().subtract(const Duration(hours: 1)),
+        pondId: 'test-pond-5',
+        feedsPerDay: 4,
       );
 
       final result = FeedOrchestrator.compute(input);
@@ -240,7 +253,8 @@ void main() {
 
       // ✅ Final feed ≤ base × 1.3 (safety cap)
       final maxAllowed = baseFeed * 1.3;
-      expect(result.finalFeed, lessThanOrEqualTo(maxAllowed + 0.01)); // Allow tiny float error
+      expect(result.finalFeed,
+          lessThanOrEqualTo(maxAllowed + 0.01)); // Allow tiny float error
 
       // ✅ If clamped occurred, log it
       if (result.debugInfo.wasClamped == true) {
@@ -319,8 +333,10 @@ void main() {
       expect(result1.finalFeed, equals(result2.finalFeed));
       expect(result2.finalFeed, equals(result3.finalFeed));
 
-      expect(result1.correction.trayFactor, equals(result2.correction.trayFactor));
-      expect(result1.correction.combinedFactor, equals(result2.correction.combinedFactor));
+      expect(
+          result1.correction.trayFactor, equals(result2.correction.trayFactor));
+      expect(result1.correction.combinedFactor,
+          equals(result2.correction.combinedFactor));
     });
 
     // ────────────────────────────────────────────────────────────────────

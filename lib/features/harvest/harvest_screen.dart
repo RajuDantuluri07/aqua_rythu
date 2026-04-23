@@ -576,7 +576,8 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
                 if (qty == null || qty <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text("Enter a valid quantity (e.g. 250.5)"),
+                      content:
+                          const Text("Enter a valid quantity (e.g. 250.5)"),
                       backgroundColor: Colors.red.shade600,
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -587,7 +588,8 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
                 if (price == null || price <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text("Enter a valid price per kg (e.g. 180)"),
+                      content:
+                          const Text("Enter a valid price per kg (e.g. 180)"),
                       backgroundColor: Colors.red.shade600,
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -699,6 +701,22 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
           ? TextInputType.number
           : const TextInputType.numberWithOptions(decimal: true),
       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'This field is required';
+        }
+        final numValue = double.tryParse(value);
+        if (numValue == null) {
+          return 'Please enter a valid number';
+        }
+        if (numValue < 0) {
+          return 'Value cannot be negative';
+        }
+        if (label.toLowerCase().contains('count') && numValue < 1) {
+          return 'Count must be at least 1';
+        }
+        return null;
+      },
       decoration: InputDecoration(
         labelText: label,
         suffixText: suffix,

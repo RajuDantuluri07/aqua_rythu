@@ -17,9 +17,38 @@ class PondCard extends StatelessWidget {
     Color statusBgColor;
     Color borderColor = Colors.transparent;
     String? actionText;
-    
+
+    // Defensive checks for pond data
+    if (pond == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, color: Colors.grey, size: 32),
+              SizedBox(height: 8),
+              Text(
+                'Pond data unavailable',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     // Determine pond status based on FCR and other metrics
-    final fcr = pond.fcr ?? 0.0;
+    final fcr = (pond.fcr as num?)?.toDouble() ?? 0.0;
     if (fcr > 1.8) {
       status = 'CRITICAL';
       statusColor = const Color(0xFFE53935);
@@ -43,20 +72,10 @@ class PondCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: status == 'CRITICAL' 
+          color: status == 'CRITICAL'
               ? const Color(0xFFE53935).withOpacity(0.03)
               : Colors.white,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: const Color(0xFFBDCABD).withOpacity(0.15),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF00210E).withOpacity(0.04),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
         child: Stack(
           children: [
@@ -70,7 +89,8 @@ class PondCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
                         color: statusBgColor,
                         borderRadius: BorderRadius.circular(20),
@@ -87,12 +107,14 @@ class PondCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            status,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: statusColor,
+                          Expanded(
+                            child: Text(
+                              status,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
                             ),
                           ),
                         ],
@@ -100,13 +122,15 @@ class PondCard extends StatelessWidget {
                     ),
                     if (actionText != null) ...[
                       const SizedBox(height: 6),
-                      Text(
-                        actionText!,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
-                          letterSpacing: 1.2,
+                      Expanded(
+                        child: Text(
+                          actionText!,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
                     ],
@@ -119,7 +143,9 @@ class PondCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  pond.name ?? 'Pond',
+                  pond.name?.toString() ?? 'Pond',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -129,36 +155,46 @@ class PondCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE2E2E2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${(pond.area ?? 0).toStringAsFixed(1)} ac',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF3E4A40),
-                          letterSpacing: 1.2,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E2E2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${((pond.area as num?)?.toDouble() ?? 0.0).toStringAsFixed(1)} ac',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF3E4A40),
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE2E2E2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${((pond.seedCount ?? 0) / 100000).toStringAsFixed(1)} lac',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF3E4A40),
-                          letterSpacing: 1.2,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E2E2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${(((pond.seedCount as num?)?.toInt() ?? 0) / 100000).toStringAsFixed(1)} lac',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF3E4A40),
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
                     ),
@@ -181,7 +217,7 @@ class PondCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${pond.doc ?? 0}',
+                            '${(pond.doc as num?)?.toInt() ?? 0}',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -205,7 +241,7 @@ class PondCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${(pond.todayFeed ?? 0).toStringAsFixed(0)} kg',
+                            '${(pond.todayFeed ?? 0.0).toStringAsFixed(0)} kg',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,

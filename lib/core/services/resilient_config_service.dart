@@ -71,8 +71,8 @@ class ResilientConfigService {
       'debug_mode_enabled': false,
     },
     'admin_security': {
-      'admin_passcode': '0000',
-      'admin_user_id': 'default-user-id',
+      'admin_passcode': 'SET_IN_PRODUCTION', // Must be overridden in production
+      'admin_user_id': 'SET_IN_PRODUCTION', // Must be overridden in production
     },
   };
 

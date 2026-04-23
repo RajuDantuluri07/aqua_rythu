@@ -501,7 +501,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
 
     final error = await ref
         .read(feedScheduleProvider.notifier)
-        .updateFeed(widget.pondId, widget.index, index, val);
+        .updateFeed(widget.index, index, val);
 
     if (error != null) {
       // Over-limit: revert field and show error

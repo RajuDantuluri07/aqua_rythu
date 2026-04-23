@@ -1,7 +1,5 @@
 import '../enums/feed_stage.dart';
-import '../../../systems/feed/feed_intelligence_engine.dart';
-import '../../../systems/feed/feed_decision_engine.dart';
-import '../../../systems/feed/feed_recommendation_engine.dart';
+import '../../../systems/feed/feed_models.dart';
 import 'correction_result.dart';
 import 'feed_debug_info.dart';
 
@@ -33,12 +31,10 @@ class OrchestratorResult {
   // ── Convenience getters ───────────────────────────────────────────────────
 
   double get finalFeed => correction.finalFeed;
-  double get combinedFactor => correction.combinedFactor;
   double get trayFactor => correction.trayFactor;
-  double get smartFactor => correction.v2Factor;
-  double get fcrFactor => correction.fcrFactor;
-  double get fcr => correction.fcrFactor;
+  double get factor => correction.factor;
   bool get isSmartApplied => correction.isSmartApplied;
+  String get safetyStatus => correction.safetyStatus;
 
   const OrchestratorResult({
     required this.baseFeed,
@@ -56,24 +52,15 @@ class OrchestratorResult {
     required String engineVersion,
     required int doc,
   }) {
-    const correction = CorrectionResult(
-      finalFeed: 0.0,
+    final correction = CorrectionResult(
+      baseFeed: 0.0,
       trayFactor: 1.0,
-      growthFactor: 1.0,
-      samplingFactor: 1.0,
-      environmentFactor: 0.0,
-      fcrFactor: 1.0,
-      intelligenceFactor: 1.0,
-      v2Factor: 0.0,
-      combinedFactor: 0.0,
+      finalFeed: 0.0,
+      safetyStatus: 'stopped',
       reasons: ['Critical DO — stop feeding'],
       alerts: ['🚨 Critical DO — stop feeding'],
       isCriticalStop: true,
       isSmartApplied: false,
-      factorBreakdown: {'environment': 0.0},
-      factorExplanations: {
-        'environment': 'CRITICAL — dissolved oxygen too low'
-      },
     );
     const decision = FeedDecision(
       action: 'Stop Feeding',

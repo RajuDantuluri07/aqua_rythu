@@ -3,10 +3,66 @@ import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/utils/doc_utils.dart';
 import '../../../core/utils/time_provider.dart';
+import '../../../core/utils/logger.dart';
 import '../../../features/feed/models/feed_input.dart';
 
 class FeedInputBuilder {
   static final _supabase = Supabase.instance.client;
+
+  /// Validates string fields with proper null checking
+  static String _validateStringField(dynamic value, String fieldName,
+      [String defaultValue = '']) {
+    if (value == null) {
+      AppLogger.warn(
+          'Missing string field: $fieldName, using default: $defaultValue');
+      return defaultValue;
+    }
+    if (value is! String) {
+      AppLogger.error(
+          'Invalid type for $fieldName: expected String, got ${value.runtimeType}');
+      return defaultValue;
+    }
+    return value as String;
+  }
+
+  /// Validates integer fields with proper null checking
+  static int _validateIntField(dynamic value, String fieldName,
+      [int defaultValue = 0]) {
+    if (value == null) {
+      AppLogger.warn(
+          'Missing int field: $fieldName, using default: $defaultValue');
+      return defaultValue;
+    }
+    if (value is! int) {
+      if (value is num) {
+        final intValue = value.toInt();
+        AppLogger.warn('Converted num to int for $fieldName: $intValue');
+        return intValue;
+      }
+      AppLogger.error(
+          'Invalid type for $fieldName: expected int, got ${value.runtimeType}');
+      return defaultValue;
+    }
+    return value as int;
+  }
+
+  /// Validates double fields with proper null checking
+  static double? _validateDoubleField(dynamic value, String fieldName) {
+    if (value == null) {
+      return null;
+    }
+    if (value is! num) {
+      AppLogger.error(
+          'Invalid type for $fieldName: expected num, got ${value.runtimeType}');
+      return null;
+    }
+    final numValue = value as num;
+    if (numValue.isNaN || numValue.isInfinite) {
+      AppLogger.error('Invalid double value for $fieldName: $numValue');
+      return null;
+    }
+    return numValue.toDouble();
+  }
 
   /// Builds the canonical FeedInput for a pond using only persisted state.
   ///
@@ -24,8 +80,30 @@ class FeedInputBuilder {
       throw Exception('FeedInputBuilder: pond not found: $pondId');
     }
 
-    final currentDoc = _computeDoc(pond['stocking_date'] as String);
-    final seedCount = (pond['seed_count'] as int?) ?? 100000;
+    // CRITICAL: No default for stocking_date - must be explicitly provided
+    if (pond['stocking_date'] == null ||
+        pond['stocking_date'].toString().isEmpty) {
+      throw Exception(
+        'FeedInputBuilder: CRITICAL MISSING DATA - stocking_date is required for pond $pondId. '
+        'Cannot calculate DOC without stocking date.',
+      );
+    }
+    final currentDoc = _computeDoc(
+        _validateStringField(pond['stocking_date'], 'stocking_date'));
+    // CRITICAL: No default for seed_count - must be explicitly provided
+    if (pond['seed_count'] == null) {
+      throw Exception(
+        'FeedInputBuilder: CRITICAL MISSING DATA - seed_count is required for pond $pondId. '
+        'Cannot calculate feed without shrimp count.',
+      );
+    }
+    final seedCount = _validateIntField(pond['seed_count'], 'seed_count');
+    if (seedCount <= 0) {
+      throw Exception(
+        'FeedInputBuilder: CRITICAL INVALID DATA - seed_count=$seedCount for pond $pondId. '
+        'Cannot calculate feed with zero or negative shrimp count.',
+      );
+    }
     final sample = _latestAbwFromPondData(pond);
     final water = await _latestWaterLog(pondId);
     final trayStatuses = await _latestTrayStatuses(pondId, currentDoc);
@@ -33,11 +111,24 @@ class FeedInputBuilder {
 
     final lastFeedTime = await _latestFeedTime(pondId, currentDoc);
 
+    // Collect data quality warnings for UI display
+    final List<String> dataWarnings = [];
+    if (!water.hasValidData && water.fallbackReason.isNotEmpty) {
+      dataWarnings.add('⚠️ Water data issue: ${water.fallbackReason}');
+    }
+    if (sample.abw == null) {
+      dataWarnings.add('⚠️ No sampling data - using blind feeding');
+    }
+    if (trayStatuses.isEmpty && currentDoc > 30) {
+      dataWarnings.add('⚠️ No tray data - appetite signals unavailable');
+    }
+
+    final bool hasIncompleteData = dataWarnings.isNotEmpty;
+
     // Fix #1: compute real values so FeedIntelligenceEngine and FCREngine receive
     // actual data instead of the null that permanently disabled both correction layers.
-    final actualFeedYesterday = currentDoc > 1
-        ? await _actualFeedForDoc(pondId, currentDoc - 1)
-        : null;
+    final actualFeedYesterday =
+        currentDoc > 1 ? await _actualFeedForDoc(pondId, currentDoc - 1) : null;
 
     final lastFcr = await _computeLastFcr(
       pondId: pondId,
@@ -50,7 +141,10 @@ class FeedInputBuilder {
       doc: currentDoc,
       abw: sample.abw,
       stockingType: StockingType.values.firstWhere(
-        (type) => type.name == ((pond['stocking_type'] as String?) ?? 'nursery'),
+        (type) =>
+            type.name ==
+            _validateStringField(
+                pond['stocking_type'], 'stocking_type', 'nursery'),
         orElse: () => StockingType.nursery,
       ),
       feedingScore: 3.0,
@@ -66,11 +160,16 @@ class FeedInputBuilder {
       lastFcr: lastFcr,
       actualFeedYesterday: actualFeedYesterday,
       lastFeedTime: lastFeedTime,
-      anchorFeed: (pond['anchor_feed'] as num?)?.toDouble(),
+      anchorFeed: _validateDoubleField(pond['anchor_feed'], 'anchor_feed'),
+      pondId: pondId,
+      feedsPerDay: 4, // Default to 4 feeds per day
+      dataWarnings: dataWarnings,
+      hasIncompleteData: hasIncompleteData,
     );
   }
 
-  static Future<List<TrayStatus>> _latestTrayStatuses(String pondId, int doc) async {
+  static Future<List<TrayStatus>> _latestTrayStatuses(
+      String pondId, int doc) async {
     try {
       final rows = await _supabase
           .from('tray_logs')
@@ -83,7 +182,8 @@ class FeedInputBuilder {
 
       if (rows.isEmpty) return const [];
 
-      final rawStatuses = List<String>.from(rows.first['tray_statuses'] as List? ?? []);
+      final rawStatuses =
+          List<String>.from(rows.first['tray_statuses'] as List? ?? []);
       if (rawStatuses.length == 1 && rawStatuses.first == 'skipped') {
         return const [];
       }
@@ -95,18 +195,21 @@ class FeedInputBuilder {
           return TrayStatus.partial;
         }
       }).toList();
-    } catch (_) {
-      return const [];
+    } catch (e, stackTrace) {
+      AppLogger.error('Failed to get tray statuses for pond $pondId DOC $doc',
+          e, stackTrace);
+      return const []; // Return empty list as fallback
     }
   }
 
   static ({double? abw, int ageDays}) _latestAbwFromPondData(
       Map<String, dynamic> pond) {
-    final abw = (pond['current_abw'] as num?)?.toDouble();
+    final abw = _validateDoubleField(pond['current_abw'], 'current_abw');
     if (abw == null || abw <= 0) return (abw: null, ageDays: 0);
 
-    final sampleDateStr = pond['latest_sample_date'] as String?;
-    if (sampleDateStr == null) return (abw: null, ageDays: 0);
+    final sampleDateStr =
+        _validateStringField(pond['latest_sample_date'], 'latest_sample_date');
+    if (sampleDateStr.isEmpty) return (abw: null, ageDays: 0);
 
     final parsed = DateTime.tryParse(sampleDateStr);
     if (parsed == null) return (abw: null, ageDays: 0);
@@ -123,14 +226,23 @@ class FeedInputBuilder {
     return (abw: abw, ageDays: ageDays);
   }
 
-  static Future<({double dissolvedOxygen, double ammonia, double temperature, double phChange})>
-      _latestWaterLog(String pondId) async {
+  static Future<
+      ({
+        double dissolvedOxygen,
+        double ammonia,
+        double temperature,
+        double phChange,
+        bool hasValidData,
+        String fallbackReason
+      })> _latestWaterLog(String pondId) async {
+    // SAFE FALLBACK: Only for non-critical water parameters
     const safeDefaults = (
       dissolvedOxygen: 6.0,
       ammonia: 0.05,
       temperature: 28.0,
       phChange: 0.0,
     );
+
     try {
       final rows = await _supabase
           .from('water_logs')
@@ -139,27 +251,82 @@ class FeedInputBuilder {
           .order('created_at', ascending: false)
           .limit(1);
 
-      if (rows.isEmpty) return safeDefaults;
+      if (rows.isEmpty) {
+        AppLogger.warn(
+          '[FeedInputBuilder] NO WATER DATA for pond $pondId. '
+          'Using safe fallback values - feed may be inaccurate.',
+        );
+        return (
+          dissolvedOxygen: safeDefaults.dissolvedOxygen,
+          ammonia: safeDefaults.ammonia,
+          temperature: safeDefaults.temperature,
+          phChange: safeDefaults.phChange,
+          hasValidData: false,
+          fallbackReason: 'No water data available',
+        );
+      }
 
       final row = rows.first;
 
       // Discard readings older than 48 hours. A stale low-DO reading blocks
       // feeding long after conditions recover; a stale safe reading gives false
       // confidence when current water is actually critical.
-      final createdAt = DateTime.tryParse(row['created_at'] as String? ?? '');
+      final createdAt = DateTime.tryParse(
+          _validateStringField(row['created_at'], 'created_at', ''));
       if (createdAt != null) {
         final ageHours = TimeProvider.now().difference(createdAt).inHours;
-        if (ageHours > 48) return safeDefaults;
+        if (ageHours > 48) {
+          AppLogger.warn(
+            '[FeedInputBuilder] STALE WATER DATA (${ageHours}h old) for pond $pondId. '
+            'Using safe fallback values - feed may be inaccurate.',
+          );
+          return (
+            dissolvedOxygen: safeDefaults.dissolvedOxygen,
+            ammonia: safeDefaults.ammonia,
+            temperature: safeDefaults.temperature,
+            phChange: safeDefaults.phChange,
+            hasValidData: false,
+            fallbackReason: 'Water data is $ageHours hours old',
+          );
+        }
+      }
+
+      // Validate critical DO reading - if missing, use safe default but warn
+      final doValue =
+          _validateDoubleField(row['dissolved_oxygen'], 'dissolved_oxygen');
+      if (doValue == null) {
+        AppLogger.warn(
+          '[FeedInputBuilder] MISSING DO reading for pond $pondId. '
+          'Using safe default DO=${safeDefaults.dissolvedOxygen} - feed may be inaccurate.',
+        );
       }
 
       return (
-        dissolvedOxygen: (row['dissolved_oxygen'] as num?)?.toDouble() ?? 6.0,
-        ammonia: (row['ammonia'] as num?)?.toDouble() ?? 0.05,
-        temperature: (row['temperature'] as num?)?.toDouble() ?? 28.0,
+        dissolvedOxygen: doValue ?? safeDefaults.dissolvedOxygen,
+        ammonia: _validateDoubleField(row['ammonia'], 'ammonia') ??
+            safeDefaults.ammonia,
+        temperature: _validateDoubleField(row['temperature'], 'temperature') ??
+            safeDefaults.temperature,
         phChange: 0.0,
+        hasValidData: doValue != null,
+        fallbackReason: doValue == null ? 'Missing DO reading' : '',
       );
-    } catch (_) {
-      return safeDefaults;
+    } catch (e, stackTrace) {
+      AppLogger.error(
+          '[FeedInputBuilder] FAILED to get water log for pond $pondId',
+          e,
+          stackTrace);
+      AppLogger.warn(
+        'Using safe water fallback values - feed may be inaccurate.',
+      );
+      return (
+        dissolvedOxygen: safeDefaults.dissolvedOxygen,
+        ammonia: safeDefaults.ammonia,
+        temperature: safeDefaults.temperature,
+        phChange: safeDefaults.phChange,
+        hasValidData: false,
+        fallbackReason: 'Water data fetch failed',
+      );
     }
   }
 
@@ -202,8 +369,12 @@ class FeedInputBuilder {
           .take(3)
           .map((date) => _statusesToLeftoverPct(byDate[date]!))
           .toList();
-    } catch (_) {
-      return const [-1.0];
+    } catch (e, stackTrace) {
+      AppLogger.error(
+          'Failed to get 3-day leftover percentages for pond $pondId',
+          e,
+          stackTrace);
+      return const [-1.0]; // Return default value as fallback
     }
   }
 
@@ -219,9 +390,14 @@ class FeedInputBuilder {
           .maybeSingle();
 
       if (row == null) return null;
-      return DateTime.tryParse(row['created_at'] as String? ?? '');
-    } catch (_) {
-      return null;
+      return DateTime.tryParse(
+          _validateStringField(row['created_at'], 'created_at', ''));
+    } catch (e, stackTrace) {
+      AppLogger.error(
+          'Failed to get latest feed time for pond $pondId DOC $doc',
+          e,
+          stackTrace);
+      return null; // Return null as fallback
     }
   }
 
@@ -258,10 +434,13 @@ class FeedInputBuilder {
           .maybeSingle();
 
       if (row == null) return null;
-      final val = (row['feed_given'] as num?)?.toDouble() ?? 0.0;
-      return val > 0 ? val : null;
-    } catch (_) {
-      return null;
+      final val = _validateDoubleField(row['feed_given'], 'feed_given');
+      if (val == null || val <= 0) return null;
+      return val;
+    } catch (e, stackTrace) {
+      AppLogger.error(
+          'Failed to get actual feed for pond $pondId DOC $doc', e, stackTrace);
+      return null; // Return null as fallback
     }
   }
 
@@ -297,21 +476,23 @@ class FeedInputBuilder {
       // so the final row per date is the authoritative daily total.
       final Map<String, double> latestByDate = {};
       for (final row in rows) {
-        final dateKey = (row['created_at'] as String).substring(0, 10);
-        final val = (row['feed_given'] as num?)?.toDouble() ?? 0.0;
+        final dateKey = _validateStringField(row['created_at'], 'created_at')
+            .substring(0, 10);
+        final val =
+            _validateDoubleField(row['feed_given'], 'feed_given') ?? 0.0;
         latestByDate[dateKey] = val; // ascending order → last entry wins
       }
 
-      final totalFeed =
-          latestByDate.values.fold(0.0, (s, v) => s + v);
+      final totalFeed = latestByDate.values.fold(0.0, (s, v) => s + v);
       if (totalFeed <= 0) return null;
 
       final fcr = totalFeed / biomassKg;
       // Discard implausible values — likely bad data rather than real FCR.
       if (fcr < 0.5 || fcr > 5.0) return null;
       return fcr;
-    } catch (_) {
-      return null;
+    } catch (e, stackTrace) {
+      AppLogger.error('Failed to compute FCR for pond $pondId', e, stackTrace);
+      return null; // Return null as fallback
     }
   }
 

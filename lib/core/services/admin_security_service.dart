@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
+import 'app_config_service.dart';
 
 class AdminSecurityService {
   static final AdminSecurityService _instance =
@@ -12,6 +13,20 @@ class AdminSecurityService {
   static const Duration _sessionTimeout = Duration(minutes: 15);
 
   bool get isAdminAuthorized => _isAdminAuthorized;
+
+  // Temporary admin logic based on email
+  bool isAdmin(User? user) {
+    if (user == null) return false;
+
+    const adminEmail = "naveendantuluri1@gmail.com";
+    final isAdminUser = user.email == adminEmail;
+
+    // Debug logging for verification
+    print("ADMIN CHECK: ${user.email} -> $isAdminUser");
+    AppLogger.debug("ADMIN CHECK: ${user.email} -> $isAdminUser");
+
+    return isAdminUser;
+  }
 
   Future<bool> validateAdminAccess(String passcode) async {
     try {
@@ -26,6 +41,12 @@ class AdminSecurityService {
         return false;
       }
 
+      // Check if user is admin based on email
+      if (!isAdmin(user)) {
+        AppLogger.warn('Admin access denied: User not authorized');
+        return false;
+      }
+
       // Additional validation - ensure user is properly authenticated
       final session = Supabase.instance.client.auth.currentSession;
       if (session == null || session.accessToken.isEmpty) {
@@ -33,26 +54,31 @@ class AdminSecurityService {
         return false;
       }
 
-      // Use secure Edge Function for passcode validation
-      final response = await Supabase.instance.client.functions.invoke(
-        'validate-admin-passcode',
-        body: {
-          'passcode': passcode,
-        },
-      );
+      // Get configured admin passcode
+      final configService = AppConfigService(Supabase.instance.client);
+      final adminConfig = await configService.getAdminSecurityConfig();
+      final configuredPasscode = adminConfig['admin_passcode'] as String?;
 
-      final data = response.data;
-
-      if (data['success'] == true) {
-        _isAdminAuthorized = true;
-        _adminLoginTime = DateTime.now();
-        AppLogger.info('Admin access granted for user: ${user.id}');
-        return true;
-      } else {
-        AppLogger.warn(
-            'Admin access denied: ${data['message'] ?? 'Unknown error'}');
+      // Validate passcode is properly configured
+      if (configuredPasscode == null ||
+          configuredPasscode.isEmpty ||
+          configuredPasscode == 'SET_IN_PRODUCTION') {
+        AppLogger.error(
+            'Admin access denied: Passcode not configured in production');
         return false;
       }
+
+      // Validate provided passcode against configured passcode
+      if (passcode != configuredPasscode) {
+        AppLogger.warn('Admin access denied: Invalid passcode');
+        return false;
+      }
+
+      // Grant access to admin users
+      _isAdminAuthorized = true;
+      _adminLoginTime = DateTime.now();
+      AppLogger.info('Admin access granted for user: ${user.email}');
+      return true;
     } catch (e) {
       // Log error but don't expose details
       AppLogger.error('Admin validation error: $e');

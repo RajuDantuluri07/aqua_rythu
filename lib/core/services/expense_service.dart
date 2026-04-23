@@ -2,63 +2,69 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense_model.dart';
 import '../utils/logger.dart';
 
-/// Validates numeric fields and logs issues instead of silent defaults
-double _validateNumericField(dynamic value, String fieldName,
-    [double defaultValue = 0.0]) {
-  if (value == null) {
-    AppLogger.error('Missing required field: $fieldName');
-    return defaultValue;
-  }
-
-  if (value is! num) {
-    AppLogger.error(
-        'Invalid type for $fieldName: expected number, got ${value.runtimeType}');
-    return defaultValue;
-  }
-
-  final numValue = value as num;
-  if (numValue.isNaN) {
-    AppLogger.error('Invalid value for $fieldName: NaN');
-    return defaultValue;
-  }
-
-  if (numValue < 0) {
-    AppLogger.warn('Negative value for $fieldName: $numValue, using 0.0');
-    return 0.0;
-  }
-
-  return numValue.toDouble();
-}
-
-/// Validates string fields and logs issues instead of silent defaults
-String _validateStringField(dynamic value, String fieldName,
-    [String defaultValue = 'other']) {
-  if (value == null) {
-    AppLogger.error('Missing required field: $fieldName');
-    return defaultValue;
-  }
-
-  if (value is! String) {
-    AppLogger.error(
-        'Invalid type for $fieldName: expected string, got ${value.runtimeType}');
-    return defaultValue;
-  }
-
-  final strValue = value as String;
-  if (strValue.isEmpty) {
-    AppLogger.warn('Empty string for $fieldName, using default: $defaultValue');
-    return defaultValue;
-  }
-
-  return strValue;
-}
-
 class ExpenseService {
   final supabase = Supabase.instance.client;
+
+  /// Validates numeric fields and logs issues instead of silent defaults
+  double _validateNumericField(dynamic value, String fieldName) {
+    if (value == null) {
+      AppLogger.error('Missing required field: $fieldName');
+      throw ArgumentError('Missing required field: $fieldName');
+    }
+
+    if (value is! num) {
+      AppLogger.error(
+          'Invalid type for $fieldName: expected number, got ${value.runtimeType}');
+      throw ArgumentError('Invalid type for $fieldName: expected number');
+    }
+
+    final numValue = value as num;
+    if (numValue.isNaN) {
+      AppLogger.error('Invalid value for $fieldName: NaN');
+      throw ArgumentError('Invalid value for $fieldName: NaN');
+    }
+
+    if (numValue.isInfinite) {
+      AppLogger.error('Invalid value for $fieldName: Infinite');
+      throw ArgumentError('Invalid value for $fieldName: Infinite');
+    }
+
+    if (numValue < 0) {
+      AppLogger.warn('Negative value for $fieldName: $numValue');
+      throw ArgumentError('Negative value for $fieldName: $numValue');
+    }
+
+    return numValue.toDouble();
+  }
+
+  /// Validates string fields and logs issues instead of silent defaults
+  String _validateStringField(dynamic value, String fieldName,
+      [String defaultValue = 'other']) {
+    if (value == null) {
+      AppLogger.error('Missing required field: $fieldName');
+      return defaultValue;
+    }
+
+    if (value is! String) {
+      AppLogger.error(
+          'Invalid type for $fieldName: expected string, got ${value.runtimeType}');
+      return defaultValue;
+    }
+
+    final strValue = value as String;
+    if (strValue.isEmpty) {
+      AppLogger.warn(
+          'Empty string for $fieldName, using default: $defaultValue');
+      return defaultValue;
+    }
+
+    return strValue;
+  }
 
   Future<String> createExpense({
     required String farmId,
     required String cropId,
+    String? pondId,
     required ExpenseCategory category,
     required double amount,
     String? notes,
@@ -76,6 +82,7 @@ class ExpenseService {
             'user_id': user.id,
             'farm_id': farmId,
             'crop_id': cropId,
+            'pond_id': pondId,
             'category': category.value,
             'amount': amount,
             'notes': notes,
@@ -152,7 +159,7 @@ class ExpenseService {
       for (final item in result) {
         final category =
             _validateStringField(item['category'], 'category', 'other');
-        final amount = _validateNumericField(item['amount'], 'amount', 0.0);
+        final amount = _validateNumericField(item['amount'], 'amount');
 
         categoryTotals[category] = (categoryTotals[category] ?? 0.0) + amount;
         categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
@@ -197,7 +204,7 @@ class ExpenseService {
       for (final item in result) {
         final category =
             _validateStringField(item['category'], 'category', 'other');
-        final amount = _validateNumericField(item['amount'], 'amount', 0.0);
+        final amount = _validateNumericField(item['amount'], 'amount');
 
         categoryTotals[category] = (categoryTotals[category] ?? 0.0) + amount;
         categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
@@ -243,7 +250,7 @@ class ExpenseService {
       for (final item in result) {
         final category =
             _validateStringField(item['category'], 'category', 'other');
-        final amount = _validateNumericField(item['amount'], 'amount', 0.0);
+        final amount = _validateNumericField(item['amount'], 'amount');
         final date = DateTime.parse(item['date']);
 
         // Calculate week start (Monday)
@@ -316,13 +323,51 @@ class ExpenseService {
       double total = 0.0;
 
       for (final item in result) {
-        total += _validateNumericField(item['amount'], 'amount', 0.0);
+        total += _validateNumericField(item['amount'], 'amount');
       }
 
       return total;
     } catch (e) {
       AppLogger.error('Failed to get total expenses: $e');
       return 0.0;
+    }
+  }
+
+  Future<void> updateExpense({
+    required String expenseId,
+    ExpenseCategory? category,
+    double? amount,
+    String? notes,
+    DateTime? date,
+  }) async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        throw Exception('User not logged in');
+      }
+
+      final updateData = <String, dynamic>{};
+      if (category != null) updateData['category'] = category.value;
+      if (amount != null) updateData['amount'] = amount;
+      if (notes != null) updateData['notes'] = notes.isEmpty ? null : notes;
+      if (date != null)
+        updateData['date'] = date.toIso8601String().split('T')[0];
+
+      if (updateData.isEmpty) {
+        AppLogger.warn('No data to update for expense $expenseId');
+        return;
+      }
+
+      await supabase
+          .from('expenses')
+          .update(updateData)
+          .eq('id', expenseId)
+          .eq('user_id', user.id);
+
+      AppLogger.info('Updated expense: $expenseId');
+    } catch (e) {
+      AppLogger.error('Failed to update expense: $e');
+      rethrow;
     }
   }
 

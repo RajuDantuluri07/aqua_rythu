@@ -1,5 +1,4 @@
 enum ExpenseCategory {
-  feed('feed', 'Feed'),
   labour('labour', 'Labour'),
   electricity('electricity', 'Electricity'),
   diesel('diesel', 'Diesel/Oil'),
@@ -24,6 +23,7 @@ class Expense {
   final String userId;
   final String farmId;
   final String cropId;
+  final String? pondId;
   final ExpenseCategory category;
   final double amount;
   final String? notes;
@@ -35,6 +35,7 @@ class Expense {
     required this.userId,
     required this.farmId,
     required this.cropId,
+    this.pondId,
     required this.category,
     required this.amount,
     this.notes,
@@ -48,6 +49,7 @@ class Expense {
       userId: map['user_id']?.toString() ?? '',
       farmId: map['farm_id']?.toString() ?? '',
       cropId: map['crop_id']?.toString() ?? '',
+      pondId: map['pond_id']?.toString(),
       category: ExpenseCategory.fromString(map['category'] ?? 'other'),
       amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       notes: map['notes']?.toString(),
@@ -62,7 +64,7 @@ class Expense {
       'id': id,
       'user_id': userId,
       'farm_id': farmId,
-      'crop_id': cropId,
+      'pond_id': pondId,
       'category': category.value,
       'amount': amount,
       'notes': notes,
@@ -76,6 +78,7 @@ class Expense {
     String? userId,
     String? farmId,
     String? cropId,
+    String? pondId,
     ExpenseCategory? category,
     double? amount,
     String? notes,
@@ -87,6 +90,7 @@ class Expense {
       userId: userId ?? this.userId,
       farmId: farmId ?? this.farmId,
       cropId: cropId ?? this.cropId,
+      pondId: pondId ?? this.pondId,
       category: category ?? this.category,
       amount: amount ?? this.amount,
       notes: notes ?? this.notes,

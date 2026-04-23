@@ -38,6 +38,7 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
   }
 
   void _addItem() {
+    if (!mounted) return;
     setState(() {
       _items.add(InventoryItem(
         nameController: TextEditingController(),
@@ -76,6 +77,7 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
   }
 
   void _removeItem(int index) {
+    if (!mounted) return;
     setState(() {
       if (_items.length > 1) {
         _items[index].nameController.dispose();
@@ -110,6 +112,8 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
       );
       return;
     }
+
+    if (!mounted) return;
 
     setState(() => _isLoading = true);
 
@@ -159,7 +163,7 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to save inventory: $e'),
+          content: Text('Failed to save inventory'),
           backgroundColor: Colors.red,
         ),
       );
@@ -286,6 +290,7 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
                   );
                   return;
                 }
+                if (!mounted) return;
                 setState(() {
                   item.category = value!;
                   item.isAutoTracked = value == 'feed';

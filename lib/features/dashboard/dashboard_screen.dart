@@ -4,14 +4,9 @@ import 'package:intl/intl.dart';
 import 'package:aqua_rythu/features/farm/farm_provider.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
-import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
-import 'package:aqua_rythu/features/growth/growth_provider.dart';
-import 'package:aqua_rythu/features/growth/sampling_log.dart';
+import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
 import '../common/banner_widget.dart';
-import '../farm/farm_provider.dart';
-import '../admin/logo_tap_detector.dart';
-import '../../routes/app_routes.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _bg = Color(0xFFF5F7FA);
@@ -32,6 +27,7 @@ class _PondRow {
   final int doc, seedCount;
   final double abw, fcr, biomass, todayFeed, yesterdayFeed, area;
   final bool fcrTrendUp, feedTrendUp, hasAbwData;
+  final PondViewState feedState;
 
   const _PondRow({
     required this.id,
@@ -48,6 +44,7 @@ class _PondRow {
     required this.hasAbwData,
     required this.area,
     required this.seedCount,
+    required this.feedState,
   });
 }
 
@@ -81,7 +78,6 @@ class DashboardScreen extends ConsumerWidget {
 
     final farmState = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
-    final feedHistory = ref.watch(feedHistoryProvider);
 
     // Show loading spinner while farms are being fetched on startup
     if (farmState.farms.isEmpty && farmState.selectedId.isEmpty) {
@@ -96,258 +92,255 @@ class DashboardScreen extends ConsumerWidget {
       return _noPondsView(context, ref, farmState, currentFarm);
 
     final today = DateTime.now();
-    final yesterday = today.subtract(const Duration(days: 1));
 
-    // ── Per-pond computation ──────────────────────────────────────────────────
-    final List<_PondRow> rows = ponds.map((pond) {
-      final doc = ref.watch(docProvider(pond.id));
-      final growthLogs = ref.watch(growthProvider(pond.id));
-      final logs = feedHistory[pond.id] ?? [];
+    // ── Load feed data from controller for each pond ────────────────────────
+    Future<List<_PondRow>> _buildPondRows() async {
+      final rows = <_PondRow>[];
 
-      final bool hasAbwData = growthLogs.isNotEmpty && growthLogs.first.abw > 0;
-      final double abw =
-          hasAbwData ? growthLogs.first.abw : (pond.currentAbw ?? 0.0);
+      for (final pond in ponds) {
+        try {
+          // Get feed state from single source of truth
+          final feedState = await pondDashboardController.load(pond.id);
 
-      double survival = 1.0;
-      if (doc > 60) {
-        survival = 0.90;
-      } else if (doc > 30) survival = 0.95;
+          // Extract data from controller result
+          final feedResult = feedState.feedResult;
+          final double abw = pond.currentAbw ?? 0.0;
+          final bool hasAbwData = abw > 0;
 
-      final double biomass = (pond.seedCount * survival * abw) / 1000;
-      final double totalFeed = logs.isNotEmpty ? logs.first.cumulative : 0.0;
-      final double fcr =
-          (hasAbwData && biomass > 0.1) ? totalFeed / biomass : 0.0;
+          // Get feed amounts from controller state
+          final double todayFeed = feedState.roundFeedAmounts.values
+              .where((status) => status > 0)
+              .fold(0.0, (sum, amount) => sum + amount);
 
-      // Today's feed
-      double todayFeed = 0;
-      if (logs.isNotEmpty) {
-        final first = logs.first;
-        if (first.date.year == today.year &&
-            first.date.month == today.month &&
-            first.date.day == today.day) {
-          todayFeed = first.total;
-        }
-      }
+          // Simplified biomass and FCR from controller data
+          final double biomass = feedResult?.finalFeed != null
+              ? (pond.seedCount * 0.95 * abw) / 1000 // Simplified calculation
+              : 0.0;
+          final double fcr = biomass > 0.1 ? todayFeed / biomass : 0.0;
 
-      // Yesterday's feed
-      double yesterdayFeed = 0;
-      for (final log in logs) {
-        if (log.date.year == yesterday.year &&
-            log.date.month == yesterday.month &&
-            log.date.day == yesterday.day) {
-          yesterdayFeed = log.total;
-          break;
-        }
-      }
-
-      // FCR trend (current vs 7 days ago)
-      bool fcrTrendUp = false;
-      if (hasAbwData && logs.length >= 2) {
-        final cutoff = today.subtract(const Duration(days: 7));
-        final oldLogs = logs.where((l) => l.date.isBefore(cutoff)).toList();
-        if (oldLogs.isNotEmpty) {
-          final oldAbw = _abwAtDoc(growthLogs, oldLogs.first.doc);
-          if (oldAbw != null && oldAbw > 0) {
-            double os = 1.0;
-            if (oldLogs.first.doc > 60) {
-              os = 0.90;
-            } else if (oldLogs.first.doc > 30) os = 0.95;
-            final oldBiomass = (pond.seedCount * os * oldAbw) / 1000;
-            final oldFcr =
-                oldBiomass > 0.1 ? oldLogs.first.cumulative / oldBiomass : 0.0;
-            fcrTrendUp = fcr > oldFcr;
+          // Status based on controller feed result
+          String status = 'Good';
+          if (feedResult?.decision.action == 'Stop Feeding') {
+            status = 'Critical';
+          } else if (fcr > 1.5) {
+            status = 'Warning';
           }
+
+          rows.add(_PondRow(
+            id: pond.id,
+            name: pond.name,
+            doc: feedState.doc,
+            abw: abw,
+            fcr: fcr,
+            biomass: biomass,
+            todayFeed: todayFeed,
+            yesterdayFeed: 0.0, // TODO: Get from feed history if needed
+            status: status,
+            fcrTrendUp: false, // Simplified for now
+            feedTrendUp: false, // Simplified for now
+            hasAbwData: hasAbwData,
+            area: pond.area,
+            seedCount: pond.seedCount,
+            feedState: feedState,
+          ));
+        } catch (e) {
+          // Fallback for controller errors
+          rows.add(_PondRow(
+            id: pond.id,
+            name: pond.name,
+            doc: 0,
+            abw: 0.0,
+            fcr: 0.0,
+            biomass: 0.0,
+            todayFeed: 0.0,
+            yesterdayFeed: 0.0,
+            status: 'Error',
+            fcrTrendUp: false,
+            feedTrendUp: false,
+            hasAbwData: false,
+            area: pond.area,
+            seedCount: pond.seedCount,
+            feedState: PondViewState(
+              pondId: pond.id,
+              doc: 0,
+              error: 'Failed to load: $e',
+            ),
+          ));
         }
       }
 
-      // Status
-      String status;
-      if (fcr > 1.8) {
-        status = 'Critical';
-      } else if (!hasAbwData && doc > 0)
-        status = 'Warning';
-      else if (fcr > 1.5)
-        status = 'Warning';
-      else
-        status = 'Good';
+      return rows;
+    }
 
-      return _PondRow(
-        id: pond.id,
-        name: pond.name,
-        doc: doc,
-        abw: abw,
-        fcr: fcr,
-        biomass: biomass,
-        todayFeed: todayFeed,
-        yesterdayFeed: yesterdayFeed,
-        status: status,
-        fcrTrendUp: fcrTrendUp,
-        feedTrendUp: todayFeed >= yesterdayFeed,
-        hasAbwData: hasAbwData,
-        area: pond.area,
-        seedCount: pond.seedCount,
-      );
-    }).toList();
+    return FutureBuilder<List<_PondRow>>(
+      future: _buildPondRows(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _loadingView();
+        }
 
-    // ── Farm-level aggregates ─────────────────────────────────────────────────
-    final double totalFeedFarm = rows.fold(
-        0.0,
-        (s, r) =>
-            s +
-            (feedHistory[r.id]?.isNotEmpty == true
-                ? feedHistory[r.id]!.first.cumulative
-                : 0.0));
-    final double feedToday = rows.fold(0.0, (s, r) => s + r.todayFeed);
-    final double feedYesterday = rows.fold(0.0, (s, r) => s + r.yesterdayFeed);
-    final double totalFeedCost = totalFeedFarm * kFeedCostPerKg;
-    final double totalBiomass = rows.fold(0.0, (s, r) => s + r.biomass);
+        if (!snapshot.hasData) {
+          return _noPondsView(context, ref, farmState, currentFarm);
+        }
 
-    final double feedChangePct = feedYesterday > 0
-        ? ((feedToday - feedYesterday) / feedYesterday) * 100
-        : 0.0;
+        final rows = snapshot.data!;
 
-    final double farmFcr =
-        totalBiomass > 0.1 ? totalFeedFarm / totalBiomass : 0.0;
-    final String biomassStatus = farmFcr < 1.5
-        ? 'Within optimal range'
-        : farmFcr < 2.0
-            ? 'Monitor closely'
-            : 'Needs attention';
+        // ── Farm-level aggregates ─────────────────────────────────────────────────
+        final double totalFeedFarm = rows.fold(0.0, (s, r) => s + r.todayFeed);
+        final double feedToday = totalFeedFarm;
+        final double feedYesterday =
+            rows.fold(0.0, (s, r) => s + r.yesterdayFeed);
+        final double totalFeedCost = totalFeedFarm * kFeedCostPerKg;
+        final double totalBiomass = rows.fold(0.0, (s, r) => s + r.biomass);
 
-    final int needsAttentionCount =
-        rows.where((r) => r.status != 'Good').length;
+        final double feedChangePct = feedYesterday > 0
+            ? ((feedToday - feedYesterday) / feedYesterday) * 100
+            : 0.0;
 
-    // ── Insights ─────────────────────────────────────────────────────────────
-    final insights = _buildInsights(rows, ponds, today);
+        final double farmFcr =
+            totalBiomass > 0.1 ? totalFeedFarm / totalBiomass : 0.0;
+        final String biomassStatus = farmFcr < 1.5
+            ? 'Within optimal range'
+            : farmFcr < 2.0
+                ? 'Monitor closely'
+                : 'Needs attention';
 
-    return Scaffold(
-      backgroundColor: _bg,
-      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Header(
-                farmState: farmState,
-                currentFarm: currentFarm,
-                onSelectFarm: (id) =>
-                    ref.read(farmProvider.notifier).selectFarm(id),
-                onAddFarm: () =>
-                    Navigator.pushNamed(context, AppRoutes.addFarm),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── 2×2 KPI grid ──────────────────────────────────────
-                    _KpiGrid(
-                      totalFeedFarm: totalFeedFarm,
-                      feedToday: feedToday,
-                      feedChangePct: feedChangePct,
-                      totalFeedCost: totalFeedCost,
-                      totalBiomass: totalBiomass,
-                      biomassStatus: biomassStatus,
-                    ),
+        final int needsAttentionCount =
+            rows.where((r) => r.status != 'Good').length;
 
-                    // ── Farm Insights ─────────────────────────────────────
-                    if (insights.isNotEmpty) ...[
-                      const SizedBox(height: 28),
-                      const Text(
-                        'Farm Insights',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: _textPrimary,
+        // ── Insights ─────────────────────────────────────────────────────────────
+        final insights = _buildInsights(rows, ponds, today);
+
+        return Scaffold(
+          backgroundColor: _bg,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Header(
+                    farmState: farmState,
+                    currentFarm: currentFarm,
+                    onSelectFarm: (id) =>
+                        ref.read(farmProvider.notifier).selectFarm(id),
+                    onAddFarm: () =>
+                        Navigator.pushNamed(context, AppRoutes.addFarm),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── 2×2 KPI grid ──────────────────────────────────────
+                        _KpiGrid(
+                          totalFeedFarm: totalFeedFarm,
+                          feedToday: feedToday,
+                          feedChangePct: feedChangePct,
+                          totalFeedCost: totalFeedCost,
+                          totalBiomass: totalBiomass,
+                          biomassStatus: biomassStatus,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...insights.map((ins) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _InsightCard(
-                              insight: ins,
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                AppRoutes.pondDashboard,
-                                arguments: ins.pondId,
+
+                        // ── Farm Insights ─────────────────────────────────────
+                        if (insights.isNotEmpty) ...[
+                          const SizedBox(height: 28),
+                          const Text(
+                            'Farm Insights',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: _textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...insights.map((ins) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _InsightCard(
+                                  insight: ins,
+                                  onTap: () => Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.pondDashboard,
+                                    arguments: ins.pondId,
+                                  ),
+                                ),
+                              )),
+                        ],
+
+                        // ── Pond list ─────────────────────────────────────────
+                        const SizedBox(height: 28),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${rows.length} ACTIVE PONDS',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: _textSub,
+                                letterSpacing: 0.5,
                               ),
                             ),
-                          )),
-                    ],
-
-                    // ── Pond list ─────────────────────────────────────────
-                    const SizedBox(height: 28),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${rows.length} ACTIVE PONDS',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: _textSub,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () =>
-                              Navigator.pushNamed(context, AppRoutes.addPond),
-                          child: const Text(
-                            'VIEW ALL',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: _green,
-                              letterSpacing: 0.5,
+                            GestureDetector(
+                              onTap: () => Navigator.pushNamed(
+                                  context, AppRoutes.addPond),
+                              child: const Text(
+                                'VIEW ALL',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: _green,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
+                        const SizedBox(height: 12),
+                        ...rows.map((r) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _PondCard(
+                                row: r,
+                                onTap: () => Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.pondDashboard,
+                                  arguments: r.id,
+                                ),
+                                onEdit: () => Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.editPond,
+                                  arguments: r.id,
+                                ),
+                                onDelete: () => _confirmDelete(
+                                  context,
+                                  r.name,
+                                  () async {
+                                    try {
+                                      await ref
+                                          .read(farmProvider.notifier)
+                                          .deletePond(currentFarm.id, r.id);
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content:
+                                                  Text('Failed to delete: $e')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              ),
+                            )),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    ...rows.map((r) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _PondCard(
-                            row: r,
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.pondDashboard,
-                              arguments: r.id,
-                            ),
-                            onEdit: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.editPond,
-                              arguments: r.id,
-                            ),
-                            onDelete: () => _confirmDelete(
-                              context,
-                              r.name,
-                              () async {
-                                try {
-                                  await ref
-                                      .read(farmProvider.notifier)
-                                      .deletePond(currentFarm.id, r.id);
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                          content:
-                                              Text('Failed to delete: $e')),
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                          ),
-                        )),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -377,8 +370,11 @@ class DashboardScreen extends ConsumerWidget {
     }
 
     // No sampling in 10+ days (only for tanks with DOC > 5, since new tanks don't need early samples)
+    // Create a lookup map for O(1) access instead of O(n²) where().firstOrNull
+    final rowMap = {for (final row in rows) row.id: row};
+
     for (final pond in ponds) {
-      final row = rows.where((r) => r.id == pond.id).firstOrNull;
+      final row = rowMap[pond.id];
       if (row == null || row.doc < 6)
         continue; // Skip tanks DOC <= 5 (too young to sample)
       final lastSample = pond.latestSampleDate;
@@ -398,19 +394,7 @@ class DashboardScreen extends ConsumerWidget {
     return result;
   }
 
-  static double? _abwAtDoc(List<SamplingLog> logs, int doc) {
-    if (logs.isEmpty) return null;
-    SamplingLog? closest;
-    int bestDiff = 9999;
-    for (final l in logs) {
-      final diff = (l.doc - doc).abs();
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        closest = l;
-      }
-    }
-    return closest?.abw;
-  }
+  // Removed _abwAtDoc - no longer needed with controller-based approach
 
   void _confirmDelete(
       BuildContext context, String name, VoidCallback onConfirmed) {
@@ -591,18 +575,16 @@ class _Header extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Farm icon with hidden admin access
-          LogoTapDetector(
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: _green.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.agriculture_rounded,
-                  color: _green, size: 22),
+          // Farm icon
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: _green.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child:
+                const Icon(Icons.agriculture_rounded, color: _green, size: 22),
           ),
           const SizedBox(width: 10),
 

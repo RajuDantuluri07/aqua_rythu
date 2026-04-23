@@ -22,7 +22,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
-  
+
   ExpenseCategory _selectedCategory = ExpenseCategory.labour;
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
@@ -54,14 +54,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
     try {
       final amount = double.parse(_amountController.text);
-      
+
       await ref.read(expensesProvider(widget.cropId).notifier).addExpense(
-        farmId: widget.farmId,
-        category: _selectedCategory,
-        amount: amount,
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        date: _selectedDate,
-      );
+            farmId: widget.farmId,
+            pondId: null, // TODO: Add pond selection if needed
+            category: _selectedCategory,
+            amount: amount,
+            notes: _notesController.text.trim().isEmpty
+                ? null
+                : _notesController.text.trim(),
+            date: _selectedDate,
+          );
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -215,7 +218,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       )
                     : const Text(

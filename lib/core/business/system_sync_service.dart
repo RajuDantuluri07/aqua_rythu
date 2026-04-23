@@ -2,7 +2,6 @@ import '../services/expense_service.dart';
 import '../services/feed_service.dart';
 import '../services/inventory_service.dart';
 import '../utils/logger.dart';
-import '../../core/models/expense_model.dart';
 
 /// Unified system synchronization service for AquaRythu
 ///
@@ -38,8 +37,8 @@ class SystemSyncService {
       // Step 1: Calculate total feed amount
       final totalFeedAmount = feedRounds.fold(0.0, (sum, round) => sum + round);
 
-      // Step 2: Calculate feed cost
-      final feedCost = totalFeedAmount * feedCostPerKg;
+      // Step 2: Feed cost is now calculated from inventory system
+      // No need to calculate here as it comes from inventory usage
 
       // Step 3: Validate inventory has sufficient feed
       final inventoryValidation = await _validateFeedInventory(
@@ -62,16 +61,9 @@ class SystemSyncService {
         return SyncResult.failure('Feed not found in feed logs for DOC $doc');
       }
 
-      // Step 5: Auto-create expense entry for feed cost
-      await _expenseService.createExpense(
-        farmId: farmId,
-        cropId: cropId,
-        category: ExpenseCategory.feed,
-        amount: feedCost,
-        notes:
-            'Auto-generated from feed: ${totalFeedAmount.toStringAsFixed(1)}kg @ DOC $doc',
-        date: DateTime.now(),
-      );
+      // Step 5: Feed cost is now automatically calculated from inventory
+      // No manual feed expense entry needed - feed cost comes from inventory system
+      AppLogger.info('Feed cost will be calculated from inventory usage');
 
       // Step 6: Validate inventory deduction happened
       await _validateInventoryDeduction(pondId, totalFeedAmount,
@@ -90,8 +82,8 @@ class SystemSyncService {
       String pondId, double requiredAmount,
       {required String cropId, required String farmId}) async {
     try {
-      final inventoryStock = await _inventoryService.getInventoryStock(
-          cropId: cropId, farmId: farmId);
+      final inventoryStock =
+          await _inventoryService.getInventoryStock(cropId, farmId);
 
       // Find feed items in inventory
       final feedItems = inventoryStock.where(
@@ -154,27 +146,18 @@ class SystemSyncService {
       final feedLogs = await _feedService
           .fetchFeedLogs(''); // Get all feed logs for the period
 
-      // Get expense data
-      final expenses = await _expenseService.getExpenses(
-        farmId: farmId,
-        cropId: cropId,
-        startDate: startDate,
-        endDate: endDate,
-      );
-
       // Get inventory data
       final inventoryStock = await _inventoryService.getInventoryStock(
-        cropId: cropId,
-        farmId: farmId,
+        cropId,
+        farmId,
       );
 
       // Calculate totals
       final totalFeedAmount = feedLogs.fold(0.0,
           (sum, log) => sum + ((log['feed_given'] as num?)?.toDouble() ?? 0.0));
 
-      final totalFeedExpenses = expenses
-          .where((expense) => expense.category == ExpenseCategory.feed)
-          .fold(0.0, (sum, expense) => sum + expense.amount);
+      // Feed expenses are no longer tracked - feed cost comes from inventory only
+      final totalFeedExpenses = 0.0;
 
       final totalInventoryFeed = inventoryStock
           .where((item) => item['category']?.toString().toLowerCase() == 'feed')

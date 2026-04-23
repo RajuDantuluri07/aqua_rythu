@@ -5,6 +5,7 @@ import 'auth_provider.dart';
 import 'forgot_password_dialog.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
+import '../../core/services/admin_security_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +18,112 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLogin = true;
+
+  // Admin access tracking
+  int _logoClickCount = 0;
+  DateTime? _lastLogoClickTime;
+  static const Duration _clickResetTime = Duration(seconds: 3);
+  static const int _requiredClicks = 5;
+
+  void _handleLogoClick() {
+    final now = DateTime.now();
+
+    // Reset counter if too much time has passed
+    if (_lastLogoClickTime != null &&
+        now.difference(_lastLogoClickTime!) > _clickResetTime) {
+      _logoClickCount = 0;
+    }
+
+    _logoClickCount++;
+    _lastLogoClickTime = now;
+
+    // Check if required clicks reached
+    if (_logoClickCount >= _requiredClicks) {
+      _logoClickCount = 0;
+      _showAdminPasscodeDialog();
+    }
+  }
+
+  void _showAdminPasscodeDialog() {
+    final TextEditingController passcodeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Admin Access'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter admin passcode:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passcodeController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              decoration: const InputDecoration(
+                hintText: '4-digit passcode',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final passcode = passcodeController.text.trim();
+              Navigator.of(dialogContext).pop();
+
+              if (passcode.isEmpty) return;
+
+              try {
+                final adminService = AdminSecurityService();
+                final isValid =
+                    await adminService.validateAdminAccess(passcode);
+
+                if (mounted) {
+                  if (isValid) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Admin access granted! Session active for 15 minutes.'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Invalid passcode'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Authentication failed'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -86,15 +193,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               children: [
                 const SizedBox(height: AppSpacing.xl),
                 // Hero logo for smooth transition from SplashScreen
-                Hero(
-                  tag: 'app_logo',
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    height: 90,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.water_drop_rounded,
-                      size: 60,
-                      color: theme.primaryColor,
+                GestureDetector(
+                  onTap: _handleLogoClick,
+                  child: Hero(
+                    tag: 'app_logo',
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 90,
+                      errorBuilder: (context, error, stackTrace) => Icon(
+                        Icons.water_drop_rounded,
+                        size: 60,
+                        color: theme.primaryColor,
+                      ),
                     ),
                   ),
                 ),

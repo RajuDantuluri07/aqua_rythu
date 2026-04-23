@@ -1,5 +1,11 @@
+import '../../core/services/feed_config_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 class FeedEngineConstants {
-  /// Survival rate estimation (PRD 13.2)
+  static final FeedConfigService _configService =
+      FeedConfigService(Supabase.instance.client);
+
+  /// Survival rate estimation (PRD 13.2) - These are biological constants, not configurable
   static const Map<int, double> survivalRates = {
     1: 0.98,
     15: 0.96,
@@ -9,7 +15,7 @@ class FeedEngineConstants {
     120: 0.80,
   };
 
-  /// Average Body Weight (ABW) targets in grams
+  /// Average Body Weight (ABW) targets in grams - Biological constants, not configurable
   static const Map<int, double> abwTargets = {
     1: 0.01,
     15: 0.08,
@@ -22,7 +28,7 @@ class FeedEngineConstants {
     120: 32.0,
   };
 
-  /// Feeding Rate (% body weight)
+  /// Feeding Rate (% body weight) - Biological constants, not configurable
   static const Map<int, double> feedingRates = {
     1: 0.15,
     15: 0.12,
@@ -32,44 +38,97 @@ class FeedEngineConstants {
     120: 0.025,
   };
 
-  /// Meal distribution factors
-  static const double firstMealFactor = 0.8;
-  static const double lastMealFactor = 1.2;
+  // ── Configurable Constants (now loaded from FeedConfigService) ─────────────────
 
-  // Tray multipliers REMOVED — use MasterFeedEngine.trayFactor() instead.
+  /// Get meal distribution factors from config
+  static Future<Map<String, double>> getMealFactors({String? farmId}) async {
+    return await _configService.getMealFactors(farmId: farmId);
+  }
 
-  // ── Feed cost constants ───────────────────────────────────────────────────
+  /// Get feed cost per kg from config
+  static Future<double> getFeedCostPerKg({String? farmId}) async {
+    return await _configService.getFeedCostPerKg(farmId: farmId);
+  }
 
-  /// Approximate cost of shrimp feed per kg (₹).
-  /// Used for ₹-framed warnings (e.g. "Feeding early wastes ₹X").
-  /// Typical commercial pellet range: ₹60–90/kg. Conservative midpoint used.
-  /// BUG-13 fix: was hardcoded as ₹20/kg in FeedStatusEngine.estimateFeedLoss,
-  /// which under-stated the loss 3–4x. Centralised here for easy tuning.
-  /// TODO V2: make this configurable per-farm (user-entered purchase price).
-  static const double feedCostPerKg = 70.0;
+  /// Get harvest price per kg from config
+  static Future<double> getHarvestPricePerKg({String? farmId}) async {
+    return await _configService.getHarvestPricePerKg(farmId: farmId);
+  }
 
-  /// Default market price per kg of harvested L. vannamei (₹).
-  /// Shared across PondValueEngine and insight calculations.
-  static const double harvestPricePerKg = 150.0;
+  /// Get feed factor bounds from config
+  static Future<Map<String, double>> getFeedFactorBounds(
+      {String? farmId}) async {
+    return await _configService.getFeedFactorBounds(farmId: farmId);
+  }
 
-  // ── Master Feed Engine Constants ──────────────────────────────────────────
+  /// Get smart mode minimum DOC from config
+  static Future<int> getSmartModeMinDoc({String? farmId}) async {
+    return await _configService.getSmartModeMinDoc(farmId: farmId);
+  }
 
-  /// Minimum feed factor for safety clamping (±30% from base).
-  static const double minFeedFactor = 0.70;
+  /// Get intelligence thresholds from config
+  static Future<Map<String, double>> getIntelligenceThresholds(
+      {String? farmId}) async {
+    return await _configService.getIntelligenceThresholds(farmId: farmId);
+  }
 
-  /// Maximum feed factor for safety clamping (±30% from base).
-  static const double maxFeedFactor = 1.30;
+  /// Get intelligence factors from config
+  static Future<Map<String, double>> getIntelligenceFactors(
+      {String? farmId}) async {
+    return await _configService.getIntelligenceFactors(farmId: farmId);
+  }
 
-  /// Minimum DOC for smart-mode corrections (SmartFeedEngineV2, FCR, intelligence).
-  static const int smartModeMinDoc = 30;
+  // ── Legacy Static Methods (for backward compatibility) ─────────────────────────
 
-  /// Intelligence factor thresholds for feed adjustments.
-  static const double intelligenceHighThreshold = 15.0;
-  static const double intelligenceLowThreshold = 5.0;
+  /// Legacy method - use getFeedCostPerKg() instead
+  @deprecated
+  static double get feedCostPerKg => 70.0; // Default fallback
 
-  /// Intelligence factor adjustments (softer than previous aggressive 1.15/0.85).
-  static const double intelligenceHighFactor = 1.10;
-  static const double intelligenceMediumFactor = 1.05;
-  static const double intelligenceLowFactor = 0.95;
-  static const double intelligenceVeryLowFactor = 0.90;
+  /// Legacy method - use getHarvestPricePerKg() instead
+  @deprecated
+  static double get harvestPricePerKg => 150.0; // Default fallback
+
+  /// Legacy method - use getMealFactors() instead
+  @deprecated
+  static double get firstMealFactor => 0.8; // Default fallback
+
+  /// Legacy method - use getMealFactors() instead
+  @deprecated
+  static double get lastMealFactor => 1.2; // Default fallback
+
+  /// Legacy method - use getFeedFactorBounds() instead
+  @deprecated
+  static double get minFeedFactor => 0.70; // Default fallback
+
+  /// Legacy method - use getFeedFactorBounds() instead
+  @deprecated
+  static double get maxFeedFactor => 1.30; // Default fallback
+
+  /// Legacy method - use getSmartModeMinDoc() instead
+  @deprecated
+  static int get smartModeMinDoc => 30; // Default fallback
+
+  /// Legacy method - use getIntelligenceThresholds() instead
+  @deprecated
+  static double get intelligenceHighThreshold => 15.0; // Default fallback
+
+  /// Legacy method - use getIntelligenceThresholds() instead
+  @deprecated
+  static double get intelligenceLowThreshold => 5.0; // Default fallback
+
+  /// Legacy method - use getIntelligenceFactors() instead
+  @deprecated
+  static double get intelligenceHighFactor => 1.10; // Default fallback
+
+  /// Legacy method - use getIntelligenceFactors() instead
+  @deprecated
+  static double get intelligenceMediumFactor => 1.05; // Default fallback
+
+  /// Legacy method - use getIntelligenceFactors() instead
+  @deprecated
+  static double get intelligenceLowFactor => 0.95; // Default fallback
+
+  /// Legacy method - use getIntelligenceFactors() instead
+  @deprecated
+  static double get intelligenceVeryLowFactor => 0.90; // Default fallback
 }

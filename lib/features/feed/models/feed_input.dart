@@ -28,6 +28,16 @@ class FeedInput {
   // Anchor feed for DOC > 30 hybrid flow (farmer-set baseline)
   final double? anchorFeed;
 
+  // Pond identifier for safety validation and logging
+  final String pondId;
+
+  // Number of feed rounds per day for feed splitting
+  final int? feedsPerDay;
+
+  // Data quality warnings for UI display
+  final List<String> dataWarnings;
+  final bool hasIncompleteData;
+
   FeedInput({
     required this.seedCount,
     required this.doc,
@@ -47,5 +57,9 @@ class FeedInput {
     this.actualFeedYesterday,
     this.lastFeedTime,
     this.anchorFeed,
+    required this.pondId,
+    this.feedsPerDay,
+    this.dataWarnings = const [],
+    this.hasIncompleteData = false,
   });
 }

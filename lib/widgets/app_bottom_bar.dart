@@ -15,7 +15,7 @@ class AppBottomBar extends StatelessWidget {
 
         switch (index) {
           case 0:
-            Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+            Navigator.pushReplacementNamed(context, AppRoutes.home);
             break;
           case 1:
             Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
@@ -30,12 +30,16 @@ class AppBottomBar extends StatelessWidget {
       backgroundColor: Colors.white,
       elevation: 12,
       type: BottomNavigationBarType.fixed,
-      selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-      unselectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+      selectedLabelStyle:
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      unselectedLabelStyle:
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: "HOME"),
-        BottomNavigationBarItem(icon: Icon(Icons.water_drop_rounded), label: "TANKS"),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: "PROFILE"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.water_drop_rounded), label: "PONDS"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.person_rounded), label: "PROFILE"),
       ],
     );
   }

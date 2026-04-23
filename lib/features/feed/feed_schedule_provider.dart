@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
 import '../../systems/planning/feed_plan_constants.dart';
+import 'feed_history_provider.dart';
 
 class FeedDayPlan {
   final int doc;
@@ -82,7 +83,8 @@ class FeedScheduleState {
     this.error,
   });
 
-  double get totalProjectedFeed => days.fold(0.0, (sum, day) => sum + day.total);
+  double get totalProjectedFeed =>
+      days.fold(0.0, (sum, day) => sum + day.total);
 
   FeedScheduleState copyWith({
     List<FeedDayPlan>? days,
@@ -101,12 +103,14 @@ class FeedScheduleState {
 
 class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
   final FeedService _feedService;
+  final Ref _ref;
 
-  FeedScheduleNotifier(this._feedService) : super(FeedScheduleState(days: [], isLoading: true));
+  FeedScheduleNotifier(this._feedService, this._ref)
+      : super(FeedScheduleState(days: [], isLoading: true));
 
   Future<void> loadFeedSchedule(String pondId) async {
     state = state.copyWith(isLoading: true, error: null);
-    
+
     try {
       final existingData = await _feedService.getFeedPlans(pondId);
 
@@ -126,8 +130,7 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
         final doc = item['doc'] as int;
         final round = item['round'] as int;
         final feedAmount = (item['planned_amount'] as num).toDouble();
-        final baseFeed =
-            (item['base_feed'] as num?)?.toDouble() ?? feedAmount;
+        final baseFeed = (item['base_feed'] as num?)?.toDouble() ?? feedAmount;
 
         groupedData.putIfAbsent(doc, () => [0.0, 0.0, 0.0, 0.0]);
 
@@ -157,8 +160,8 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
           }
         }
         // Use base_feed sum as engineTotal; fall back to planned_amount sum.
-        final eTotal = engineTotals[doc] ??
-            rounds.fold<double>(0.0, (s, r) => s + r);
+        final eTotal =
+            engineTotals[doc] ?? rounds.fold<double>(0.0, (s, r) => s + r);
         return FeedDayPlan(doc: doc, rounds: rounds, engineTotal: eTotal);
       }).toList()
         ..sort((a, b) => a.doc.compareTo(b.doc));
@@ -183,8 +186,8 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
 
     final updatedDays = List<FeedDayPlan>.from(state.days);
     final day = updatedDays[docIndex];
-    final rounds  = List<double>.from(day.rounds);
-    final manual  = List<bool>.from(day.isRoundManual);
+    final rounds = List<double>.from(day.rounds);
+    final manual = List<bool>.from(day.isRoundManual);
 
     if (value <= 0) {
       // Deactivating a round — clear its manual flag
@@ -218,13 +221,14 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
     if (docIndex < 0 || docIndex >= state.days.length) return;
 
     final updatedDays = List<FeedDayPlan>.from(state.days);
-    final day   = updatedDays[docIndex];
+    final day = updatedDays[docIndex];
     final total = day.engineTotal > 0 ? day.engineTotal : day.total;
     final manual = List<bool>.filled(4, false);
     final rounds = List<double>.from(day.rounds);
 
     final activeIdx = <int>[
-      for (int i = 0; i < rounds.length; i++) if (rounds[i] > 0) i
+      for (int i = 0; i < rounds.length; i++)
+        if (rounds[i] > 0) i
     ];
 
     if (activeIdx.isEmpty) {
@@ -251,8 +255,8 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
       List<double> rounds, List<bool> manual, double engineTotal) {
     if (engineTotal <= 0) return;
 
-    final remaining = (engineTotal - _manualSum(rounds, manual))
-        .clamp(0.0, engineTotal);
+    final remaining =
+        (engineTotal - _manualSum(rounds, manual)).clamp(0.0, engineTotal);
 
     final autoIdx = <int>[
       for (int i = 0; i < rounds.length; i++)
@@ -271,11 +275,16 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
   /// Percentages for smart distribution by active-round count.
   static List<double> _getSmartDistribution(int count) {
     switch (count) {
-      case 1:  return [1.0];
-      case 2:  return [0.5,  0.5];
-      case 3:  return [0.3,  0.3,  0.4];
-      case 4:  return [0.25, 0.25, 0.25, 0.25];
-      default: return [];
+      case 1:
+        return [1.0];
+      case 2:
+        return [0.5, 0.5];
+      case 3:
+        return [0.3, 0.3, 0.4];
+      case 4:
+        return [0.25, 0.25, 0.25, 0.25];
+      default:
+        return [];
     }
   }
 
@@ -293,19 +302,24 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
     }
   }
 
-  static double _manualSum(List<double> rounds, List<bool> manual) =>
-      [for (int i = 0; i < rounds.length; i++) if (manual[i]) rounds[i]]
-          .fold(0.0, (s, v) => s + v);
+  static double _manualSum(List<double> rounds, List<bool> manual) => [
+        for (int i = 0; i < rounds.length; i++)
+          if (manual[i]) rounds[i]
+      ].fold(0.0, (s, v) => s + v);
 
   /// Round to 1 decimal place, avoiding floating-point drift.
   static double _round1dp(double v) => (v * 10).round() / 10;
 
   Future<void> saveFeedSchedule(String pondId) async {
     state = state.copyWith(isSaving: true, error: null);
-    
+
     try {
       await _feedService.saveFeedPlans(pondId, state.days);
-      
+
+      // Invalidate related caches to ensure fresh data
+      _ref.invalidate(feedHistoryProvider);
+      _ref.invalidate(feedScheduleProvider);
+
       state = state.copyWith(isSaving: false);
     } catch (e) {
       AppLogger.error('Failed to save feed plans', e);
@@ -323,7 +337,8 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
 }
 
 // Provider
-final feedScheduleProvider = StateNotifierProvider<FeedScheduleNotifier, FeedScheduleState>((ref) {
+final feedScheduleProvider =
+    StateNotifierProvider<FeedScheduleNotifier, FeedScheduleState>((ref) {
   final feedService = FeedService();
-  return FeedScheduleNotifier(feedService);
+  return FeedScheduleNotifier(feedService, ref);
 });
