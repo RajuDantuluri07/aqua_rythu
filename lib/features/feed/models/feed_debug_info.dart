@@ -62,6 +62,12 @@ class FeedDebugInfo {
   /// Null for blind phase and anchor-feed flow (V2 not run).
   final Map<String, dynamic>? v2Debug;
 
+  /// 🔥 NEW: Base feed source for debugging anchor feed bug fix
+  final String? baseFeedSource;
+
+  /// 🔥 NEW: Base feed explanation for debugging
+  final String? baseFeedExplanation;
+
   const FeedDebugInfo({
     required this.doc,
     required this.baseFeedPer100k,
@@ -83,5 +89,7 @@ class FeedDebugInfo {
     required this.hasSampling,
     required this.feedStage,
     this.v2Debug,
+    this.baseFeedSource,
+    this.baseFeedExplanation,
   });
 }

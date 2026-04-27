@@ -18,7 +18,8 @@ dependencies:
   flutter_riverpod: ^2.6.1
   intl: ^0.19.0
   shared_preferences: ^2.3.3
-  lottie: ^3.1.0   # 👈 ADD HERE
+  lottie: ^3.1.0
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

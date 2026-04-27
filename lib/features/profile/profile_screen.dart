@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
-import 'farm_settings_screen.dart';
 import 'legal_screen.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_provider.dart';
 import '../farm/farm_provider.dart';
-import '../farm/edit_farm_dialog.dart';
+import '../farm/farms_list_sheet.dart';
 import 'user_provider.dart';
-import 'package:aqua_rythu/core/services/farm_service.dart';
-import 'package:aqua_rythu/core/services/admin_security_service.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
-// Admin provider removed temporarily
-// import '../admin/admin_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -22,67 +18,462 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  void _handleAboutClick() {
-    _showAboutDialog();
+  static const _primaryGreen = Color(0xFF1B8A4C);
+  static const _lightGrey = Color(0xFFF2F4F6);
+  static const _sectionLabelColor = Color(0xFF9E9E9E);
+  static const _cardBorder = Color(0xFFE8ECF0);
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  void _navigateToAdminAccess() {
-    Navigator.of(context).pushNamed(AppRoutes.adminPasscode);
-  }
+  @override
+  Widget build(BuildContext context) {
+    final farmState = ref.watch(farmProvider);
+    final userProfile = ref.watch(userProvider);
+    final connectedFarms = farmState.farms.length;
 
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('About AquaRythu'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      backgroundColor: _lightGrey,
+      bottomNavigationBar: const AppBottomBar(currentIndex: 2),
+      body: SafeArea(
+        child: ListView(
           children: [
-            Text('AquaRythu - Smart Shrimp Farming'),
-            SizedBox(height: 8),
-            Text('Version: 1.0.0'),
-            SizedBox(height: 8),
-            Text('© 2024 AquaRythu Technologies'),
+            // ── PROFILE HEADER ──────────────────────────────────────────
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              child: Column(
+                children: [
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 46,
+                        backgroundImage: NetworkImage(
+                          userProfile.profileImageUrl ??
+                              'https://i.pravatar.cc/150?img=3',
+                        ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: _primaryGreen,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.edit,
+                              size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    userProfile.name,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    userProfile.email,
+                    style: const TextStyle(
+                        fontSize: 14, color: Color(0xFF666666)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    userProfile.phoneNumber,
+                    style: const TextStyle(
+                        fontSize: 14, color: Color(0xFF666666)),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── PREMIUM ACCESS BANNER ────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1B8A4C), Color(0xFF25A862)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'PREMIUM ACCESS',
+                            style: TextStyle(
+                              color: Color(0xFFB8F0D0),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Upgrade to PRO',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Unlock advanced farm analytics',
+                            style: TextStyle(
+                              color: Color(0xFFCCF0DD),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const UpgradeToProScreen()),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text('Upgrade Now',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── STATUS CARD ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GestureDetector(
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const FarmsListSheet(),
+                ),
+                child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 18, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _cardBorder),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'STATUS',
+                            style: TextStyle(
+                              color: _sectionLabelColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Connected Farms: $connectedFarms',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A1A1A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5EE),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.water_drop,
+                          color: _primaryGreen, size: 22),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right,
+                        color: Color(0xFFBBBBBB), size: 18),
+                  ],
+                ),
+              ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── SECURITY ─────────────────────────────────────────────────
+            _sectionLabel('SECURITY'),
+            _sectionCard([
+              _menuItem(
+                icon: Icons.settings_outlined,
+                label: 'Settings',
+                onTap: () {},
+              ),
+              _menuItem(
+                icon: Icons.privacy_tip_outlined,
+                label: 'Privacy Policy',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => LegalScreen.privacyPolicy()),
+                ),
+              ),
+              _menuItem(
+                icon: Icons.gavel_outlined,
+                label: 'Terms and Conditions',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => LegalScreen.termsAndConditions()),
+                ),
+                showDivider: false,
+              ),
+            ]),
+
+            const SizedBox(height: 16),
+
+            // ── OPTION ───────────────────────────────────────────────────
+            _sectionLabel('OPTION'),
+            _sectionCard([
+              _menuItem(
+                icon: Icons.translate_outlined,
+                label: 'Language',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5EE),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'English',
+                        style: TextStyle(
+                          color: _primaryGreen,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.chevron_right,
+                        color: Color(0xFFBBBBBB), size: 20),
+                  ],
+                ),
+                showDivider: false,
+              ),
+            ]),
+
+            const SizedBox(height: 16),
+
+            // ── SUPPORT ──────────────────────────────────────────────────
+            _sectionLabel('SUPPORT'),
+            _sectionCard([
+              _menuItem(
+                icon: Icons.help_outline_rounded,
+                label: 'FAQ',
+                onTap: () {},
+              ),
+              _menuItem(
+                icon: Icons.chat_outlined,
+                label: 'Aqua Rythu WhatsApp',
+                externalLink: true,
+                onTap: () => _launchUrl('https://wa.me/918179363691'),
+              ),
+              _menuItem(
+                icon: Icons.mail_outline_rounded,
+                label: 'Email',
+                onTap: () =>
+                    _launchUrl('mailto:support@aquarythu.com'),
+              ),
+              _menuItem(
+                icon: Icons.update_rounded,
+                label: 'Check Updates',
+                onTap: () {},
+              ),
+              _menuItem(
+                icon: Icons.group_outlined,
+                label: 'Telegram Group',
+                externalLink: true,
+                onTap: () => _launchUrl('https://t.me/aquarythu'),
+                showDivider: false,
+              ),
+            ]),
+
+            const SizedBox(height: 16),
+
+            // ── ACCOUNT ──────────────────────────────────────────────────
+            _sectionLabel('ACCOUNT'),
+            _sectionCard([
+              _menuItem(
+                icon: Icons.logout_rounded,
+                label: 'Sign Out',
+                labelColor: const Color(0xFFE53935),
+                iconColor: const Color(0xFFE53935),
+                showDivider: false,
+                onTap: () => _showLogoutDialog(context),
+              ),
+            ]),
+
+            const SizedBox(height: 24),
+
+            // ── FOOTER ───────────────────────────────────────────────────
+            const Center(
+              child: Text(
+                'AQUARYTHU V1.0.0',
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 2,
+                  color: Color(0xFFBBBBBB),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
   }
 
-  void _showAdminPasscodeDialog() {
-    final TextEditingController passcodeController = TextEditingController();
+  // ── HELPERS ─────────────────────────────────────────────────────────────
 
+  Widget _sectionLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 20, bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: _sectionLabelColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionCard(List<Widget> children) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _cardBorder),
+        ),
+        child: Column(children: children),
+      ),
+    );
+  }
+
+  Widget _menuItem({
+    required IconData icon,
+    required String label,
+    VoidCallback? onTap,
+    bool showDivider = true,
+    bool externalLink = false,
+    Color? labelColor,
+    Color? iconColor,
+    Widget? trailing,
+  }) {
+    final effectiveIconColor = iconColor ?? const Color(0xFF444444);
+    final effectiveLabelColor = labelColor ?? const Color(0xFF1A1A1A);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F7FA),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: effectiveIconColor, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: effectiveLabelColor,
+                    ),
+                  ),
+                ),
+                trailing ??
+                    Icon(
+                      externalLink
+                          ? Icons.open_in_new_rounded
+                          : Icons.chevron_right,
+                      color: const Color(0xFFBBBBBB),
+                      size: 20,
+                    ),
+              ],
+            ),
+          ),
+        ),
+        if (showDivider)
+          const Divider(
+              height: 1, thickness: 1, indent: 66, color: Color(0xFFF0F0F0)),
+      ],
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Admin Access'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter admin passcode:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: passcodeController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              decoration: const InputDecoration(
-                hintText: '4-digit passcode',
-                border: OutlineInputBorder(),
-                counterText: '',
-              ),
-              autofocus: true,
-            ),
-          ],
-        ),
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -90,429 +481,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           TextButton(
             onPressed: () async {
-              final passcode = passcodeController.text.trim();
+              await ref.read(authProvider.notifier).logout();
+              if (!context.mounted) return;
               Navigator.of(dialogContext).pop();
-
-              if (passcode.isEmpty) return;
-
-              try {
-                final adminService = AdminSecurityService();
-                final isValid =
-                    await adminService.validateAdminAccess(passcode);
-
-                if (mounted) {
-                  if (isValid) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                            'Admin access granted! Session active for 15 minutes.'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Invalid passcode'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error occurred'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+              Navigator.pushNamedAndRemoveUntil(
+                  context, AppRoutes.login, (route) => false);
             },
-            child: const Text('Submit'),
+            child: const Text('Sign Out',
+                style: TextStyle(color: Color(0xFFE53935))),
           ),
         ],
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final farmState = ref.watch(farmProvider);
-    final userProfile = ref.watch(userProvider);
-
-    return Scaffold(
-      // backgroundColor is now handled by the global theme
-      appBar: AppBar(
-        title: const Text("Profile"),
-      ),
-      bottomNavigationBar: const AppBottomBar(currentIndex: 2),
-      body: Column(
-        children: [
-          // 🔹 TOP PROFILE
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            color: Theme.of(context).colorScheme.surface,
-            child: Column(
-              children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundImage: NetworkImage(
-                        userProfile.profileImageUrl ??
-                            "https://i.pravatar.cc/150?img=3",
-                      ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    )
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  userProfile.name,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(userProfile.phoneNumber,
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          // 🔹 FARM LIST
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                Text(
-                  "MY FARMS",
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                const SizedBox(height: 10),
-
-                // 🔹 DYNAMIC FARM LIST
-                ...farmState.farms.map((farm) {
-                  final isActive = farm.id == farmState.selectedId;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _farmTile(
-                      context,
-                      ref,
-                      farm: farm,
-                      active: isActive,
-                    ),
-                  );
-                }),
-
-                const SizedBox(height: 10),
-
-                // Add Farm Button
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.add),
-                  label: const Text("+ Add New Farm"),
-                  onPressed: () {
-                    Navigator.pushNamed(context, AppRoutes.addFarm);
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                // GENERAL
-                Text(
-                  "GENERAL",
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                const SizedBox(height: 10),
-
-                _menuTile(Icons.workspace_premium, "🚀 Upgrade to PRO",
-                    onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const UpgradeToProScreen(),
-                    ),
-                  );
-                }),
-                _menuTile(Icons.settings, "Account Settings"),
-                _menuTile(Icons.notifications, "Notification Preferences"),
-                _menuTile(Icons.language, "App Language"),
-
-                // Admin Access - Only show for admin users
-                Consumer(
-                  builder: (context, ref, child) {
-                    // Admin functionality disabled temporarily
-                    final isAdmin = false; // ref.watch(isAdminProvider);
-                    if (!isAdmin) return const SizedBox.shrink();
-
-                    return _menuTile(
-                      Icons.admin_panel_settings,
-                      "Admin Control Panel",
-                      onTap: _navigateToAdminAccess,
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                // LEGAL
-                Text(
-                  "LEGAL & SUPPORT",
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                const SizedBox(height: 10),
-
-                _menuTile(Icons.description, "Terms & Conditions", onTap: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LegalScreen.termsAndConditions(),
-                      ));
-                }),
-                _menuTile(Icons.privacy_tip, "Privacy Policy", onTap: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LegalScreen.privacyPolicy(),
-                      ));
-                }),
-                _menuTile(Icons.info, "About AquaRythu",
-                    onTap: _handleAboutClick),
-
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-
-          // 🔻 LOGOUT
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Theme.of(context).colorScheme.surface,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (BuildContext dialogContext) {
-                    return AlertDialog(
-                      title: const Text('Logout'),
-                      content: const Text('Are you sure you want to log out?'),
-                      actions: <Widget>[
-                        TextButton(
-                          child: const Text('Cancel'),
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                        ),
-                        TextButton(
-                          child: Text('Logout',
-                              style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error)),
-                          onPressed: () async {
-                            await ref.read(authProvider.notifier).logout();
-                            // Close the dialog first
-                            if (!context.mounted) return;
-                            Navigator.of(dialogContext).pop();
-                            // Navigate to login and remove all previous routes
-                            Navigator.pushNamedAndRemoveUntil(
-                                context, AppRoutes.login, (route) => false);
-                          },
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text("Logout Account"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.errorContainer,
-                foregroundColor: Theme.of(context).colorScheme.error,
-                elevation: 0,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _farmTile(
-    BuildContext context,
-    WidgetRef ref, {
-    required Farm farm,
-    required bool active,
-  }) {
-    final theme = Theme.of(context);
-    final status = "${farm.ponds.length} Ponds • ${farm.location}";
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const FarmSettingsScreen(),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: active
-              ? theme.colorScheme.primaryContainer.withOpacity(0.3)
-              : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.water_drop, color: theme.colorScheme.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(farm.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text(
-                    status,
-                    style: TextStyle(
-                      color: active ? theme.colorScheme.primary : Colors.grey,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'edit') {
-                  showDialog(
-                    context: context,
-                    builder: (dialogContext) => EditFarmDialog(
-                      farmId: farm.id,
-                      initialName: farm.name,
-                      initialLocation: farm.location,
-                    ),
-                  );
-                } else if (value == 'delete') {
-                  showDialog(
-                    context: context,
-                    builder: (dialogContext) => AlertDialog(
-                      title: const Text('Delete Farm?'),
-                      content: Text(
-                        'Are you sure you want to delete "${farm.name}" and all its ponds? This action cannot be undone.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            Navigator.of(dialogContext).pop();
-                            try {
-                              final farmService = FarmService();
-                              await farmService.deleteFarm(farm.id);
-
-                              // Update local state
-                              ref
-                                  .read(farmProvider.notifier)
-                                  .deleteFarm(farm.id);
-
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content:
-                                      const Text("Farm deleted successfully"),
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  backgroundColor: Colors.green.shade600,
-                                ),
-                              );
-                            } catch (e) {
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("Error: $e"),
-                                  backgroundColor: Colors.red.shade600,
-                                ),
-                              );
-                            }
-                          },
-                          child: Text(
-                            'Delete',
-                            style: TextStyle(
-                              color: theme.colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-              itemBuilder: (BuildContext context) => [
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit_outlined, size: 18),
-                      SizedBox(width: 10),
-                      Text('Edit Farm'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete_outline,
-                          size: 18, color: Color(0xFFE53935)),
-                      SizedBox(width: 10),
-                      Text(
-                        'Delete Farm',
-                        style: TextStyle(color: Color(0xFFE53935)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              icon: const Icon(Icons.more_vert),
-              position: PopupMenuPosition.over,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _menuTile(IconData icon, String title, {VoidCallback? onTap}) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
     );
   }
 }

@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../farm/farm_provider.dart';
+import '../farm/farm_switcher_sheet.dart';
 import '../feed/feed_history_provider.dart';
 import '../growth/growth_provider.dart';
+import '../pond/enums/seed_type.dart';
+import '../tray/tray_provider.dart';
+import '../upgrade/subscription_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../core/language/app_localizations.dart';
 import '../../core/services/admin_security_service.dart';
+import '../../core/utils/logger.dart';
 import '../../routes/app_routes.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -41,11 +46,17 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
+// Feed savings: baseline FCR for "expected feed" benchmark, and ₹/kg for cost.
+const double _baselineFcr = 1.6;
+const double _feedPricePerKg = 80;
+
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _tapCount = 0;
   DateTime? _lastTapTime;
   static const Duration _tapResetTime = Duration(seconds: 3);
   static const int _requiredTaps = 5;
+
+  String? _lastTrackedSavingsRange;
 
   void _handleFarmNameTap() {
     final adminService = AdminSecurityService();
@@ -215,6 +226,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 0.75;
   }
 
+  // ─── Feed Savings ──────────────────────────────────────────────────────────
+
+  ({double moneySaved, bool hasFullData, bool hasPartialData}) _farmSavings(
+      List<Pond> ponds) {
+    double feedSavedKg = 0;
+    bool hasFullData = false;
+    bool hasPartialData = false;
+
+    for (final p in ponds) {
+      // Nursery seed reaches feeding maturity faster than hatchery seed.
+      final fullThreshold = p.seedType == SeedType.nurseryBig ? 7 : 20;
+      final partialThreshold = p.seedType == SeedType.nurseryBig ? 7 : 15;
+
+      final history = ref.watch(feedHistoryProvider)[p.id] ?? [];
+      double feedGiven = 0;
+      for (final e in history) {
+        feedGiven += (e.total as num?)?.toDouble() ?? 0;
+      }
+      if (feedGiven == 0) continue;
+
+      final growthLogs = ref.watch(growthProvider(p.id));
+      final samplingAvailable = p.hasSampling || growthLogs.isNotEmpty;
+      final trayLogs = ref.watch(trayProvider(p.id));
+      final trayCount = trayLogs.where((l) => !l.isSkipped).length;
+
+      final eligible = p.doc >= fullThreshold &&
+          (trayCount >= 3 || samplingAvailable);
+
+      if (eligible && growthLogs.isNotEmpty) {
+        final survival = _survivalRate(p.doc);
+        final biomass = (p.seedCount * survival * growthLogs.first.abw) / 1000;
+        if (biomass > 0) {
+          final expected = biomass * _baselineFcr;
+          final saved = expected - feedGiven;
+          if (saved > 0) feedSavedKg += saved;
+          hasFullData = true;
+        }
+      } else if (p.doc >= partialThreshold) {
+        hasPartialData = true;
+      }
+    }
+
+    return (
+      moneySaved: feedSavedKg * _feedPricePerKg,
+      hasFullData: hasFullData,
+      hasPartialData: hasPartialData && !hasFullData,
+    );
+  }
+
+  void _maybeTrackSavingsView(double moneySaved, bool isPro) {
+    final range = moneySaved < 500
+        ? '<500'
+        : moneySaved < 2000
+            ? '500-2k'
+            : '2k+';
+    if (_lastTrackedSavingsRange == range) return;
+    _lastTrackedSavingsRange = range;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppLogger.debug(
+          'analytics: savings_visible plan=${isPro ? 'PRO' : 'FREE'} range=$range value=${moneySaved.toStringAsFixed(0)}');
+    });
+  }
+
   ({int score, String label}) _healthScore(List<Pond> ponds) {
     if (ponds.isEmpty) return (score: 100, label: 'Excellent');
     double total = 0;
@@ -296,7 +370,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     farmName: farm.name,
                     doc: minDoc,
                     pondCount: ponds.length,
-                    onNameTap: _handleFarmNameTap,
+                    onIconSecretTap: _handleFarmNameTap,
+                    onNameTap: () => FarmSwitcherSheet.show(context),
                   ),
                   _HeroStrip(
                     totalFeed: totalFeed,
@@ -366,12 +441,14 @@ class _AppBar extends StatelessWidget {
   final int doc;
   final int pondCount;
   final VoidCallback onNameTap;
+  final VoidCallback onIconSecretTap;
 
   const _AppBar({
     required this.farmName,
     required this.doc,
     required this.pondCount,
     required this.onNameTap,
+    required this.onIconSecretTap,
   });
 
   @override
@@ -381,34 +458,50 @@ class _AppBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: _greenSoft,
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(color: _greenHi.withOpacity(0.2)),
-            ),
-            child: const Center(
-              child: Icon(Icons.set_meal_rounded, color: _greenHi, size: 20),
+          GestureDetector(
+            onTap: onIconSecretTap,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _greenSoft,
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: _greenHi.withOpacity(0.2)),
+              ),
+              child: const Center(
+                child: Icon(Icons.set_meal_rounded, color: _greenHi, size: 20),
+              ),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: GestureDetector(
               onTap: onNameTap,
+              behavior: HitTestBehavior.opaque,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Hi, $shortName',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
-                      letterSpacing: -0.01 * 16,
-                      height: 1,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Hi, $shortName',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: _ink,
+                            letterSpacing: -0.01 * 16,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: _ink2,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 3),
                   Text(
@@ -1199,44 +1292,42 @@ class _AlertCard extends StatelessWidget {
         ? _amber.withOpacity(0.18)
         : _orange.withOpacity(0.16);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border(
-          left: BorderSide(color: accentColor, width: 3),
-          top: const BorderSide(color: _line),
-          right: const BorderSide(color: _line),
-          bottom: const BorderSide(color: _line),
-        ),
-      ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [bgGrad, Colors.white],
             stops: const [0, 0.6],
           ),
-          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _line),
         ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.schedule_rounded,
-                color: titleColor,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 3, color: accentColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: iconBg,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.schedule_rounded,
+                          color: titleColor,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1304,7 +1395,12 @@ class _AlertCard extends StatelessWidget {
                 ],
               ),
             ),
-          ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

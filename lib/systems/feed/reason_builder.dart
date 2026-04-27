@@ -14,28 +14,27 @@ import '../../features/tray/enums/tray_status.dart';
 class ReasonBuilder {
   static const String version = '1.0.0';
 
-  /// Build reason for feed decision (supports BOTH increase & decrease)
+  /// Build reason for feed decision
   ///
-  /// [baseline] Baseline feed amount
-  /// [actual] Actual feed amount after adjustments
   /// [trayLeftover] Whether trays show leftover feed
   /// [growthSlow] Whether growth is below expected
+  /// [fcrHigh] Whether FCR is above target
+  /// [waterQualityPoor] Whether water quality is poor
   /// [confidenceLevel] Current confidence level
   ///
-  /// Returns clear reason string for both directions
+  /// Returns clear reason string
   static String buildReason({
-    required double baseline,
-    required double actual,
     required bool trayLeftover,
     required bool growthSlow,
-    required String confidenceLevel,
+    bool fcrHigh = false,
+    bool waterQualityPoor = false,
+    String confidenceLevel = 'medium',
   }) {
-    if (actual < baseline) {
-      // Feed reduction case
-      if (trayLeftover) {
-        return 'Tray leftover detected → reduced feed to prevent waste';
-      }
-      return 'Optimization applied → reducing excess feeding';
+    final List<String> reasons = [];
+
+    if (trayLeftover) {
+      reasons.add('Tray leftover detected → reduced feed to prevent waste');
+    } else if (growthSlow) {
       reasons.add('Growth below expected → adjusted feed');
     } else if (fcrHigh) {
       reasons.add('High FCR detected → optimized feed');
@@ -43,12 +42,10 @@ class ReasonBuilder {
       reasons.add('Water quality concerns → conservative feeding');
     }
 
-    // If no primary factors, use standard optimization
     if (reasons.isEmpty) {
       reasons.add('Standard optimization applied');
     }
 
-    // Add confidence context if low
     if (confidenceLevel == 'low') {
       reasons.add('(Limited data - conservative approach)');
     }
@@ -74,30 +71,44 @@ class ReasonBuilder {
     double? ammonia,
     String confidenceLevel = 'medium',
   }) {
-    final List<String> factors = [];
+    final List<String> reasons = [];
 
-    // Tray analysis
-    if (trayStatuses != null && trayStatuses.isNotEmpty) {}
-
-    // Growth analysis
-    final String growthPattern = analyzeGrowthPattern(currentAbw, expectedAbw);
-    if (growthPattern.isNotEmpty) {
-      reasons.add(growthPattern);
+    if (trayStatuses != null && trayStatuses.isNotEmpty) {
+      final String trayPattern = analyzeTrayPattern(trayStatuses);
+      if (trayPattern.isNotEmpty) {
+        reasons.add(trayPattern);
+      }
     }
 
-    // FCR analysis
-    final String fcrPattern = analyzeFcrPattern(currentFcr, targetFcr, trend);
-    if (fcrPattern.isNotEmpty) {
-      reasons.add(fcrPattern);
+    if (currentAbw != null && expectedAbw != null) {
+      final String growthPattern =
+          analyzeGrowthPattern(currentAbw, expectedAbw);
+      if (growthPattern.isNotEmpty) {
+        reasons.add(growthPattern);
+      }
     }
 
-    // Water quality analysis
-    final String waterPattern = analyzeWaterQualityPattern(confidenceLevel);
+    if (currentFcr != null && targetFcr != null) {
+      final String fcrPattern = analyzeFcrPattern(currentFcr, targetFcr);
+      if (fcrPattern.isNotEmpty) {
+        reasons.add(fcrPattern);
+      }
+    }
+
+    final String waterPattern = analyzeWaterQuality(
+      dissolvedOxygen: dissolvedOxygen,
+      temperature: temperature,
+      ammonia: ammonia,
+    );
     if (waterPattern.isNotEmpty) {
       reasons.add(waterPattern);
+    } else {
+      final String qualityPattern = analyzeWaterQualityPattern(confidenceLevel);
+      if (qualityPattern.isNotEmpty) {
+        reasons.add(qualityPattern);
+      }
     }
 
-    // Build final reason
     if (reasons.isEmpty) {
       return 'Standard optimization applied';
     }
@@ -153,32 +164,6 @@ class ReasonBuilder {
       return 'Growth slightly ahead of target';
     } else {
       return 'Growth on target';
-    }
-  }
-
-  /// Analyze FCR pattern for reasoning
-  ///
-  /// [currentFcr] Current Feed Conversion Ratio
-  /// [targetFcr] Target FCR for current DOC
-  /// [trend] FCR trend ('improving', 'stable', 'worsening')
-  ///
-  /// Returns analysis string
-  static String analyzeFcrPattern(
-      double currentFcr, double targetFcr, String trend) {
-    if (currentFcr <= 0 || targetFcr <= 0) {
-      return 'FCR data unavailable';
-    }
-
-    final double fcrRatio = currentFcr / targetFcr;
-
-    if (fcrRatio > 1.3) {
-      return 'FCR significantly above target';
-    } else if (fcrRatio > 1.1) {
-      return 'FCR slightly above target';
-    } else if (fcrRatio < 0.9) {
-      return 'FCR below target';
-    } else {
-      return 'FCR on target';
     }
   }
 

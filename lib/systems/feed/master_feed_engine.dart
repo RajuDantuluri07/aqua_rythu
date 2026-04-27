@@ -43,6 +43,7 @@ import '../../../features/feed/models/orchestrator_result.dart';
 import 'engine_constants.dart';
 import 'feed_calculations.dart';
 import 'feed_models.dart';
+import 'feed_base_resolver.dart';
 export '../../../features/feed/models/correction_result.dart';
 export '../../../features/feed/models/feed_debug_info.dart';
 export '../../../features/feed/models/orchestrator_result.dart';
@@ -334,15 +335,25 @@ class MasterFeedEngine {
       );
     }
 
-    // ── STEP 1: Base Feed (keep existing compute logic) ───────────────────
+    // ── STEP 1: Base Feed (using new BaseFeedResolver) ───────────────────
     final stage1Debug = computeWithDebug(
       doc: input.doc,
       stockingType: input.stockingType,
       density: input.seedCount,
     );
-    final baseFeed = (input.doc > kSmartModeMinDoc && input.anchorFeed != null)
-        ? input.anchorFeed!
-        : stage1Debug.finalFeed;
+
+    // 🔥 CRITICAL FIX: Use BaseFeedResolver to prevent anchor feed bug
+    final baseFeedResult = FeedBaseResolver.resolveBaseFeed(
+      doc: input.doc,
+      anchorFeed: input.anchorFeed,
+      actualFeedYesterday: input.actualFeedYesterday,
+      plannedFeed: stage1Debug.finalFeed,
+      pondId: input.pondId,
+    );
+    final baseFeed = baseFeedResult.feedAmount;
+
+    // 🔥 CRITICAL FIX: Validate base feed for smart feeding safety
+    FeedBaseResolver.validateSmartFeedBase(input.doc, baseFeed, input.pondId);
 
     // ── STEP 2: DOC Rule Enforcement ───────────────────────────────────────
     final bool isBlindPhase = input.doc <= 30;
@@ -476,6 +487,9 @@ class MasterFeedEngine {
         hasSampling: input.abw != null,
         feedStage: feedStage.name,
         v2Debug: null, // ❌ DISABLED
+        // 🔥 NEW: Base feed source tracking for debugging
+        baseFeedSource: FeedBaseResolver.sourceToString(baseFeedResult.source),
+        baseFeedExplanation: baseFeedResult.explanation,
       ),
     );
   }

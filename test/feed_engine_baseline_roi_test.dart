@@ -13,6 +13,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aqua_rythu/systems/feed/baseline_calculator.dart';
 import 'package:aqua_rythu/systems/feed/smart_feed_service.dart';
+import 'package:aqua_rythu/systems/feed/roi_calculator.dart';
+import 'package:aqua_rythu/systems/feed/confidence_service.dart';
+import 'package:aqua_rythu/systems/feed/reason_builder.dart';
+import 'package:aqua_rythu/systems/feed/feed_pipeline.dart';
 import 'package:aqua_rythu/features/tray/enums/tray_status.dart';
 
 void main() {
@@ -120,7 +124,7 @@ void main() {
         trayFactor: 0.70, // Would be 21kg (30% reduction)
         growthFactor: 1.0,
         fcrFactor: 1.0,
-      });
+      );
 
       expect(result, equals(26.4)); // Capped at 30 * 0.88 = 26.4
     });

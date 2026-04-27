@@ -38,6 +38,18 @@ class Pond {
   // Seed type: determines which DOC-based feed table to use
   final SeedType seedType;
 
+  // ── Harvest / Action Engine fields ─────────────────────────────────────────
+  final int? stockCount;          // current active stock (after harvests)
+  final bool hasSampling;         // whether at least one sample exists
+  final String harvestStage;      // 'none' | 'partial' | 'near' | 'completed'
+  final double activeStockPct;    // fraction of initial stock still in pond
+  final DateTime? lastHarvestDate;
+  final double? lastHarvestQty;
+
+  // ── Daily Action Engine fields ──────────────────────────────────────────────
+  final String aerationType;      // 'low' | 'medium' | 'high' — affects capacity
+  final String? trayScore;        // 'good' | 'average' | 'poor' — latest tray result
+
   Pond({
     required this.id,
     required this.name,
@@ -57,6 +69,14 @@ class Pond {
     this.isAnchorInitialized = false,
     this.fcr,
     SeedType? seedType,
+    this.stockCount,
+    this.hasSampling = false,
+    this.harvestStage = 'none',
+    this.activeStockPct = 1.0,
+    this.lastHarvestDate,
+    this.lastHarvestQty,
+    this.aerationType = 'medium',
+    this.trayScore,
   }) : seedType = seedType ?? SeedTypeX.fromPlSize(plSize);
 
   /// Returns how many feed rounds apply for the given DOC, respecting
@@ -85,7 +105,16 @@ class Pond {
     bool? isCustomFeedPlan,
     double? anchorFeed,
     bool? isAnchorInitialized,
+    double? fcr,
     SeedType? seedType,
+    int? stockCount,
+    bool? hasSampling,
+    String? harvestStage,
+    double? activeStockPct,
+    DateTime? lastHarvestDate,
+    double? lastHarvestQty,
+    String? aerationType,
+    String? trayScore,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -104,7 +133,16 @@ class Pond {
       isCustomFeedPlan: isCustomFeedPlan ?? this.isCustomFeedPlan,
       anchorFeed: anchorFeed ?? this.anchorFeed,
       isAnchorInitialized: isAnchorInitialized ?? this.isAnchorInitialized,
+      fcr: fcr ?? this.fcr,
       seedType: seedType ?? this.seedType,
+      stockCount: stockCount ?? this.stockCount,
+      hasSampling: hasSampling ?? this.hasSampling,
+      harvestStage: harvestStage ?? this.harvestStage,
+      activeStockPct: activeStockPct ?? this.activeStockPct,
+      lastHarvestDate: lastHarvestDate ?? this.lastHarvestDate,
+      lastHarvestQty: lastHarvestQty ?? this.lastHarvestQty,
+      aerationType: aerationType ?? this.aerationType,
+      trayScore: trayScore ?? this.trayScore,
     );
   }
 
@@ -226,6 +264,17 @@ class FarmNotifier extends StateNotifier<FarmState> {
                     : null,
                 isAnchorInitialized: p['is_anchor_initialized'] ?? false,
                 seedType: SeedTypeX.fromDb(p['stocking_type'] as String?),
+                stockCount: p['stock_count'] as int?,
+                hasSampling: p['has_sampling'] as bool? ?? false,
+                harvestStage: p['harvest_stage'] as String? ?? 'none',
+                activeStockPct:
+                    (p['active_stock_pct'] as num?)?.toDouble() ?? 1.0,
+                lastHarvestDate: p['last_harvest_date'] != null
+                    ? DateTime.tryParse(p['last_harvest_date'] as String)
+                    : null,
+                lastHarvestQty: (p['last_harvest_qty'] as num?)?.toDouble(),
+                aerationType: p['aeration_type'] as String? ?? 'medium',
+                trayScore: p['tray_score'] as String?,
               ));
             } catch (e) {
               AppLogger.error('Failed to parse pond: $e', e);
@@ -427,13 +476,52 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
-  void deleteFarm(String farmId) {
+  Future<void> deleteFarm(String farmId) async {
+    try {
+      await FarmService().deleteFarm(farmId);
+    } catch (e) {
+      AppLogger.error('Failed to delete farm from DB', e);
+      rethrow;
+    }
+
     final updatedFarms = state.farms.where((f) => f.id != farmId).toList();
-    final newSelectedId = updatedFarms.isNotEmpty ? updatedFarms.first.id : '';
+    final newSelectedId = state.selectedId == farmId
+        ? (updatedFarms.isNotEmpty ? updatedFarms.first.id : '')
+        : state.selectedId;
 
     state = state.copyWith(
       farms: updatedFarms,
       selectedId: newSelectedId,
+    );
+  }
+
+  /// Update pond state after a harvest is logged.
+  void updatePondHarvest({
+    required String pondId,
+    required int newStockCount,
+    required double activeStockPct,
+    required String harvestStage,
+    required double lastHarvestQty,
+  }) {
+    state = state.copyWith(
+      farms: state.farms.map((f) {
+        return Farm(
+          id: f.id,
+          name: f.name,
+          location: f.location,
+          ponds: f.ponds.map((p) {
+            if (p.id != pondId) return p;
+            return p.copyWith(
+              stockCount: newStockCount,
+              activeStockPct: activeStockPct,
+              harvestStage: harvestStage,
+              lastHarvestDate: DateTime.now(),
+              lastHarvestQty: lastHarvestQty,
+              hasSampling: false,
+            );
+          }).toList(),
+        );
+      }).toList(),
     );
   }
 

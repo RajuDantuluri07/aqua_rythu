@@ -41,6 +41,15 @@ class FeedPipeline {
     );
 
     try {
+      final validation = validatePondData(pond);
+      if (!validation.isValid) {
+        return FeedPipelineResult.error(
+          pondId: pond.id,
+          doc: pond.doc,
+          error: validation.errors.join('; '),
+        );
+      }
+
       // Step 1: Calculate baseline feed
       final double baselineFeed = BaselineCalculator.calculateBaselineFeed(
         doc: pond.doc,
@@ -95,19 +104,20 @@ class FeedPipeline {
 
       // Step 6.5: Zero-data fallback (CRITICAL TRUST FIX)
       if (!pond.hasTrayData && !pond.hasSampling) {
-        // Insufficient data - use baseline directly with low confidence
         final result = FeedPipelineResult(
           pondId: pond.id,
           doc: pond.doc,
           baselineFeed: baselineFeed,
           actualFeed: baselineFeed, // No adjustments
           dailySavings: 0.0, // No savings
-          cumulativeSavings: await _getPreviousCumulativeSavings(pond.id),
+          cumulativeSavings: previousTotal,
           confidence: 'low',
-          reason: 'Insufficient data → using standard feeding',
-          abw: abw,
-          biomass: biomass,
-          feedRate: feedRate,
+          reason:
+              'Insufficient data → Standard optimization applied (Limited data - conservative approach)',
+          action: _buildAction(baselineFeed),
+          abw: pondAbw,
+          biomass: pondBiomass,
+          feedRate: pondFeedRate,
           feedCostPerKg: pond.feedCostPerKg,
           timestamp: DateTime.now(),
         );
@@ -133,15 +143,8 @@ class FeedPipeline {
         confidenceLevel: confidence,
       );
 
-      // Step 8: Calculate additional metrics
-      final double abw =
-          pond.sampledAbw ?? BaselineCalculator.estimateAbwFromDoc(pond.doc);
-      final double biomass = BaselineCalculator.calculateBiomass(
-        shrimpCount: pond.shrimpCount,
-        abw: abw,
-        survivalRate: pond.survivalRate,
-      );
-      final double feedRate = BaselineCalculator.getFeedRate(pond.doc, abw);
+      // Step 8: Build clear action output (VERY IMPORTANT)
+      final String action = _buildAction(actualFeed);
 
       // Step 9: Create result
       final result = FeedPipelineResult(
@@ -153,6 +156,7 @@ class FeedPipeline {
         cumulativeSavings: cumulativeSavings,
         confidence: confidence,
         reason: reason,
+        action: action,
         abw: pondAbw,
         biomass: pondBiomass,
         feedRate: pondFeedRate,
@@ -160,11 +164,8 @@ class FeedPipeline {
         timestamp: DateTime.now(),
       );
 
-      // Step 9: Build clear action output (VERY IMPORTANT)
-      final String action = _buildAction(actualFeed);
-
       // Step 10: Save to database
-      final saved = await _saveToDatabase(result);
+      final saved = await saveToDatabase(result);
 
       if (!saved) {
         AppLogger.warn(
@@ -496,7 +497,6 @@ class FeedPipelineResult {
     required this.pondId,
     required this.doc,
     required this.error,
-    required this.action,
   })  : isError = true,
         baselineFeed = 0.0,
         actualFeed = 0.0,
