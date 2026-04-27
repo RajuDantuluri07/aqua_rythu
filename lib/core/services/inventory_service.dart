@@ -91,7 +91,7 @@ class InventoryService {
           .eq('category', 'feed')
           .eq('is_auto_tracked', true)
           .maybeSingle();
-      return result as Map<String, dynamic>?;
+      return result;
     } catch (e) {
       AppLogger.error('Failed to get feed item for crop: $e');
       return null;
@@ -191,7 +191,7 @@ class InventoryService {
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
-      return result as Map<String, dynamic>?;
+      return result;
     } catch (e) {
       AppLogger.error('Failed to get last purchase: $e');
       return null;
@@ -260,7 +260,7 @@ class InventoryService {
           .select('last_action_type, last_action_date, last_action_details')
           .eq('id', itemId)
           .maybeSingle();
-      return result as Map<String, dynamic>?;
+      return result;
     } catch (e) {
       AppLogger.error('Failed to get last action: $e');
       return null;
@@ -275,7 +275,7 @@ class InventoryService {
           .select('expected_stock, last_verified_quantity, stock_difference')
           .eq('id', itemId)
           .maybeSingle();
-      return result as Map<String, dynamic>?;
+      return result;
     } catch (e) {
       AppLogger.error('Failed to get stock mismatch: $e');
       return null;

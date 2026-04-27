@@ -52,7 +52,7 @@ class OrchestratorResult {
     required String engineVersion,
     required int doc,
   }) {
-    final correction = CorrectionResult(
+    final correction = const CorrectionResult(
       baseFeed: 0.0,
       trayFactor: 1.0,
       finalFeed: 0.0,

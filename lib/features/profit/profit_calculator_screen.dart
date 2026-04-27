@@ -117,7 +117,7 @@ class _ProfitCalculatorScreenState
                       TextFormField(
                         controller: _harvestWeightController,
                         keyboardType:
-                            TextInputType.numberWithOptions(decimal: true),
+                            const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Harvest Weight (kg)',
                           border: OutlineInputBorder(),
@@ -141,7 +141,7 @@ class _ProfitCalculatorScreenState
                       TextFormField(
                         controller: _sellingPriceController,
                         keyboardType:
-                            TextInputType.numberWithOptions(decimal: true),
+                            const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Selling Price (₹ per kg)',
                           border: OutlineInputBorder(),

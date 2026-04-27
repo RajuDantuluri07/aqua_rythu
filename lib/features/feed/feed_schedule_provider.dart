@@ -234,7 +234,9 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
     if (activeIdx.isEmpty) {
       // All zeroed — restore all 4 rounds equally
       final per = _round1dp(total / 4);
-      for (int i = 0; i < 3; i++) rounds[i] = per;
+      for (int i = 0; i < 3; i++) {
+        rounds[i] = per;
+      }
       rounds[3] = _round1dp(total - per * 3);
     } else {
       final dist = _getSmartDistribution(activeIdx.length);

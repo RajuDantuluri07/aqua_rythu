@@ -86,7 +86,7 @@ class _AdjustStockScreenState extends ConsumerState<AdjustStockScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Stock ${_selectedAdjustmentType}: $actionText'),
+          content: Text('Stock $_selectedAdjustmentType: $actionText'),
           backgroundColor: Colors.green,
         ),
       );

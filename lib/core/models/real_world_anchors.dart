@@ -1,8 +1,7 @@
 /// Real-World Anchors System - grounds decisions in actual farm reality
 /// Ensures decisions are safe, practical, and based on real farm data
+library;
 
-import 'dart:math';
-import 'growth_curve.dart';
 
 class RealWorldAnchors {
   static const double MAX_FEED_CHANGE_PERCENTAGE = 0.15; // 15% max change per decision

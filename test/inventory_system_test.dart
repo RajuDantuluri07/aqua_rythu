@@ -9,9 +9,9 @@ void main() {
         // Used: 10 kg
         // Expected: 40 kg
 
-        final openingStock = 50.0;
-        final usedStock = 10.0;
-        final expectedStock = openingStock - usedStock;
+        const openingStock = 50.0;
+        const usedStock = 10.0;
+        const expectedStock = openingStock - usedStock;
 
         expect(expectedStock, equals(40.0));
 
@@ -28,9 +28,9 @@ void main() {
     group('TEST 2: Loss Detection', () {
       test('Expected 40 -> actual 35 -> LOSS = 5', () async {
         // This test verifies loss detection logic
-        final expectedStock = 40.0;
-        final actualStock = 35.0;
-        final difference = actualStock - expectedStock;
+        const expectedStock = 40.0;
+        const actualStock = 35.0;
+        const difference = actualStock - expectedStock;
 
         expect(difference, equals(-5.0));
 

@@ -110,7 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
+                    const SnackBar(
                       content: Text('Authentication failed'),
                       backgroundColor: Colors.red,
                     ),

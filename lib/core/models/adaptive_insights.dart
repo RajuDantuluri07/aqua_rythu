@@ -1,7 +1,7 @@
 /// Adaptive insights system with confidence scoring and learning capabilities
 /// Moves from rule-based to intelligent adaptive recommendations
+library;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'growth_curve.dart';
 
@@ -295,7 +295,7 @@ class AdaptiveInsightEngine {
           id: 'sampling_overdue_${pond.id}',
           title: '🔬 Sampling Overdue - ${pond.name}',
           description:
-              '${pond.name}: ${daysSinceSample} days since last sample. Critical for biomass estimation.',
+              '${pond.name}: $daysSinceSample days since last sample. Critical for biomass estimation.',
           type: InsightType.warning,
           icon: Icons.science,
           confidence: 0.9,
@@ -363,7 +363,7 @@ class AdaptiveInsightEngine {
             supportingData: [
               'Current ABW: ${currentAbw.toStringAsFixed(1)}g',
               'DOC: $currentDoc',
-              'Estimated Harvest: ${daysToHarvest} days',
+              'Estimated Harvest: $daysToHarvest days',
               'Biomass: ${pond.estimatedBiomass?.toStringAsFixed(0)}kg',
             ],
             generatedAt: DateTime.now(),
@@ -406,7 +406,7 @@ class AdaptiveInsightEngine {
   }
 
   static int _predictDaysToHarvest(double currentAbw, int currentDoc) {
-    final harvestAbw = 20.0; // Target harvest size
+    const harvestAbw = 20.0; // Target harvest size
     final growthRate = GrowthCurve.getGrowthRate(currentDoc);
 
     if (growthRate <= 0) return 999;

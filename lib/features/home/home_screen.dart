@@ -356,9 +356,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (fcr > 0) {
         // Convert FCR to health score (lower FCR = better health)
         double healthScore = 100.0;
-        if (fcr > 2.0)
+        if (fcr > 2.0) {
           healthScore = 60;
-        else if (fcr > 1.8)
+        } else if (fcr > 1.8)
           healthScore = 70;
         else if (fcr > 1.5)
           healthScore = 80;
@@ -707,7 +707,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          ...ponds.map((pond) => _buildPondCard(pond)).toList(),
+          ...ponds.map((pond) => _buildPondCard(pond)),
         ],
       ),
     );
@@ -838,7 +838,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     Text(
-                      _calculateTodayFeed(pond).toStringAsFixed(0) + ' kg',
+                      '${_calculateTodayFeed(pond).toStringAsFixed(0)} kg',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

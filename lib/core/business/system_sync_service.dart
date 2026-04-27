@@ -157,7 +157,7 @@ class SystemSyncService {
           (sum, log) => sum + ((log['feed_given'] as num?)?.toDouble() ?? 0.0));
 
       // Feed expenses are no longer tracked - feed cost comes from inventory only
-      final totalFeedExpenses = 0.0;
+      const totalFeedExpenses = 0.0;
 
       final totalInventoryFeed = inventoryStock
           .where((item) => item['category']?.toString().toLowerCase() == 'feed')

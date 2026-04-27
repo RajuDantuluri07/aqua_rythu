@@ -499,7 +499,7 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
           TextSelection.collapsed(offset: _controllers[index].text.length);
     }
 
-    final error = await ref
+    final error = ref
         .read(feedScheduleProvider.notifier)
         .updateFeed(widget.index, index, val);
 

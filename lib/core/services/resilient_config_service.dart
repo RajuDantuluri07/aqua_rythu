@@ -131,7 +131,7 @@ class ResilientConfigService {
           .select('key, value, updated_at')
           .order('updated_at', ascending: false);
 
-      if (response != null && response.isNotEmpty) {
+      if (response.isNotEmpty) {
         final config = <String, dynamic>{};
         for (final item in response) {
           config[item['key']] = item['value'];

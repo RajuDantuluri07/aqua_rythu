@@ -11,13 +11,13 @@
 // Test cases cover all scenarios from DEV TICKET requirements
 
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/systems/feed/baseline_calculator.dart';
-import '../lib/systems/feed/smart_feed_service.dart';
-import '../lib/systems/feed/roi_calculator.dart';
-import '../lib/systems/feed/confidence_service.dart';
-import '../lib/systems/feed/reason_builder.dart';
-import '../lib/systems/feed/feed_pipeline.dart';
-import '../lib/features/tray/enums/tray_status.dart';
+import 'package:aqua_rythu/systems/feed/baseline_calculator.dart';
+import 'package:aqua_rythu/systems/feed/smart_feed_service.dart';
+import 'package:aqua_rythu/systems/feed/roi_calculator.dart';
+import 'package:aqua_rythu/systems/feed/confidence_service.dart';
+import 'package:aqua_rythu/systems/feed/reason_builder.dart';
+import 'package:aqua_rythu/systems/feed/feed_pipeline.dart';
+import 'package:aqua_rythu/features/tray/enums/tray_status.dart';
 
 void main() {
   group('Baseline Calculator Tests', () {
@@ -405,7 +405,7 @@ void main() {
 
   group('Feed Pipeline Integration Tests', () {
     test('Case 1: Normal optimization pipeline', () async {
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-1',
         doc: 45,
         shrimpCount: 10000,
@@ -432,7 +432,7 @@ void main() {
     });
 
     test('Case 2: Feed increased scenario', () async {
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-2',
         doc: 60,
         shrimpCount: 10000,
@@ -456,7 +456,7 @@ void main() {
     });
 
     test('Case 3: No data - low confidence', () async {
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-3',
         doc: 30,
         shrimpCount: 10000,
@@ -481,7 +481,7 @@ void main() {
     });
 
     test('Pond data validation', () {
-      final invalidPond = PondData(
+      const invalidPond = PondData(
         id: '', // Invalid ID
         doc: -1, // Invalid DOC
         shrimpCount: 0, // Invalid count
@@ -497,7 +497,7 @@ void main() {
     });
 
     test('Error handling in pipeline', () async {
-      final invalidPond = PondData(
+      const invalidPond = PondData(
         id: 'test-pond-error',
         doc: 45,
         shrimpCount: -1000, // Should cause error

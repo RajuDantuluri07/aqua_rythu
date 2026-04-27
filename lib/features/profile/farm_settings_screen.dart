@@ -81,7 +81,7 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text("Error saving settings"),
           backgroundColor: Colors.red,
         ),

@@ -88,13 +88,14 @@ class DashboardScreen extends ConsumerWidget {
 
     final ponds =
         currentFarm.ponds.where((p) => p.status.name == 'active').toList();
-    if (ponds.isEmpty)
+    if (ponds.isEmpty) {
       return _noPondsView(context, ref, farmState, currentFarm);
+    }
 
     final today = DateTime.now();
 
     // ── Load feed data from controller for each pond ────────────────────────
-    Future<List<_PondRow>> _buildPondRows() async {
+    Future<List<_PondRow>> buildPondRows() async {
       final rows = <_PondRow>[];
 
       for (final pond in ponds) {
@@ -173,7 +174,7 @@ class DashboardScreen extends ConsumerWidget {
     }
 
     return FutureBuilder<List<_PondRow>>(
-      future: _buildPondRows(),
+      future: buildPondRows(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _loadingView();
@@ -375,8 +376,9 @@ class DashboardScreen extends ConsumerWidget {
 
     for (final pond in ponds) {
       final row = rowMap[pond.id];
-      if (row == null || row.doc < 6)
+      if (row == null || row.doc < 6) {
         continue; // Skip tanks DOC <= 5 (too young to sample)
+      }
       final lastSample = pond.latestSampleDate;
       final daysSince =
           lastSample == null ? 999 : today.difference(lastSample).inDays;

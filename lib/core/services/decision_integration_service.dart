@@ -1,5 +1,6 @@
 /// Decision Integration Service - transforms all data into actionable decisions
 /// The final layer that moves from "insights" to "decisions"
+library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -346,8 +347,9 @@ class DecisionIntegrationService {
 
   String _extractInsightType(String insightId) {
     if (insightId.startsWith('growth_')) return 'growth';
-    if (insightId.startsWith('feed_') || insightId.startsWith('fcr_'))
+    if (insightId.startsWith('feed_') || insightId.startsWith('fcr_')) {
       return 'feed';
+    }
     if (insightId.startsWith('sampling_')) return 'sampling';
     if (insightId.startsWith('harvest_')) return 'harvest';
     return 'other';

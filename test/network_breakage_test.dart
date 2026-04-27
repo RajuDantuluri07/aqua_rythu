@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:async';
-import 'dart:convert';
 
 /// NETWORK BREAKAGE TEST SUITE
 ///
@@ -21,16 +20,16 @@ void main() {
     test('BREAK: Network timeout should not crash app', () async {
       // Simulate network timeout
       when(mockClient.from(any)).thenThrow(
-          TimeoutException('Network timeout', Duration(seconds: 30)));
+          TimeoutException('Network timeout', const Duration(seconds: 30)));
 
       try {
         await networkService.executeWithTimeout(
           () async {
             await Future.delayed(
-                Duration(seconds: 35)); // Simulate slow operation
+                const Duration(seconds: 35)); // Simulate slow operation
             return {'success': true};
           },
-          timeout: Duration(seconds: 10),
+          timeout: const Duration(seconds: 10),
           operationName: 'test operation',
         );
 
@@ -90,7 +89,7 @@ void main() {
     test('BREAK: Malformed JSON response should not crash', () async {
       try {
         // Simulate malformed JSON response
-        final malformedData = '{"invalid": json, "missing": quotes}';
+        const malformedData = '{"invalid": json, "missing": quotes}';
 
         // App should handle malformed JSON gracefully
         if (malformedData.contains('invalid')) {
@@ -119,12 +118,10 @@ void main() {
             continue;
           }
 
-          if (record is Map) {
-            final id = record['id'] ?? 'unknown';
-            final name = record['name'] ?? 'unnamed';
-            print('Record $id: $name');
-          }
-        }
+          final id = record['id'] ?? 'unknown';
+          final name = record['name'] ?? 'unnamed';
+          print('Record $id: $name');
+                }
       } catch (e) {
         fail('Should handle partial data gracefully: $e');
       }
@@ -166,7 +163,7 @@ void main() {
         List<Future<void>> requests = [];
 
         for (int i = 0; i < 10; i++) {
-          requests.add(Future.delayed(Duration(milliseconds: 100), () {
+          requests.add(Future.delayed(const Duration(milliseconds: 100), () {
             print('Simulating network request $i');
             // Simulate occasional failures
             if (i % 3 == 0) {

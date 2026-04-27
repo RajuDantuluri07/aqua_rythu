@@ -109,19 +109,19 @@ class ShrimpPricingConfig {
 
   /// Get default shrimp pricing configuration
   factory ShrimpPricingConfig.defaultConfig() {
-    return ShrimpPricingConfig(
+    return const ShrimpPricingConfig(
       pricingTiers: [
-        const ShrimpPricing(count: 100, price: 270),
-        const ShrimpPricing(count: 90, price: 280),
-        const ShrimpPricing(count: 80, price: 300),
-        const ShrimpPricing(count: 70, price: 310),
-        const ShrimpPricing(count: 60, price: 320),
-        const ShrimpPricing(count: 50, price: 340),
-        const ShrimpPricing(count: 45, price: 350),
-        const ShrimpPricing(count: 40, price: 370),
-        const ShrimpPricing(count: 35, price: 380),
-        const ShrimpPricing(count: 30, price: 480),
-        const ShrimpPricing(count: 25, price: 540),
+        ShrimpPricing(count: 100, price: 270),
+        ShrimpPricing(count: 90, price: 280),
+        ShrimpPricing(count: 80, price: 300),
+        ShrimpPricing(count: 70, price: 310),
+        ShrimpPricing(count: 60, price: 320),
+        ShrimpPricing(count: 50, price: 340),
+        ShrimpPricing(count: 45, price: 350),
+        ShrimpPricing(count: 40, price: 370),
+        ShrimpPricing(count: 35, price: 380),
+        ShrimpPricing(count: 30, price: 480),
+        ShrimpPricing(count: 25, price: 540),
       ],
       enabled: true,
       currency: 'INR',

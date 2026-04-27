@@ -1,5 +1,6 @@
 /// Farm-specific profile system for personalized growth modeling
 /// Each farm has unique characteristics that affect growth patterns
+library;
 
 import 'dart:math';
 import 'growth_curve.dart';

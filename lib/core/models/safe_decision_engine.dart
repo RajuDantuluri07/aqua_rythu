@@ -1,5 +1,6 @@
 /// Safe Decision Engine - ensures decisions are safe, practical, and trustworthy
 /// Replaces exact numbers with ranges and implements strict safety constraints
+library;
 
 import 'dart:math';
 import 'profit_decision_engine.dart';
@@ -27,7 +28,7 @@ class SafeDecisionEngine {
       return SafeProfitDecision(
         farmStability: anchors.overallStability,
         decisions: {},
-        primaryDecision: SafePrimaryDecision(
+        primaryDecision: const SafePrimaryDecision(
           type: SafeDecisionType.maintenance,
           title: '🔒 Farm Stability Mode',
           description: 'Farm conditions require stabilization. Focus on basic operations.',
@@ -81,7 +82,7 @@ class SafeDecisionEngine {
     final safetyConstraints = <String>[];
     
     double totalPotentialSavings = 0;
-    final confidenceRange = ConfidenceRange(0.4, 0.8);
+    const confidenceRange = ConfidenceRange(0.4, 0.8);
 
     for (final pond in pondData) {
       if (pond.currentFcr == null || pond.expectedFcr == null) continue;
@@ -139,7 +140,7 @@ class SafeDecisionEngine {
       actionItems: recommendations,
       safetyConstraints: safetyConstraints,
       implementationCost: 0,
-      timeToImplement: Duration(days: 7), // Gradual implementation
+      timeToImplement: const Duration(days: 7), // Gradual implementation
     );
   }
 
@@ -155,7 +156,7 @@ class SafeDecisionEngine {
     final safetyConstraints = <String>[];
     
     double totalPotentialRevenue = 0;
-    final confidenceRange = ConfidenceRange(0.5, 0.9);
+    const confidenceRange = ConfidenceRange(0.5, 0.9);
 
     for (final pond in pondData) {
       if (pond.currentAbw == null) continue;
@@ -189,9 +190,9 @@ class SafeDecisionEngine {
       ]);
 
       if (currentAbw >= 18.0 && minDaysToHarvest <= 7) {
-        recommendations.add('${pond.pondName}: Harvest ready - window ${minDaysToHarvest}-${maxDaysToHarvest} days');
+        recommendations.add('${pond.pondName}: Harvest ready - window $minDaysToHarvest-$maxDaysToHarvest days');
       } else if (minDaysToHarvest <= 21) {
-        recommendations.add('${pond.pondName}: Consider harvest in ${minDaysToHarvest}-${maxDaysToHarvest > 14 ? 14 : maxDaysToHarvest} days');
+        recommendations.add('${pond.pondName}: Consider harvest in $minDaysToHarvest-${maxDaysToHarvest > 14 ? 14 : maxDaysToHarvest} days');
       }
     }
 
@@ -213,7 +214,7 @@ class SafeDecisionEngine {
       actionItems: recommendations,
       safetyConstraints: safetyConstraints,
       implementationCost: 5000, // Harvest preparation costs
-      timeToImplement: Duration(days: 14),
+      timeToImplement: const Duration(days: 14),
     );
   }
 
@@ -228,7 +229,7 @@ class SafeDecisionEngine {
     final safetyConstraints = <String>[];
     
     double totalPotentialSavings = 0;
-    final confidenceRange = ConfidenceRange(0.3, 0.7);
+    const confidenceRange = ConfidenceRange(0.3, 0.7);
 
     // Calculate current cost structure
     double totalFeedCost = 0;
@@ -271,7 +272,7 @@ class SafeDecisionEngine {
       actionItems: recommendations,
       safetyConstraints: safetyConstraints,
       implementationCost: 1000, // Analysis and planning costs
-      timeToImplement: Duration(days: 21),
+      timeToImplement: const Duration(days: 21),
     );
   }
 
@@ -305,7 +306,7 @@ class SafeDecisionEngine {
     }
 
     // Default to maintenance decision
-    return SafePrimaryDecision(
+    return const SafePrimaryDecision(
       type: SafeDecisionType.maintenance,
       title: '📊 Monitor Farm Performance',
       description: 'All parameters within safe ranges. Continue current practices with regular monitoring.',
@@ -421,7 +422,7 @@ class SafeRecommendation {
   /// Get ROI range
   ValueRange get roiRange {
     if (implementationCost <= 0) {
-      return ValueRange(0, 0);
+      return const ValueRange(0, 0);
     }
     return ValueRange(
       (valueRange.min / implementationCost) * 100,

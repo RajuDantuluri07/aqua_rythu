@@ -28,7 +28,7 @@ class PondValue {
 class PondValueEngine {
   // Default market price per kg for L. vannamei.
   // Pulled from FeedEngineConstants so both engines share one tunable value.
-  static double _defaultPricePerKg = FeedEngineConstants.harvestPricePerKg;
+  static final double _defaultPricePerKg = FeedEngineConstants.harvestPricePerKg;
 
   /// Calculate pond value.
   ///
@@ -67,10 +67,12 @@ class PondValueEngine {
     double factor = 1.0;
     if (fedToday) factor += 0.01;
     if (missedFeed) factor -= 0.02;
-    if (traySignal == 'full')
+    if (traySignal == 'full') {
       factor -= 0.02; // overfeeding → FCR risk, feed wasted
-    if (traySignal == 'empty')
+    }
+    if (traySignal == 'empty') {
       factor += 0.01; // shrimp eating well → biomass growing
+    }
 
     final double finalValue = baseValue * factor;
     final double delta = finalValue * 0.01; // +1% per feeding event

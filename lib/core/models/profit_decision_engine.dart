@@ -1,5 +1,6 @@
 /// Profit Decision Engine - transforms data into actionable decisions
 /// Moves from "insights" to "decisions" with economic optimization
+library;
 
 import 'dart:math';
 import 'growth_curve.dart';
@@ -113,7 +114,7 @@ class ProfitDecisionEngine {
       actionItems: recommendations,
       analysis: feedAnalysis,
       implementationCost: 0, // No cost to reduce feed
-      timeToImplement: Duration(days: 1), // Immediate
+      timeToImplement: const Duration(days: 1), // Immediate
     );
   }
 
@@ -156,10 +157,10 @@ class ProfitDecisionEngine {
 
         if (daysToOptimal <= 14) {
           recommendations.add(
-              '${pond.pondName}: Harvest in ${daysToOptimal} days for +₹${(revenueGap / 1000).toStringAsFixed(1)}K revenue');
+              '${pond.pondName}: Harvest in $daysToOptimal days for +₹${(revenueGap / 1000).toStringAsFixed(1)}K revenue');
         } else if (daysToOptimal <= 30) {
           recommendations.add(
-              '${pond.pondName}: Consider harvest in ${daysToOptimal} days for optimal revenue');
+              '${pond.pondName}: Consider harvest in $daysToOptimal days for optimal revenue');
         }
       } else if (daysToOptimal <= 7 && currentAbw >= 18.0) {
         // Ready for harvest
@@ -274,7 +275,7 @@ class ProfitDecisionEngine {
       analysis: costBenefitAnalysis,
       implementationCost:
           recommendations.length * 500, // Estimated implementation cost
-      timeToImplement: Duration(days: 7),
+      timeToImplement: const Duration(days: 7),
     );
   }
 
@@ -313,7 +314,7 @@ class ProfitDecisionEngine {
           totalRevenueOpportunity += sizePremium;
 
           recommendations.add(
-              '${pond.pondName}: Grow to 20g in ${daysToSize20} days for size premium +₹${(sizePremium / 1000).toStringAsFixed(1)}K');
+              '${pond.pondName}: Grow to 20g in $daysToSize20 days for size premium +₹${(sizePremium / 1000).toStringAsFixed(1)}K');
         }
       }
     }
@@ -343,7 +344,7 @@ class ProfitDecisionEngine {
       actionItems: recommendations,
       analysis: revenueAnalysis,
       implementationCost: 0,
-      timeToImplement: Duration(days: 14),
+      timeToImplement: const Duration(days: 14),
     );
   }
 
@@ -362,7 +363,7 @@ class ProfitDecisionEngine {
     if (pond.currentAbw == null) return 999;
 
     final currentAbw = pond.currentAbw!;
-    final targetAbw = 20.0; // Optimal harvest size
+    const targetAbw = 20.0; // Optimal harvest size
 
     // Use farm-specific growth rates
     final growthRate = _getFarmSpecificGrowthRate(farmProfile, pond.doc);
@@ -451,7 +452,7 @@ class ProfitDecisionEngine {
       PondProfitData pond, MarketConditions market) {
     // Calculate additional revenue from growing to larger size
     final currentBiomass = pond.estimatedBiomass ?? 0;
-    final sizePremiumRate = 0.05; // 5% premium for 20g vs 15-18g
+    const sizePremiumRate = 0.05; // 5% premium for 20g vs 15-18g
     return currentBiomass * market.currentPrice * sizePremiumRate;
   }
 

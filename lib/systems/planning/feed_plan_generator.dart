@@ -27,7 +27,7 @@ Future<void> generateFeedPlan({
   final clampedEnd = endDoc.clamp(startDoc, 120);
 
   // Acquire lock to prevent concurrent feed plan generation for the same pond
-  final lockKey = '${pondId}_${startDoc}_${endDoc}';
+  final lockKey = '${pondId}_${startDoc}_$endDoc';
   if (_feedPlanLocks.contains(lockKey)) {
     AppLogger.warn(
         'Feed plan generation already in progress for pond $pondId (DOC $startDoc-$endDoc)');
@@ -113,7 +113,7 @@ Future<void> generateFeedPlan({
 /// feed is computed dynamically on demand, never pre-generated here.
 /// Call this on dashboard load and after tray/feed events.
 Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
-  final lockKey = '${pondId}_ensure_future_feed_${currentDoc}';
+  final lockKey = '${pondId}_ensure_future_feed_$currentDoc';
 
   // Prevent concurrent future feed generation for the same pond
   if (_feedPlanLocks.contains(lockKey)) {

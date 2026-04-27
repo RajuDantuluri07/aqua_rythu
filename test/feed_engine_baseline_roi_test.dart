@@ -11,13 +11,9 @@
 // Test cases cover all scenarios from the DEV TICKET requirements
 
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/systems/feed/baseline_calculator.dart';
-import '../lib/systems/feed/smart_feed_service.dart';
-import '../lib/systems/feed/roi_calculator.dart';
-import '../lib/systems/feed/confidence_service.dart';
-import '../lib/systems/feed/reason_builder.dart';
-import '../lib/systems/feed/feed_pipeline.dart';
-import '../lib/features/tray/enums/tray_status.dart';
+import 'package:aqua_rythu/systems/feed/baseline_calculator.dart';
+import 'package:aqua_rythu/systems/feed/smart_feed_service.dart';
+import 'package:aqua_rythu/features/tray/enums/tray_status.dart';
 
 void main() {
   group('Baseline Calculator Tests', () {

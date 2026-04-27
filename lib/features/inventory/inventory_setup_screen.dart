@@ -162,7 +162,7 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Failed to save inventory'),
           backgroundColor: Colors.red,
         ),

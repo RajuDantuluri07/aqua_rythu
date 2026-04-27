@@ -113,9 +113,9 @@ class TodayActionCard extends StatelessWidget {
               ),
             ),
             if (priority != 'success')
-              Icon(
+              const Icon(
                 Icons.chevron_right,
-                color: const Color(0xFF3E4A40),
+                color: Color(0xFF3E4A40),
                 size: 20,
               ),
           ],

@@ -1,7 +1,7 @@
 /// Decision Priority Service - implements strict decision priority system
 /// Ensures only the most critical and safe decisions are presented to farmers
+library;
 
-import 'dart:math';
 import '../models/safe_decision_engine.dart';
 import '../models/real_world_anchors.dart';
 import '../utils/logger.dart';
@@ -100,7 +100,7 @@ class DecisionPriorityService {
 
     // Check water quality indicators
     if (anchors.environmentalStressScore > 0.8) {
-      issues.add(SafetyIssue(
+      issues.add(const SafetyIssue(
         type: SafetyIssueType.water_quality,
         severity: SafetySeverity.critical,
         description: 'High environmental stress detected',
@@ -111,7 +111,7 @@ class DecisionPriorityService {
 
     // Check for recent mortality
     if (anchors.hasRecentMortality) {
-      issues.add(SafetyIssue(
+      issues.add(const SafetyIssue(
         type: SafetyIssueType.mortality,
         severity: SafetySeverity.critical,
         description: 'Recent mortality event detected',
@@ -212,7 +212,7 @@ class DecisionPriorityService {
   // Decision creation methods
 
   static SafePrimaryDecision _createStabilityDecision(FarmAnchors anchors) {
-    return SafePrimaryDecision(
+    return const SafePrimaryDecision(
       type: SafeDecisionType.maintenance,
       title: '🔒 Farm Stability Mode Active',
       description:
@@ -237,7 +237,7 @@ class DecisionPriorityService {
 
   static SafePrimaryDecision _createLowConfidenceDecision(
       FarmAnchors anchors, SafeProfitDecision safeDecision) {
-    return SafePrimaryDecision(
+    return const SafePrimaryDecision(
       type: SafeDecisionType.maintenance,
       title: '📊 Low Confidence - Monitoring Mode',
       description:
@@ -271,9 +271,9 @@ class DecisionPriorityService {
       type: SafeDecisionType.maintenance,
       title: '🚨 Safety Alert: ${primaryIssue.type.name}',
       description: primaryIssue.description,
-      confidenceRange: ConfidenceRange(0.8, 0.95),
+      confidenceRange: const ConfidenceRange(0.8, 0.95),
       valueRange:
-          ValueRange(0, 0), // Safety decisions don't have direct monetary value
+          const ValueRange(0, 0), // Safety decisions don't have direct monetary value
       urgency: DecisionUrgency.urgent,
       actionItems: [
         primaryIssue.immediateAction,
@@ -288,13 +288,13 @@ class DecisionPriorityService {
         'Daily monitoring required',
         'Have emergency contacts ready',
       ],
-      timeToImplement: Duration(hours: 4),
+      timeToImplement: const Duration(hours: 4),
     );
   }
 
   static SafePrimaryDecision _createDecisionFatigueDecision(
       DecisionHistory history) {
-    return SafePrimaryDecision(
+    return const SafePrimaryDecision(
       type: SafeDecisionType.maintenance,
       title: '📋 Daily Decision Limit Reached',
       description:
@@ -319,7 +319,7 @@ class DecisionPriorityService {
 
   static SafePrimaryDecision _createDefaultMaintenanceDecision(
       FarmAnchors anchors) {
-    return SafePrimaryDecision(
+    return const SafePrimaryDecision(
       type: SafeDecisionType.maintenance,
       title: '📊 Farm Operating Normally',
       description:

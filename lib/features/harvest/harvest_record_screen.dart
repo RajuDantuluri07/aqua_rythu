@@ -158,7 +158,7 @@ class _HarvestRecordScreenState extends ConsumerState<HarvestRecordScreen> {
                       TextFormField(
                         controller: _totalWeightController,
                         keyboardType:
-                            TextInputType.numberWithOptions(decimal: true),
+                            const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Total Harvest Weight (kg)',
                           border: OutlineInputBorder(),
@@ -182,7 +182,7 @@ class _HarvestRecordScreenState extends ConsumerState<HarvestRecordScreen> {
                       TextFormField(
                         controller: _pricePerKgController,
                         keyboardType:
-                            TextInputType.numberWithOptions(decimal: true),
+                            const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Selling Price (₹ per kg)',
                           border: OutlineInputBorder(),

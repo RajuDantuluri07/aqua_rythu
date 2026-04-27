@@ -326,7 +326,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
   Future<void> updateRoundAmount(int round, double newAmount) async {
     final pondId = state.selectedPond;
-    final lockKey = '${pondId}_round_${round}';
+    final lockKey = '${pondId}_round_$round';
 
     // Prevent concurrent updates to the same round
     if (!_tryAcquireLock(lockKey)) {
@@ -386,7 +386,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
   Future<void> markFeedDone(int round, {double? actualQty}) async {
     final pondId = state.selectedPond;
-    final lockKey = '${pondId}_mark_feed_${round}';
+    final lockKey = '${pondId}_mark_feed_$round';
 
     // Prevent concurrent feed marking for the same round
     if (!_tryAcquireLock(lockKey)) {
@@ -504,7 +504,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
   void logTray(int round) {
     final pondId = state.selectedPond;
-    final lockKey = '${pondId}_log_tray_${round}';
+    final lockKey = '${pondId}_log_tray_$round';
 
     // Prevent concurrent tray logging for the same round
     if (!_tryAcquireLock(lockKey)) {

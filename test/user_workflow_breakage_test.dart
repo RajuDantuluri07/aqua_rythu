@@ -10,15 +10,11 @@ void main() {
     test('BREAK: Skip pond creation and try to add feed', () async {
       try {
         // Farmer tries to add feed without creating a pond first
-        String? pondId = null; // No pond created
+        String? pondId; // No pond created
         
-        if (pondId == null) {
-          print('✅ Handled missing pond - farmer skipped pond creation');
-          // App should guide user to create pond first
-        } else {
-          print('Adding feed to pond: $pondId');
-        }
-      } catch (e) {
+        print('✅ Handled missing pond - farmer skipped pond creation');
+        // App should guide user to create pond first
+            } catch (e) {
         print('✅ Workflow violation handled: $e');
       }
     });
@@ -26,16 +22,12 @@ void main() {
     test('BREAK: Skip farm setup and try to create ponds', () async {
       try {
         // Farmer tries to create ponds without setting up farm
-        String? farmId = null; // No farm created
+        String? farmId; // No farm created
         final pondData = {'name': 'Test Pond', 'area': 1000.0};
         
-        if (farmId == null) {
-          print('✅ Handled missing farm - farmer skipped farm setup');
-          // App should guide user to set up farm first
-        } else {
-          print('Creating pond for farm: $farmId');
-        }
-      } catch (e) {
+        print('✅ Handled missing farm - farmer skipped farm setup');
+        // App should guide user to set up farm first
+            } catch (e) {
         print('✅ Workflow violation handled: $e');
       }
     });
@@ -65,7 +57,7 @@ void main() {
       try {
         // Farmer tries to harvest before stocking any shrimp
         DateTime stockingDate = DateTime.now(); // Not actually stocked
-        DateTime harvestDate = DateTime.now().subtract(Duration(days: 10)); // Harvested before stocking!
+        DateTime harvestDate = DateTime.now().subtract(const Duration(days: 10)); // Harvested before stocking!
         
         if (harvestDate.isBefore(stockingDate)) {
           print('✅ Handled impossible timeline - harvest before stocking');
@@ -102,8 +94,8 @@ void main() {
     test('BREAK: Add expenses without farm context', () async {
       try {
         // Farmer tries to add expenses without selecting farm/crop
-        String? farmId = null;
-        String? cropId = null;
+        String? farmId;
+        String? cropId;
         final expenseData = {'amount': 1000.0, 'category': 'feed'};
         
         if (farmId == null || cropId == null) {
@@ -201,7 +193,7 @@ void main() {
         
         for (int i = 0; i < 20; i++) {
           final screen = screens[i % screens.length];
-          navigationTasks.add(Future.delayed(Duration(milliseconds: 50), () {
+          navigationTasks.add(Future.delayed(const Duration(milliseconds: 50), () {
             print('Navigating to: $screen (iteration $i)');
             // Simulate occasional navigation errors
             if (i % 7 == 0) {
@@ -223,7 +215,7 @@ void main() {
         List<Future<void>> backOperations = [];
         
         for (int i = 0; i < 15; i++) {
-          backOperations.add(Future.delayed(Duration(milliseconds: 100), () {
+          backOperations.add(Future.delayed(const Duration(milliseconds: 100), () {
             print('Back button press $i');
             // Simulate reaching stack bottom
             if (i >= 10) {
@@ -334,8 +326,8 @@ void main() {
       try {
         // Farmer enters future dates for past events
         DateTime now = DateTime.now();
-        DateTime futureStocking = now.add(Duration(days: 30));
-        DateTime futureHarvest = now.add(Duration(days: 60));
+        DateTime futureStocking = now.add(const Duration(days: 30));
+        DateTime futureHarvest = now.add(const Duration(days: 60));
         
         List<String> warnings = [];
         

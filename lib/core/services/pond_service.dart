@@ -3,6 +3,7 @@ import '../../systems/planning/feed_plan_generator.dart';
 import '../utils/logger.dart';
 import '../utils/doc_utils.dart';
 import '../../features/farm/farm_provider.dart';
+import '../../features/pond/enums/seed_type.dart';
 export '../../features/farm/farm_provider.dart' show Pond, PondStatus;
 
 class PondService {
@@ -19,6 +20,7 @@ class PondService {
     required int seedCount,
     required int plSize,
     required int numTrays,
+    SeedType? seedType,
   }) async {
     await createPondAndReturnId(
       farmId: farmId,
@@ -28,6 +30,7 @@ class PondService {
       seedCount: seedCount,
       plSize: plSize,
       numTrays: numTrays,
+      seedType: seedType,
     );
   }
 
@@ -41,6 +44,7 @@ class PondService {
     required int seedCount,
     required int plSize,
     required int numTrays,
+    SeedType? seedType,
   }) async {
     final user = supabase.auth.currentUser;
 
@@ -69,6 +73,13 @@ class PondService {
 
       final pondId = response;
       AppLogger.info("Created pond: $pondId");
+
+      // Persist seed/stocking type (RPC doesn't accept this param yet)
+      final resolvedSeedType =
+          seedType ?? SeedTypeX.fromPlSize(plSize);
+      await supabase.from('ponds').update({
+        'stocking_type': resolvedSeedType.dbValue,
+      }).eq('id', pondId);
 
       // MANDATORY: Generate feed schedule immediately after pond creation
       await generateFeedSchedule(pondId);
@@ -131,7 +142,8 @@ class PondService {
             latest_sample_date,
             is_smart_feed_enabled,
             anchor_feed,
-            is_anchor_initialized
+            is_anchor_initialized,
+            stocking_type
           ''').eq('id', pondId).maybeSingle();
 
       if (row == null) return null;
@@ -152,6 +164,7 @@ class PondService {
         isSmartFeedEnabled: row['is_smart_feed_enabled'] ?? false,
         anchorFeed: (row['anchor_feed'] as num?)?.toDouble(),
         isAnchorInitialized: row['is_anchor_initialized'] ?? false,
+        seedType: SeedTypeX.fromDb(row['stocking_type'] as String?),
       );
     } catch (e) {
       AppLogger.error('Failed to fetch pond by ID: $pondId', e);

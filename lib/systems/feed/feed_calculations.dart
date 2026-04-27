@@ -153,7 +153,7 @@ List<TrayStatus> _processTrayReliability(List<TrayStatus> trayStatuses) {
     }
 
     AppLogger.info(
-        'Tray reliability: ${total} → ${reliableStatuses.length} reliable data points');
+        'Tray reliability: $total → ${reliableStatuses.length} reliable data points');
     return reliableStatuses;
   } else {
     // Not mixed data - all data is reliable

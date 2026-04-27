@@ -817,7 +817,7 @@ class _InventoryDashboardScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Last: ${lastActionType?.toUpperCase() ?? 'ACTION'}',
+                  'Last: ${lastActionType.toUpperCase() ?? 'ACTION'}',
                   style: TextStyle(
                     fontSize: 10,
                     color: actionColor.withOpacity(0.8),
@@ -918,7 +918,7 @@ class _VerifyStockScreenState extends State<VerifyStockScreen> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Verification Result'),
+          title: const Text('Verification Result'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

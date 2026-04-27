@@ -6,6 +6,7 @@ import 'package:aqua_rythu/core/services/feed_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/utils/doc_utils.dart';
+import '../pond/enums/seed_type.dart';
 
 enum PondStatus { active, completed }
 
@@ -34,6 +35,9 @@ class Pond {
   final bool isAnchorInitialized;
   final double? fcr;
 
+  // Seed type: determines which DOC-based feed table to use
+  final SeedType seedType;
+
   Pond({
     required this.id,
     required this.name,
@@ -51,8 +55,9 @@ class Pond {
     this.isCustomFeedPlan = false,
     this.anchorFeed,
     this.isAnchorInitialized = false,
-    this.fcr = null,
-  });
+    this.fcr,
+    SeedType? seedType,
+  }) : seedType = seedType ?? SeedTypeX.fromPlSize(plSize);
 
   /// Returns how many feed rounds apply for the given DOC, respecting
   /// any custom plan the farmer has configured.
@@ -80,6 +85,7 @@ class Pond {
     bool? isCustomFeedPlan,
     double? anchorFeed,
     bool? isAnchorInitialized,
+    SeedType? seedType,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -98,6 +104,7 @@ class Pond {
       isCustomFeedPlan: isCustomFeedPlan ?? this.isCustomFeedPlan,
       anchorFeed: anchorFeed ?? this.anchorFeed,
       isAnchorInitialized: isAnchorInitialized ?? this.isAnchorInitialized,
+      seedType: seedType ?? this.seedType,
     );
   }
 
@@ -218,6 +225,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
                     ? (p['anchor_feed'] as num).toDouble()
                     : null,
                 isAnchorInitialized: p['is_anchor_initialized'] ?? false,
+                seedType: SeedTypeX.fromDb(p['stocking_type'] as String?),
               ));
             } catch (e) {
               AppLogger.error('Failed to parse pond: $e', e);

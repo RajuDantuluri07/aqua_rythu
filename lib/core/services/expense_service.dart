@@ -18,7 +18,7 @@ class ExpenseService {
       throw ArgumentError('Invalid type for $fieldName: expected number');
     }
 
-    final numValue = value as num;
+    final numValue = value;
     if (numValue.isNaN) {
       AppLogger.error('Invalid value for $fieldName: NaN');
       throw ArgumentError('Invalid value for $fieldName: NaN');
@@ -51,7 +51,7 @@ class ExpenseService {
       return defaultValue;
     }
 
-    final strValue = value as String;
+    final strValue = value;
     if (strValue.isEmpty) {
       AppLogger.warn(
           'Empty string for $fieldName, using default: $defaultValue');
@@ -350,8 +350,9 @@ class ExpenseService {
       if (category != null) updateData['category'] = category.value;
       if (amount != null) updateData['amount'] = amount;
       if (notes != null) updateData['notes'] = notes.isEmpty ? null : notes;
-      if (date != null)
+      if (date != null) {
         updateData['date'] = date.toIso8601String().split('T')[0];
+      }
 
       if (updateData.isEmpty) {
         AppLogger.warn('No data to update for expense $expenseId');

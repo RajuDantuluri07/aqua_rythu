@@ -139,7 +139,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               // Amount Field
               TextFormField(
                 controller: _amountController,
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'Amount (₹)',
                   border: OutlineInputBorder(),

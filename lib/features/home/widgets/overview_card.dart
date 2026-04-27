@@ -87,9 +87,9 @@ class OverviewCard extends StatelessWidget {
           )),
           if (title == 'Growth overview') ...[
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Avg ratio: <span class="font-bold">0.97</span>',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF3E4A40),

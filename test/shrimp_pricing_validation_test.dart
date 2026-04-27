@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/core/models/shrimp_pricing.dart';
+import 'package:aqua_rythu/core/models/shrimp_pricing.dart';
 
 /// Test cases for shrimp pricing validation
 ///
@@ -8,11 +8,11 @@ import '../lib/core/models/shrimp_pricing.dart';
 void main() {
   group('Shrimp Pricing Validation Tests', () {
     test('Valid pricing should pass validation', () {
-      final validConfig = ShrimpPricingConfig(
+      const validConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 90, price: 280),
-          const ShrimpPricing(count: 80, price: 300),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 80, price: 300),
         ],
         enabled: true,
       );
@@ -23,10 +23,10 @@ void main() {
     });
 
     test('Price below minimum should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 50), // Too low
-          const ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 100, price: 50), // Too low
+          ShrimpPricing(count: 90, price: 280),
         ],
         enabled: true,
       );
@@ -39,10 +39,10 @@ void main() {
     });
 
     test('Price above maximum should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 15000), // Too high
-          const ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 100, price: 15000), // Too high
+          ShrimpPricing(count: 90, price: 280),
         ],
         enabled: true,
       );
@@ -55,10 +55,10 @@ void main() {
     });
 
     test('Duplicate counts should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 100, price: 280), // Duplicate
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 100, price: 280), // Duplicate
         ],
         enabled: true,
       );
@@ -71,10 +71,10 @@ void main() {
     });
 
     test('Invalid count should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 95, price: 270), // Not in valid list
-          const ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 95, price: 270), // Not in valid list
+          ShrimpPricing(count: 90, price: 280),
         ],
         enabled: true,
       );
@@ -133,11 +133,11 @@ void main() {
     });
 
     test('Price lookup should work correctly', () {
-      final config = ShrimpPricingConfig(
+      const config = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 90, price: 280),
-          const ShrimpPricing(count: 80, price: 300),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 80, price: 300),
         ],
         enabled: true,
       );
@@ -155,11 +155,11 @@ void main() {
     });
 
     test('Sorted tiers should be in descending order', () {
-      final config = ShrimpPricingConfig(
+      const config = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 25, price: 540),
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 50, price: 340),
+          ShrimpPricing(count: 25, price: 540),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 50, price: 340),
         ],
         enabled: true,
       );
@@ -174,11 +174,11 @@ void main() {
 
     // MANDATORY ORDER RULE TESTS
     test('Correct order should pass validation', () {
-      final validConfig = ShrimpPricingConfig(
+      const validConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 90, price: 280),
-          const ShrimpPricing(count: 80, price: 300),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 80, price: 300),
         ],
         enabled: true,
       );
@@ -191,11 +191,11 @@ void main() {
     });
 
     test('Wrong count order should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 110, price: 280), // Count increased
-          const ShrimpPricing(count: 80, price: 300),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 110, price: 280), // Count increased
+          ShrimpPricing(count: 80, price: 300),
         ],
         enabled: true,
       );
@@ -208,11 +208,11 @@ void main() {
     });
 
     test('Wrong price order should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 90, price: 260), // Price decreased
-          const ShrimpPricing(count: 80, price: 300),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 90, price: 260), // Price decreased
+          ShrimpPricing(count: 80, price: 300),
         ],
         enabled: true,
       );
@@ -229,13 +229,13 @@ void main() {
     });
 
     test('Both count and price wrong order should fail', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(
+          ShrimpPricing(
               count: 80, price: 300), // Started with wrong order
-          const ShrimpPricing(
+          ShrimpPricing(
               count: 100, price: 270), // Count increased, price decreased
-          const ShrimpPricing(count: 90, price: 280),
+          ShrimpPricing(count: 90, price: 280),
         ],
         enabled: true,
       );
@@ -248,11 +248,11 @@ void main() {
     });
 
     test('Same price should fail order rule', () {
-      final invalidConfig = ShrimpPricingConfig(
+      const invalidConfig = ShrimpPricingConfig(
         pricingTiers: [
-          const ShrimpPricing(count: 100, price: 270),
-          const ShrimpPricing(count: 90, price: 270), // Same price
-          const ShrimpPricing(count: 80, price: 300),
+          ShrimpPricing(count: 100, price: 270),
+          ShrimpPricing(count: 90, price: 270), // Same price
+          ShrimpPricing(count: 80, price: 300),
         ],
         enabled: true,
       );

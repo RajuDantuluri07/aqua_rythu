@@ -45,6 +45,9 @@ import 'package:aqua_rythu/features/home/kpi_row.dart';
 import 'package:aqua_rythu/features/home/feed_trend_card.dart';
 import 'package:aqua_rythu/features/home/home_builder.dart';
 import 'package:aqua_rythu/features/home/home_view_model.dart';
+import 'package:aqua_rythu/systems/feed/seed_feed_engine.dart';
+import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card.dart';
+import 'package:aqua_rythu/features/pond/widgets/seed_type_badge.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -1062,6 +1065,23 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       nextFeedAt = null;
     }
 
+    // ── Seed-based feed explanation ───────────────────────────────────────────
+    final double trayLeftover = traySignal == 'full'
+        ? 70.0
+        : traySignal == 'partial'
+            ? 30.0
+            : traySignal == 'empty'
+                ? 0.0
+                : -1.0;
+    final bool emptiedFast = traySignal == 'empty';
+    final seedExplanation = SeedFeedEngine.buildExplanation(
+      seedType: currentPond.seedType,
+      doc: currentDoc,
+      seedCount: currentPond.seedCount,
+      leftoverPercent: trayLeftover,
+      emptiedFast: emptiedFast,
+    );
+
     // ── HomeViewModel — single source of truth for all home sections ─────────
     final vm = HomeBuilder.build(
       doc: currentDoc,
@@ -1292,7 +1312,16 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+
+              // Seed type badge row
+              Row(
+                children: [
+                  SeedTypeBadge(seedType: currentPond.seedType),
+                ],
+              ),
+
+              const SizedBox(height: 8),
 
               // ── ALERT STRIP — highest priority status (not shown when all done) ──
               if (!isCompleted) ...[
@@ -1617,6 +1646,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 // ── INTELLIGENCE LAYER (below quick actions) ───────────────────
                 if (!isCompleted) ...[
                   const SizedBox(height: 20),
+
+                  // Seed-based feed breakdown (DOC table + tray + smart factors)
+                  FeedBreakdownCard(explanation: seedExplanation),
+
+                  const SizedBox(height: 10),
 
                   // Feed vs Ideal trend (7-day sparkline)
                   FeedTrendCard(data: vm.trend),

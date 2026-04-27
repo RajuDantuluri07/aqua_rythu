@@ -22,7 +22,7 @@ class FeedInputBuilder {
           'Invalid type for $fieldName: expected String, got ${value.runtimeType}');
       return defaultValue;
     }
-    return value as String;
+    return value;
   }
 
   /// Validates integer fields with proper null checking
@@ -43,7 +43,7 @@ class FeedInputBuilder {
           'Invalid type for $fieldName: expected int, got ${value.runtimeType}');
       return defaultValue;
     }
-    return value as int;
+    return value;
   }
 
   /// Validates double fields with proper null checking
@@ -56,7 +56,7 @@ class FeedInputBuilder {
           'Invalid type for $fieldName: expected num, got ${value.runtimeType}');
       return null;
     }
-    final numValue = value as num;
+    final numValue = value;
     if (numValue.isNaN || numValue.isInfinite) {
       AppLogger.error('Invalid double value for $fieldName: $numValue');
       return null;

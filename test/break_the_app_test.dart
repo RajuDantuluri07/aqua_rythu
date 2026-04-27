@@ -152,13 +152,11 @@ void main() {
       // Test what happens when services return null
       try {
         // Simulate null response from service
-        dynamic result = null;
+        dynamic result;
 
         // App should handle null gracefully
-        if (result == null) {
-          print('Service returned null - app should handle this');
-        }
-      } catch (e) {
+        print('Service returned null - app should handle this');
+            } catch (e) {
         fail('App should handle null service responses without crashing: $e');
       }
     });
@@ -186,7 +184,7 @@ void main() {
     test('BREAK: Invalid dates should not crash', () {
       try {
         // Test future dates
-        DateTime futureDate = DateTime.now().add(Duration(days: 365));
+        DateTime futureDate = DateTime.now().add(const Duration(days: 365));
         print('Future date: $futureDate');
 
         // Test very old dates
@@ -194,7 +192,7 @@ void main() {
         print('Ancient date: $ancientDate');
 
         // Test null dates
-        DateTime? nullDate = null;
+        DateTime? nullDate;
         print('Null date: $nullDate');
       } catch (e) {
         fail('App should handle invalid dates without crashing: $e');
@@ -259,7 +257,7 @@ void main() {
         List<Future<void>> operations = [];
 
         for (int i = 0; i < 100; i++) {
-          operations.add(Future.delayed(Duration(milliseconds: 10), () {
+          operations.add(Future.delayed(const Duration(milliseconds: 10), () {
             print('Rapid operation $i');
           }));
         }

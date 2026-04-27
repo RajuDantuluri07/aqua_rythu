@@ -1,6 +1,7 @@
 /// Scientific growth curve model for shrimp farming
 /// Based on Litopenaeus vannamei (Pacific white shrimp) industry standards
 /// Temperature: 28-30°C, Salinity: 15-25 ppt, Stocking density: 50-100 PL/m²
+library;
 
 import 'dart:math';
 

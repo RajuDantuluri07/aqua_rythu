@@ -38,12 +38,12 @@ class FarmHealthIndicator extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(
+          const Flexible(
             child: Text(
               'Farm health status',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF3E4A40),

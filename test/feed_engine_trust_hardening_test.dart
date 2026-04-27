@@ -11,16 +11,16 @@
 // to "trusted advisor" for pilot launch readiness
 
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/systems/feed/baseline_calculator.dart';
-import '../lib/systems/feed/smart_feed_service.dart';
-import '../lib/systems/feed/feed_pipeline.dart';
-import '../lib/systems/feed/reason_builder.dart';
+import 'package:aqua_rythu/systems/feed/baseline_calculator.dart';
+import 'package:aqua_rythu/systems/feed/smart_feed_service.dart';
+import 'package:aqua_rythu/systems/feed/feed_pipeline.dart';
+import 'package:aqua_rythu/systems/feed/reason_builder.dart';
 
 void main() {
   group('Trust Hardening - ABW & Confidence', () {
     test('Case 5: No Data - no tray, no sampling', () async {
       // Test zero-data fallback scenario
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-5',
         doc: 45,
         shrimpCount: 10000,
@@ -47,7 +47,7 @@ void main() {
 
     test('Dynamic ABW with sampling data', () async {
       // Test ABW resolution and confidence downgrade
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-6',
         doc: 60,
         shrimpCount: 10000,
@@ -85,7 +85,7 @@ void main() {
   group('Trust Hardening - Feed Rate & Reasoning', () {
     test('Case 6: Increase Case - actual > baseline', () async {
       // Test proper reasoning for feed increase
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-7',
         doc: 75,
         shrimpCount: 10000,
@@ -131,7 +131,7 @@ void main() {
   group('Trust Hardening - Safety & Validation', () {
     test('Safety caps enforced - extreme adjustments', () async {
       // Test that extreme adjustments are properly capped
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-8',
         doc: 45,
         shrimpCount: 10000,
@@ -178,7 +178,7 @@ void main() {
   group('Trust Hardening - API Response Format', () {
     test('API response includes all required fields', () async {
       // Test complete API response format
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-9',
         doc: 60,
         shrimpCount: 15000,

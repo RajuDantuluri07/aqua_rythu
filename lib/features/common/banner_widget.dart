@@ -35,14 +35,14 @@ class AnnouncementBanner extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
+              const Row(
                 children: [
                   Icon(
                     Icons.campaign,
                     color: Colors.white,
                     size: 20,
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       '📢 Announcement',
@@ -76,7 +76,7 @@ class AnnouncementBanner extends ConsumerWidget {
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.close,
                     color: Colors.white,
                     size: 16,

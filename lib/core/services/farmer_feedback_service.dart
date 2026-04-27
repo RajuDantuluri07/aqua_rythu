@@ -1,11 +1,11 @@
 /// Farmer feedback service for adaptive learning
 /// Collects and processes farmer feedback to improve insight quality
+library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/adaptive_insights.dart';
 import '../utils/logger.dart';
 
 class FarmerFeedbackService {

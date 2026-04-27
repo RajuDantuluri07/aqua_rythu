@@ -194,12 +194,12 @@ class WaterInsightService {
 
   static WaterStatus _analyzeDissolvedOxygen(double doValue, List<String> recommendations, List<String> alerts) {
     if (doValue < kCriticalDOLow) {
-      alerts.add('CRITICAL: DO below ${kCriticalDOLow} mg/L - shrimp stress');
+      alerts.add('CRITICAL: DO below $kCriticalDOLow mg/L - shrimp stress');
       recommendations.add('EMERGENCY: Increase aeration immediately');
       recommendations.add('Consider partial water exchange');
       return WaterStatus.critical;
     } else if (doValue < kWarningDOLow) {
-      alerts.add('WARNING: DO below ${kWarningDOLow} mg/L');
+      alerts.add('WARNING: DO below $kWarningDOLow mg/L');
       recommendations.add('Increase aeration');
       recommendations.add('Monitor shrimp behavior closely');
       return WaterStatus.poor;
@@ -214,13 +214,13 @@ class WaterInsightService {
 
   static WaterStatus _analyzeAmmonia(double ammoniaValue, List<String> recommendations, List<String> alerts) {
     if (ammoniaValue > kCriticalAmmoniaHigh) {
-      alerts.add('CRITICAL: Ammonia above ${kCriticalAmmoniaHigh} ppm - toxic levels');
+      alerts.add('CRITICAL: Ammonia above $kCriticalAmmoniaHigh ppm - toxic levels');
       recommendations.add('EMERGENCY: Stop feeding temporarily');
       recommendations.add('Immediate water exchange required');
       recommendations.add('Check for dead shrimp');
       return WaterStatus.critical;
     } else if (ammoniaValue > kWarningAmmoniaHigh) {
-      alerts.add('WARNING: Ammonia above ${kWarningAmmoniaHigh} ppm');
+      alerts.add('WARNING: Ammonia above $kWarningAmmoniaHigh ppm');
       recommendations.add('Reduce feeding slightly');
       recommendations.add('Increase water exchange');
       recommendations.add('Add beneficial bacteria');

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../farm/farm_provider.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import '../../routes/app_routes.dart';
+import 'enums/seed_type.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -23,6 +24,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
 
   DateTime _stockingDate = DateTime.now();
   int _numTrays = 4;
+  SeedType _seedType = SeedType.hatcherySmall;
   bool _isLoading = false;
 
   @override
@@ -158,6 +160,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           seedCount: seedCount,
           plSize: plSize,
           numTrays: _numTrays,
+          seedType: _seedType,
         );
 
         // Refresh the provider to sync the new pond from Supabase
@@ -197,6 +200,51 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         if (mounted) setState(() => _isLoading = false);
       }
     }
+  }
+
+  Widget _buildSeedTypeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: Row(
+              children: [
+                Icon(Icons.biotech_rounded,
+                    color: Theme.of(context).primaryColor, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Seed Type',
+                  style: TextStyle(
+                      fontSize: 13, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          ...SeedType.values.map((type) => RadioListTile<SeedType>(
+                dense: true,
+                value: type,
+                groupValue: _seedType,
+                activeColor: Theme.of(context).primaryColor,
+                title: Text(type.displayName,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w500)),
+                subtitle: Text(type.description,
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500)),
+                onChanged: (v) {
+                  if (v != null) setState(() => _seedType = v);
+                },
+              )),
+        ],
+      ),
+    );
   }
 
   Widget _buildTextField({
@@ -349,6 +397,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                         }
                       },
                     ),
+                    const SizedBox(height: 20),
+                    _buildSeedTypeSelector(),
                     const SizedBox(height: 20),
                     InkWell(
                       onTap: () => _selectDate(context),

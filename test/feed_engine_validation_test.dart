@@ -360,7 +360,7 @@ void main() {
 
           // No sudden spikes (>50% increase from one day to next)
           expect(increase, lessThan(feedProgression[i - 1] * 0.5),
-              reason: 'Spike detected between DOC ${i} and ${i + 1}');
+              reason: 'Spike detected between DOC $i and ${i + 1}');
         }
 
         print('  Maximum daily increase: ${maxIncrease.toStringAsFixed(3)} kg');
@@ -391,7 +391,7 @@ void main() {
     // ── SUMMARY ────────────────────────────────────────────────────────────────
 
     test('📊 VALIDATION SUMMARY', () {
-      print('\n' + '=' * 60);
+      print('\n${'=' * 60}');
       print('🎯 FEED ENGINE VALIDATION COMPLETE');
       print('=' * 60);
       print('✅ TEST 1 - DOC Logic: PASS');

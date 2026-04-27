@@ -124,7 +124,7 @@ class PondCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Expanded(
                         child: Text(
-                          actionText!,
+                          actionText,
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
@@ -207,9 +207,9 @@ class PondCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'DOC',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF3E4A40),
@@ -231,9 +231,9 @@ class PondCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Feed (D)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF3E4A40),
@@ -255,9 +255,9 @@ class PondCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'FCR',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF3E4A40),

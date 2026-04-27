@@ -88,7 +88,7 @@ class FeedHistoryNotifier
       final newRounds = List<double>.from(existing.rounds);
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
       // Get feeds per day from farm settings instead of hardcoded 4
-      final feedsPerDay = 4; // TODO: Get from farm settings
+      const feedsPerDay = 4; // TODO: Get from farm settings
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
           : List<double>.filled(feedsPerDay, 0.0);
@@ -124,7 +124,7 @@ class FeedHistoryNotifier
       );
     } else {
       // Create new today log
-      final feedsPerDay = 4; // TODO: Get from farm settings
+      const feedsPerDay = 4; // TODO: Get from farm settings
       final newRounds = List.filled(feedsPerDay, 0.0);
       newRounds[round - 1] = qty;
       final newTrays = List<TrayStatus?>.filled(feedsPerDay, null);
@@ -213,7 +213,7 @@ class FeedHistoryNotifier
       final existing = pondLogs[todayIdx];
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
       // Get feeds per day from farm settings instead of hardcoded 4
-      final feedsPerDay = 4; // TODO: Get from farm settings
+      const feedsPerDay = 4; // TODO: Get from farm settings
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
           : List<double>.filled(feedsPerDay, 0.0);

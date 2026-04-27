@@ -97,12 +97,15 @@ class BaselineCalculator {
   static double estimateAbwFromDoc(int doc) {
     if (doc <= 0) return 0.0;
     if (doc <= 30) return 0.06 * doc; // Smooth growth: ~2g at day 30
-    if (doc <= 60)
+    if (doc <= 60) {
       return 2.0 + ((doc - 30) * 0.27); // Smooth growth: ~10g at day 60
-    if (doc <= 90)
+    }
+    if (doc <= 90) {
       return 10.0 + ((doc - 60) * 0.33); // Smooth growth: ~20g at day 90
-    if (doc <= 120)
+    }
+    if (doc <= 120) {
       return 20.0 + ((doc - 90) * 0.27); // Smooth growth: ~28g at day 120
+    }
     return 28.0 + min((doc - 120) * 0.05, 2.0); // Smooth growth: Max 30g
   }
 

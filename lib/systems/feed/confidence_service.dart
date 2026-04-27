@@ -167,15 +167,17 @@ class ConfidenceService {
     
     if (lastTrayUpdate != null) {
       final int hoursAgo = now.difference(lastTrayUpdate).inHours;
-      if (hoursAgo <= 2) recencyScore += 5;
-      else if (hoursAgo <= 6) recencyScore += 3;
+      if (hoursAgo <= 2) {
+        recencyScore += 5;
+      } else if (hoursAgo <= 6) recencyScore += 3;
       else if (hoursAgo <= 24) recencyScore += 1;
     }
 
     if (lastSamplingUpdate != null) {
       final int hoursAgo = now.difference(lastSamplingUpdate).inHours;
-      if (hoursAgo <= 2) recencyScore += 5;
-      else if (hoursAgo <= 6) recencyScore += 3;
+      if (hoursAgo <= 2) {
+        recencyScore += 5;
+      } else if (hoursAgo <= 6) recencyScore += 3;
       else if (hoursAgo <= 24) recencyScore += 1;
     }
 

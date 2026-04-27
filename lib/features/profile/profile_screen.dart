@@ -10,6 +10,7 @@ import '../farm/edit_farm_dialog.dart';
 import 'user_provider.dart';
 import 'package:aqua_rythu/core/services/farm_service.dart';
 import 'package:aqua_rythu/core/services/admin_security_service.dart';
+import '../upgrade/upgrade_to_pro_screen.dart';
 // Admin provider removed temporarily
 // import '../admin/admin_provider.dart';
 
@@ -245,6 +246,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 const SizedBox(height: 10),
 
+                _menuTile(Icons.workspace_premium, "🚀 Upgrade to PRO",
+                    onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const UpgradeToProScreen(),
+                    ),
+                  );
+                }),
                 _menuTile(Icons.settings, "Account Settings"),
                 _menuTile(Icons.notifications, "Notification Preferences"),
                 _menuTile(Icons.language, "App Language"),
