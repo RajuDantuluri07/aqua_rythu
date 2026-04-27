@@ -6,7 +6,6 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
-import '../common/banner_widget.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _bg = Color(0xFFF5F7FA);
