@@ -31,6 +31,7 @@ import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/validators/feed_input_validator.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/services/feed_safety_service.dart';
+import 'package:aqua_rythu/core/services/subscription_gate.dart';
 import '../../../core/services/app_config_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // import '../growth/fcr_engine.dart'; // DISABLED FOR V1
@@ -319,8 +320,12 @@ class MasterFeedEngine {
       );
     }
 
-    // Check smart feed enabled - if disabled, force blind feeding
-    final bool forceBlindFeeding = !feedEngineConfig.smartFeedEnabled;
+    // Check smart feed enabled - if disabled, force blind feeding.
+    // FREE users are also forced into blind feeding — smart feed is a PRO
+    // feature (FeatureIds.smartFeedEngine). Tray/growth corrections are
+    // skipped, only the deterministic DOC ramp + density scaling runs.
+    final bool forceBlindFeeding =
+        !feedEngineConfig.smartFeedEnabled || !SubscriptionGate.isPro;
 
     // ── STEP 1: Critical DO safety — enforced for ALL DOC ─────────────────
     if (input.dissolvedOxygen < 3.5) {

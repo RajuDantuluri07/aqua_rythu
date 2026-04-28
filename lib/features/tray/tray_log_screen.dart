@@ -4,6 +4,8 @@ import '../../features/tray/enums/tray_status.dart';
 import 'tray_provider.dart';
 import 'tray_model.dart';
 import '../farm/farm_provider.dart';
+import '../upgrade/access_control_hooks.dart';
+import '../upgrade/subscription_provider.dart';
 import '../../core/utils/logger.dart';
 
 class TrayLogScreen extends ConsumerStatefulWidget {
@@ -93,6 +95,17 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
     );
 
     ref.read(trayProvider(widget.pondId).notifier).addTrayLog(log);
+
+    // FREE users: log is saved (basic farm op preserved) but the
+    // correction-engine result screen is gated. Trigger the paywall
+    // before popping back, so the upgrade context is "tray result".
+    final isPro = ref.read(subscriptionProvider).isPro;
+    if (!isPro) {
+      AccessControlHooks.showUpgradeDialog(
+        context,
+        FeatureIds.trayBasedCorrection,
+      );
+    }
 
     Navigator.pop(context, "Logged $_totalTrays trays");
   }

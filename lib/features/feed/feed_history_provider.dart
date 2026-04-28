@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
@@ -107,12 +108,8 @@ class FeedHistoryNotifier
         newSmartFeeds[round - 1] = smartFeedQty;
       }
 
-      // Recalculate Cumulative using date-based previous entry (not index-based)
-      double prevCum = 0.0;
-      if (todayIdx + 1 < pondLogs.length) {
-        prevCum = pondLogs[todayIdx + 1].cumulative;
-      }
-      final newTotal = newRounds.fold(0.0, (sum, val) => sum + val);
+      // 🔒 FIX #5: Calculate cumulative from database instead of index-based
+      final cumulativeFromDB = await _getCumulativeFeedFromDB(pondId, today);
 
       pondLogs[todayIdx] = FeedHistoryLog(
         date: existing.date,
@@ -122,7 +119,7 @@ class FeedHistoryNotifier
             newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
         trayStatuses: newTrays,
         expected: expected,
-        cumulative: prevCum + newTotal,
+        cumulative: cumulativeFromDB,
       );
     } else {
       // Create new today log
@@ -135,7 +132,8 @@ class FeedHistoryNotifier
         newSmartFeeds[round - 1] = smartFeedQty;
       }
 
-      final prevCum = pondLogs.isNotEmpty ? pondLogs.first.cumulative : 0.0;
+      // 🔒 FIX #5: Calculate cumulative from database for new log too
+      final cumulativeFromDB = await _getCumulativeFeedFromDB(pondId, today);
 
       pondLogs.insert(
           0,
@@ -147,7 +145,7 @@ class FeedHistoryNotifier
                 newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
             trayStatuses: newTrays,
             expected: expected,
-            cumulative: prevCum + qty,
+            cumulative: cumulativeFromDB,
           ));
     }
 
@@ -162,6 +160,31 @@ class FeedHistoryNotifier
     state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
 
     // 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation via cache invalidation
+  }
+
+  /// 🔒 FIX #5: Get cumulative feed from database (replaces index-based calculation)
+  Future<double> _getCumulativeFeedFromDB(String pondId, DateTime date) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final result = await supabase.rpc('get_cumulative_feed_safe', params: {
+        'p_pond_id': pondId,
+        'p_date': date.toIso8601String().substring(0, 10), // YYYY-MM-DD format
+      });
+      return (result as num?)?.toDouble() ?? 0.0;
+    } catch (e) {
+      AppLogger.error(
+          'Failed to get cumulative feed from DB for pond $pondId', e);
+      // Fallback to calculation from existing state if DB fails
+      final pondLogs = state[pondId] ?? <FeedHistoryLog>[];
+      if (pondLogs.isEmpty) return 0.0;
+
+      // Find the latest log before or on the target date
+      final relevantLogs = pondLogs.where(
+          (log) => log.date.isBefore(date) || log.date.isAtSameMomentAs(date));
+      if (relevantLogs.isEmpty) return 0.0;
+
+      return relevantLogs.fold<double>(0.0, (sum, log) => sum + log.total);
+    }
   }
 
   /// ✅ Persist feed log to database

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'legal_screen.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
@@ -8,6 +9,10 @@ import '../farm/farm_provider.dart';
 import '../farm/farms_list_sheet.dart';
 import 'user_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
+import '../upgrade/subscription_provider.dart';
+import '../dashboard/farm_dashboard_provider.dart';
+import '../feed/feed_history_provider.dart';
+import '../../core/services/subscription_gate.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -22,6 +27,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   static const _lightGrey = Color(0xFFF2F4F6);
   static const _sectionLabelColor = Color(0xFF9E9E9E);
   static const _cardBorder = Color(0xFFE8ECF0);
+
+  int _profileHeaderTapCount = 0;
 
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
@@ -41,57 +48,70 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: ListView(
           children: [
             // ── PROFILE HEADER ──────────────────────────────────────────
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 28),
-              child: Column(
-                children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 46,
-                        backgroundImage: NetworkImage(
-                          userProfile.profileImageUrl ??
-                              'https://i.pravatar.cc/150?img=3',
-                        ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: _primaryGreen,
-                            shape: BoxShape.circle,
+            GestureDetector(
+              onTap: () {
+                if (!kReleaseMode) {
+                  setState(() {
+                    _profileHeaderTapCount++;
+                    if (_profileHeaderTapCount >= 5) {
+                      _showDebugMenu();
+                      _profileHeaderTapCount = 0;
+                    }
+                  });
+                }
+              },
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 28),
+                child: Column(
+                  children: [
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 46,
+                          backgroundImage: NetworkImage(
+                            userProfile.profileImageUrl ??
+                                'https://i.pravatar.cc/150?img=3',
                           ),
-                          child: const Icon(Icons.edit,
-                              size: 14, color: Colors.white),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    userProfile.name,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: _primaryGreen,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    userProfile.email,
-                    style: const TextStyle(
-                        fontSize: 14, color: Color(0xFF666666)),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    userProfile.phoneNumber,
-                    style: const TextStyle(
-                        fontSize: 14, color: Color(0xFF666666)),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Text(
+                      userProfile.name,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      userProfile.email,
+                      style: const TextStyle(
+                          fontSize: 14, color: Color(0xFF666666)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      userProfile.phoneNumber,
+                      style: const TextStyle(
+                          fontSize: 14, color: Color(0xFF666666)),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -181,56 +201,56 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   builder: (_) => const FarmsListSheet(),
                 ),
                 child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _cardBorder),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'STATUS',
-                            style: TextStyle(
-                              color: _sectionLabelColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.2,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _cardBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'STATUS',
+                              style: TextStyle(
+                                color: _sectionLabelColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.2,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Connected Farms: $connectedFarms',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A1A),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Connected Farms: $connectedFarms',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A1A1A),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8F5EE),
-                        borderRadius: BorderRadius.circular(12),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5EE),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.water_drop,
+                            color: _primaryGreen, size: 22),
                       ),
-                      child: const Icon(Icons.water_drop,
-                          color: _primaryGreen, size: 22),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right,
-                        color: Color(0xFFBBBBBB), size: 18),
-                  ],
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right,
+                          color: Color(0xFFBBBBBB), size: 18),
+                    ],
+                  ),
                 ),
-              ),
               ),
             ),
 
@@ -320,8 +340,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _menuItem(
                 icon: Icons.mail_outline_rounded,
                 label: 'Email',
-                onTap: () =>
-                    _launchUrl('mailto:support@aquarythu.com'),
+                onTap: () => _launchUrl('mailto:support@aquarythu.com'),
               ),
               _menuItem(
                 icon: Icons.update_rounded,
@@ -425,8 +444,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
                 Container(
@@ -491,6 +509,113 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 style: TextStyle(color: Color(0xFFE53935))),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showDebugMenu() {
+    if (kReleaseMode) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '🔧 DEBUG MENU',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1B8A4C),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Current: ${SubscriptionGate.hasDebugOverride ? "DEBUG ${SubscriptionGate.isPro ? "PRO" : "FREE"}" : "REAL ${SubscriptionGate.isPro ? "PRO" : "FREE"}"}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.star, color: Color(0xFF1B8A4C)),
+              title: const Text('Set as PRO (Debug)'),
+              subtitle: const Text('Override to PRO for testing'),
+              onTap: () async {
+                SubscriptionGate.setDebugOverride(true);
+                await SubscriptionGate.persistDebugChoice('pro');
+                _refreshProviders();
+                if (sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop();
+                }
+                _showDebugSnackBar('DEBUG: Set to PRO');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.lock, color: Colors.grey),
+              title: const Text('Set as FREE (Debug)'),
+              subtitle: const Text('Override to FREE for testing'),
+              onTap: () async {
+                SubscriptionGate.setDebugOverride(false);
+                await SubscriptionGate.persistDebugChoice('free');
+                _refreshProviders();
+                if (sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop();
+                }
+                _showDebugSnackBar('DEBUG: Set to FREE');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.restore, color: Colors.orange),
+              title: const Text('Reset (Real State)'),
+              subtitle: const Text('Clear debug override'),
+              onTap: () async {
+                SubscriptionGate.resetDebug();
+                await SubscriptionGate.persistDebugChoice('none');
+                _refreshProviders();
+                if (sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop();
+                }
+                _showDebugSnackBar('DEBUG: Reset to real subscription');
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _refreshProviders() {
+    // Force refresh of all subscription-dependent providers
+    ref.invalidate(subscriptionProvider);
+    ref.invalidate(farmDashboardProvider);
+    ref.invalidate(feedHistoryProvider);
+  }
+
+  void _showDebugSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF1B8A4C),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

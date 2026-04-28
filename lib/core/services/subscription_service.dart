@@ -84,7 +84,7 @@ class SubscriptionService {
 
   // Cancel subscription
   Future<Subscription> cancelSubscription(String subscriptionId) async {
-    return updateSubscriptionStatus(subscriptionId, SubscriptionStatus.cancelled);
+    return updateSubscriptionStatus(subscriptionId, SubscriptionStatus.CANCELLED);
   }
 
   // Get subscription history for user
@@ -111,7 +111,7 @@ class SubscriptionService {
   Future<bool> hasActiveProSubscription(String farmId) async {
     try {
       final subscription = await getCurrentSubscription();
-      return subscription?.isPro == true && subscription.farmId == farmId;
+      return subscription?.isPro == true && subscription?.farmId == farmId;
     } catch (e) {
       return false;
     }
@@ -131,7 +131,7 @@ class SubscriptionService {
       if (!feature.isProFeature) return true; // Free features always allowed
 
       // PRO features require active PRO subscription
-      return subscription.isPro && (farmId == null || subscription.farmId == farmId);
+      return subscription.isPro && (farmId == null || subscription?.farmId == farmId);
     } catch (e) {
       return false;
     }

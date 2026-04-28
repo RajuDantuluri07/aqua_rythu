@@ -203,7 +203,7 @@ class DashboardScreen extends ConsumerWidget {
             rows.map((r) => r.doc).reduce((a, b) => a + b) ~/ rows.length;
         
         // Get feed price from config
-        final feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
+        const feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
         
         // Calculate farm-level savings
         final feedSavingsService = FeedSavingsService(Supabase.instance.client);
@@ -372,7 +372,7 @@ class DashboardScreen extends ConsumerWidget {
                                                   .showSnackBar(
                                                             content:
                                                                 Text('Failed to delete: $e')),
-                                                      );
+                                                      )
                                       }
                                     }
                                   },
@@ -468,7 +468,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _loadingView() {
     return const Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+      bottomNavigationBar: AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: Center(
           child: CircularProgressIndicator(color: _green, strokeWidth: 2.5),
@@ -505,20 +505,20 @@ class DashboardScreen extends ConsumerWidget {
                     fontWeight: FontWeight.bold,
                     color: _textPrimary,
                 ),
-              const SizedBox(height: 16),
-              const Text(
+              SizedBox(height: 16),
+              Text(
                 'Create or select a farm to get started.',
                 style: TextStyle(color: _textSub),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.addFarm),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: _green, foregroundColor: _white),
-                  child: const Text('+ Add Farm'),
+                  child: Text('+ Add Farm'),
                 ),
               ),
             ],
@@ -570,19 +570,19 @@ class DashboardScreen extends ConsumerWidget {
                             fontWeight: FontWeight.w900,
                             color: _textPrimary,
                         ),
-                      const SizedBox(height: 10),
-                      const Text(
+                      SizedBox(height: 10),
+                      Text(
                           'Track feed, growth, and profit easily.\nAdd a pond to get started.',
                           style: TextStyle(
                               fontSize: 14, color: _textSub, height: 1.5),
                           textAlign: TextAlign.center,
                         ),
-                      const SizedBox(height: 32),
+                      SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () => Navigator.pushNamed(context, AppRoutes.addPond),
-                          icon: const Icon(Icons.add_rounded, size: 20, color: _white),
+                          icon: Icon(Icons.add_rounded, size: 20, color: _white),
                           label: '+ Add Pond',
                           style: ElevatedButton.styleFrom(
                               backgroundColor: _green, foregroundColor: _white),
@@ -956,7 +956,7 @@ class _InsightCard extends StatelessWidget {
                     children: [
                       Text(
                         insight.title,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: _textPrimary,
@@ -965,7 +965,7 @@ class _InsightCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         insight.subtitle,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
                           color: _textSub,
                           height: 1.3,
@@ -1134,7 +1134,7 @@ class _PondCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    )
   }
 
   Color _getStatusColor(String status) {
@@ -1167,7 +1167,6 @@ class _Insight {
     required this.title,
     required this.description,
     this.isCritical = false,
-    this.type = 'info',
     this.subtitle,
     this.ctaLabel,
     this.pondId,

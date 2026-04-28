@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/feed_savings_service.dart';
-import '../../../features/auth/auth_provider.dart';
+import '../../../features/upgrade/subscription_provider.dart';
 
 /// Feed Savings Card for Dashboard
 /// Shows money saved through optimized feeding
@@ -17,10 +17,7 @@ class FeedSavingsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-    final isPro = authState.email != null &&
-        authState.email!.contains(
-            '@'); // TEMP: Simple pro check - replace with actual subscription logic
+    final isPro = ref.watch(subscriptionProvider).isPro;
 
     // Don't show for HIDE type
     if (savingsResult.displayType.toString() == 'hide') {
@@ -117,10 +114,9 @@ class FeedSavingsCard extends ConsumerWidget {
         if (isPro) {
           return result.displayMessage ?? 'You saved ₹0 in feed so far';
         } else {
-          // FREE users see limited preview
-          final estimatedAmount =
-              (result.moneySaved * 0.4).round(); // Show ~40% of actual
-          return 'Saved ₹${_formatCurrency(estimatedAmount.toDouble())} (estimated)';
+          // FREE users: never expose the actual rupee figure. The card is a
+          // teaser — the real number lives behind PRO.
+          return 'Unlock your feed savings — Upgrade to PRO';
         }
       case 'partialData':
         return result.displayMessage ?? 'Start using trays to track savings';
@@ -151,10 +147,4 @@ class FeedSavingsCard extends ConsumerWidget {
     return Icons.savings_rounded;
   }
 
-  // Helper method to format currency
-  String _formatCurrency(double amount) {
-    if (amount >= 100000) return '${(amount / 100000).toStringAsFixed(1)}L';
-    if (amount >= 1000) return '${(amount / 1000).toStringAsFixed(1)}K';
-    return amount.round().toString();
-  }
 }

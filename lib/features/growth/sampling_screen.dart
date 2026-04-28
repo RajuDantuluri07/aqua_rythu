@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'growth_provider.dart';
 import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
+import '../upgrade/access_control_hooks.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:aqua_rythu/core/services/sampling_service.dart';
 import '../../core/utils/logger.dart';
@@ -320,7 +321,12 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                 const SizedBox(height: 24),
                 _buildResultsSection(_calculateBiomass(seedCount, survival)),
                 const SizedBox(height: 12),
-                _buildGrowthInsightWidget(logs, doc, _avgWeight),
+                // Growth insight is a PRO feature — FREE users see a locked
+                // overlay that taps through to upgrade.
+                ProFeatureWrapper(
+                  featureId: FeatureIds.growthIntelligence,
+                  child: _buildGrowthInsightWidget(logs, doc, _avgWeight),
+                ),
               ],
 
               const SizedBox(height: 24),

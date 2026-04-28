@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'sampling_log.dart';
+import '../../core/services/subscription_gate.dart';
 import '../../core/utils/logger.dart';
 
 class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
@@ -33,7 +34,11 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
         totalPieces: row['count'] ?? 0,
       )).toList();
 
-      state = logs;
+      // PRO gate: growth intelligence (full ABW history, trend analysis) is a
+      // paid feature (FeatureIds.growthIntelligence). FREE users only see the
+      // most recent sample — enough to know "you weighed shrimp", not enough
+      // to derive growth curves, FCR signals, or rate-of-gain insights.
+      state = SubscriptionGate.isPro ? logs : logs.take(1).toList();
     } catch (e) {
       AppLogger.error('Failed to load sampling logs', e);
     }

@@ -8,7 +8,8 @@ import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.d
 import 'package:aqua_rythu/core/constants/app_constants.dart';
 import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
 import 'package:aqua_rythu/core/services/feed_savings_service_fixed.dart';
-import 'package:aqua_rythu/features/auth/auth_provider.dart';
+import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
+import 'package:aqua_rythu/features/upgrade/upgrade_to_pro_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -201,7 +202,7 @@ class DashboardScreen extends ConsumerWidget {
             rows.map((r) => r.doc).reduce((a, b) => a + b) ~/ rows.length;
         
         // Get feed price from config
-        final feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
+        const feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
         
         // Calculate farm-level savings
         final feedSavingsService = FeedSavingsService(Supabase.instance.client);
@@ -267,21 +268,20 @@ class DashboardScreen extends ConsumerWidget {
                               displayType: SavingsDisplayType.hide,
                             );
 
-                            final authState = ref.watch(authProvider);
-                            final isPro = authState.email != null && authState.email!.contains('@');
+                            final isPro = ref.watch(subscriptionProvider).isPro;
 
                             return FeedSavingsCard(
                               savingsResult: savingsResult,
                               onTap: () async {
-                                // Log analytics for savings visible
-                                if (savingsResult.displayType.toString() == 'showSavings') {
-                                  // TODO: Add analytics tracking here
-                                }
-                                    
-                                // Navigate to upgrade if not PRO and savings are shown
-                                if (!isPro && savingsResult.moneySaved > 0) {
-                                  // TODO: Navigate to upgrade screen when available
-                                  // Navigator.pushNamed(context, AppRoutes.upgradeToPro);
+                                // FREE users tapping the savings teaser → paywall.
+                                // PRO users tapping it stays in-place (no detail screen yet).
+                                if (!isPro) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const UpgradeToProScreen(),
+                                    ),
+                                  );
                                 }
                               },
                             );

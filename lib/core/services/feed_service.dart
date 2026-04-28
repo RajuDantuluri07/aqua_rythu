@@ -31,16 +31,25 @@ class FeedService {
     await _checkInventoryStock(pondId, actualFeedGiven);
 
     await _withRetry('saveFeed(pond=$pondId doc=$doc)', () async {
-      await supabase.from('feed_logs').insert({
-        'pond_id': pondId,
-        'feed_given': actualFeedGiven,
-        'base_feed': baseFeed,
-        'created_at': date.toIso8601String(),
-        'doc': doc,
-        if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
-        if (stockingType != null) 'stocking_type': stockingType,
-        if (density != null) 'density': density,
+      // 🔒 FIX #1: Use safe insert function to prevent duplicates
+      // This will check for existing (pond_id, doc, round) before inserting
+      final inserted = await supabase.rpc('safe_insert_feed_log', params: {
+        'p_pond_id': pondId,
+        'p_doc': doc,
+        'p_round': 1, // Daily feed log uses round=1 by convention
+        'p_feed_given': actualFeedGiven,
+        'p_base_feed': baseFeed,
+        'p_created_at': date.toIso8601String(),
+        'p_tray_leftover': leftoverPercent,
+        'p_stocking_type': stockingType,
+        'p_density': density,
       });
+
+      if (!inserted) {
+        AppLogger.warn(
+            'Feed log skipped - duplicate entry for pond $pondId DOC $doc');
+        return; // Skip silently for duplicates
+      }
     });
   }
 
@@ -412,14 +421,20 @@ class FeedService {
   }) async {
     await _withRetry('saveFeedRound(pond=$pondId doc=$doc round=$round)',
         () async {
-      await supabase.from('feed_logs').insert({
-        'pond_id': pondId,
-        'feed_given': amount,
-        'created_at': DateTime.now().toIso8601String(),
-        'doc': doc,
-        'round': round,
-        'is_manual': isManual,
+      // 🔒 FIX #1: Use safe insert function to prevent duplicates
+      final inserted = await supabase.rpc('safe_insert_feed_log', params: {
+        'p_pond_id': pondId,
+        'p_doc': doc,
+        'p_round': round,
+        'p_feed_given': amount,
+        'p_created_at': DateTime.now().toIso8601String(),
       });
+
+      if (!inserted) {
+        AppLogger.warn(
+            'Feed round log skipped - duplicate entry for pond $pondId DOC $doc round $round');
+        return; // Skip silently for duplicates
+      }
     });
   }
 

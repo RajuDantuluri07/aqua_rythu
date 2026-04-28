@@ -48,6 +48,8 @@ import 'package:aqua_rythu/features/home/home_view_model.dart';
 import 'package:aqua_rythu/systems/feed/seed_feed_engine.dart';
 import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card.dart';
 import 'package:aqua_rythu/features/pond/widgets/seed_type_badge.dart';
+import 'package:aqua_rythu/features/upgrade/access_control_hooks.dart';
+import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -67,6 +69,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   int _lastFeedbackRound = -1;
   // Flag to prevent repeated anchor feed dialog popup
   bool _anchorFeedDialogShown = false;
+  // Show DOC > 30 PRO paywall once per pond per session for FREE users
+  bool _smartModePaywallShown = false;
 
   @override
   void initState() {
@@ -370,8 +374,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       final idx = r - 1;
       if (idx < 0 || idx >= config.timingsDisplay.length) continue;
       final time = config.timingsDisplay[idx];
-      if (time.startsWith('--'))
+      if (time.startsWith('--')) {
         continue; // skip rounds with no scheduled time for this DOC
+      }
       result.add({'round': r, 'time': time, 'key': 'R$r'});
     }
     return result;
@@ -589,7 +594,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                   }
                 } catch (e) {
                   if (mounted) {
-                    messenger.showSnackBar(SnackBar(
+                    messenger.showSnackBar(const SnackBar(
                       content: Text('Failed to update anchor feed'),
                       backgroundColor: Colors.red,
                     ));
@@ -646,6 +651,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       // DOC > 30: No popup (smart mode already active)
       // DOC <= 30: Popup shown only once via _anchorFeedDialogShown flag
       final currentDoc = ref.read(docProvider(next.selectedPond));
+
+      // PRO paywall: when a FREE user lands on a DOC > 30 pond, smart-feed
+      // intelligence is already disabled at the service level — surface the
+      // upgrade CTA once per session so they understand what's missing.
+      final isProForPaywall = ref.read(subscriptionProvider).isPro;
+      if (currentDoc > 30 &&
+          !isProForPaywall &&
+          !_smartModePaywallShown &&
+          mounted) {
+        _smartModePaywallShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            AccessControlHooks.showUpgradeDialog(
+              context,
+              FeatureIds.smartFeedEngine,
+            );
+          }
+        });
+      }
       if (next.needsAnchorFeedInput &&
           !(previous?.needsAnchorFeedInput ?? false) &&
           currentDoc <= 30 &&
@@ -975,7 +999,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
     // TASK 1: TEMPORARY LOG - Track feed values in Pond Dashboard
     print(
-        "🏡 POND DASHBOARD FEED: Pond=${currentPond?.name ?? 'Unknown'}, PlannedFeed=${plannedFeed.toStringAsFixed(2)}kg, ConsumedFeed=${consumedFeed.toStringAsFixed(2)}kg, DOC=$currentDoc");
+        "🏡 POND DASHBOARD FEED: Pond=${currentPond.name ?? 'Unknown'}, PlannedFeed=${plannedFeed.toStringAsFixed(2)}kg, ConsumedFeed=${consumedFeed.toStringAsFixed(2)}kg, DOC=$currentDoc");
 
     // Smart Feed auto-enables at DOC ≥ 30 (smart_feeding = doc >= 30).
     // The DB flag `isSmartFeedEnabled` is the farmer's manual preference; even if
@@ -1683,7 +1707,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     required List<Supplement> activePlansToday,
     required List<SupplementLog> todaySupplementLogs,
     required String selectedPond,
-    required dynamic? smartFeedOutput, // SmartFeedOutput type not found
+    required dynamic smartFeedOutput, // SmartFeedOutput type not found
     required Pond? currentPond,
     required bool isSmartFeedEnabled,
     required double valueDelta,
@@ -1888,7 +1912,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                   : null,
               // MARK AS FED: always available on the current round, for all DOCs
               onMarkDone: isCurrent
-                  ? () {
+                  ? () async {
                       // T13 — show feedback prompt on the done card after this round
                       setState(() => _lastFeedbackRound = round);
                       final actualQty = finalFeedKg;
@@ -1903,10 +1927,39 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       }
                       // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
                       // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
-                      ref.read(pondDashboardProvider.notifier).markFeedDone(
-                            round,
-                            actualQty: actualQty,
+                      try {
+                        await ref
+                            .read(pondDashboardProvider.notifier)
+                            .markFeedDone(
+                              round,
+                              actualQty: actualQty,
+                            );
+                      } catch (e) {
+                        // 🔴 FAILURE VISIBILITY: Show user-friendly error message
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content:
+                                  const Text('Feed not saved. Please retry.'),
+                              backgroundColor: Colors.red,
+                              duration: const Duration(seconds: 4),
+                              action: SnackBarAction(
+                                label: 'Retry',
+                                textColor: Colors.white,
+                                onPressed: () async {
+                                  // Retry the same action
+                                  await ref
+                                      .read(pondDashboardProvider.notifier)
+                                      .markFeedDone(
+                                        round,
+                                        actualQty: actualQty,
+                                      );
+                                },
+                              ),
+                            ),
                           );
+                        }
+                      }
                       // ✅ SUCCESS POPUP: Show feed entry confirmation with updated value
                       _showSuccessPopup(
                         context: context,
@@ -3344,10 +3397,12 @@ class _DailyPerformanceCard extends StatelessWidget {
 
     final int goodCount =
         (feedGood ? 1 : 0) + (fcrGood ? 1 : 0) + (growthOk ? 1 : 0);
-    if (goodCount == 3)
+    if (goodCount == 3) {
       return const _DayVerdict('Great day! Everything on track ✅', _green);
-    if (goodCount == 2)
+    }
+    if (goodCount == 2) {
       return const _DayVerdict('Good day — minor area to improve', _amber);
+    }
     return const _DayVerdict('Needs attention — check the signals below', _red);
   }
 
@@ -3672,11 +3727,11 @@ class _SuccessPopupDialogState extends State<_SuccessPopupDialog>
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: _greenBorder),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.check_circle, color: _green, size: 14),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Text(
                       'SUCCESS',
                       style: TextStyle(

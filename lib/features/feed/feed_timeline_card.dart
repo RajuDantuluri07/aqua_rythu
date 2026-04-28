@@ -684,10 +684,15 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               width: double.infinity,
               height: 52, // Larger touch target for farmers
               child: ElevatedButton.icon(
-                onPressed: widget.onMarkDone != null
-                    ? () {
+                onPressed: widget.onMarkDone != null && !_isSubmitting
+                    ? () async {
                         HapticFeedback.mediumImpact(); // Tactile feedback
-                        widget.onMarkDone!();
+                        setState(() => _isSubmitting = true);
+                        try {
+                          widget.onMarkDone!();
+                        } finally {
+                          if (mounted) setState(() => _isSubmitting = false);
+                        }
                       }
                     : null,
                 style: ElevatedButton.styleFrom(
@@ -706,9 +711,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   color: Colors.white,
                   size: 22,
                 ),
-                label: const Text(
-                  "Confirm Feed",
-                  style: TextStyle(
+                label: Text(
+                  _isSubmitting ? "Saving..." : "Confirm Feed",
+                  style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,

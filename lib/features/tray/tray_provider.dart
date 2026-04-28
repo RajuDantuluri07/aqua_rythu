@@ -29,7 +29,7 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
   void addTrayLog(TrayLog log) {
     // TASK 2: TEMPORARY LOG - Verify tray logging triggers feed pipeline
     print(
-        " TRAY LOGGED: Pond=${pondId}, Round=${log.round}, Status=${log.trays.join(',')}, Leftover=${log.leftoverPercent}%");
+        " TRAY LOGGED: Pond=$pondId, Round=${log.round}, Status=${log.trays.join(',')}, Leftover=${log.leftoverPercent}%");
 
     state = [...state, log];
   }

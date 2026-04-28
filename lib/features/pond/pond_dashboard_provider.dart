@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/logger.dart';
+import '../../core/utils/feed_debug_logger.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/tray_service.dart';
 import '../../features/tray/enums/tray_status.dart';
@@ -388,10 +389,28 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final pondId = state.selectedPond;
     final lockKey = '${pondId}_mark_feed_$round';
 
+    // 🔴 DEBUG: Log feed action start
+    FeedDebugLogger.logFeedAction(
+      pondId: pondId,
+      doc: state.doc,
+      round: round,
+      status: 'started',
+      source: 'user_action',
+      feedEntered: actualQty,
+    );
+
     // Prevent concurrent feed marking for the same round
     if (!_tryAcquireLock(lockKey)) {
       AppLogger.warn(
           'Feed marking already in progress for round $round in pond $pondId');
+
+      // 🔴 DEBUG: Log duplicate prevention
+      FeedDebugLogger.logDuplicatePrevention(
+        pondId: pondId,
+        doc: state.doc,
+        round: round,
+        reason: 'concurrent_operation_locked',
+      );
       return;
     }
 
@@ -424,8 +443,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         }
       }
 
-      String? feedId = state.roundToFeedId[round];
-
       // Validate feed amounts - fail loudly if data is missing
       if (!state.roundFeedAmounts.containsKey(round)) {
         throw ArgumentError(
@@ -442,56 +459,176 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
             'Invalid feed quantity $qty for round $round in pond ${state.selectedPond}');
       }
 
-      // For DOC > 30 with no pre-existing plan row, create one on-the-fly
-      if (feedId == null || feedId.isEmpty) {
-        try {
-          final newId = await FeedService().insertFeedRound(
-            pondId: state.selectedPond,
+      // 🔴 CRITICAL: Prevent duplicate round completion
+      if (state.roundFeedStatus[round] == 'completed') {
+        AppLogger.warn(
+            'Round $round already completed for pond $pondId - skipping');
+
+        // 🔴 DEBUG: Log duplicate prevention
+        FeedDebugLogger.logDuplicatePrevention(
+          pondId: pondId,
+          doc: state.doc,
+          round: round,
+          reason: 'round_already_completed',
+        );
+        return;
+      }
+
+      // Calculate expected feed for today (needed for both transaction and fallback)
+      final expectedFeedToday =
+          state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
+
+      // 🔒 CRITICAL: Sequential execution - Transaction → DB Read → State Update
+      double actualDbFeedSaved = 0.0;
+      bool transactionSuccess = false;
+
+      try {
+        // Step 1: Await DB transaction (MUST BE FULLY COMMITTED FIRST)
+        final supabase = Supabase.instance.client;
+        transactionSuccess =
+            await supabase.rpc('complete_feed_round_with_log', params: {
+          'p_pond_id': state.selectedPond,
+          'p_doc': state.doc,
+          'p_round': round,
+          'p_feed_amount': qty,
+          'p_base_feed': qty, // Use actual feed as base feed for consistency
+          'p_created_at': DateTime.now().toIso8601String(),
+        });
+
+        if (!transactionSuccess) {
+          // 🔴 DEBUG: Log transaction failure
+          FeedDebugLogger.logTransaction(
+            pondId: pondId,
             doc: state.doc,
             round: round,
-            plannedAmount: qty,
-            status: 'completed',
+            transactionType: 'complete_feed_round_with_log',
+            success: false,
+            details: 'likely_duplicate_entry',
           );
-          feedId = newId;
-        } catch (e) {
-          AppLogger.error('Failed to create feed_round on-the-fly', e);
-          return;
+          throw Exception('Feed transaction failed - likely duplicate entry');
         }
-      } else {
-        await FeedService().markFeedPlanCompleted(feedPlanId: feedId);
+
+        // Step 2: IMMEDIATELY fetch fresh DB value (NO PARALLEL OPERATIONS)
+        // This ensures we get the ACTUAL committed value, not stale data
+        try {
+          final dbResult = await supabase
+              .from('feed_logs')
+              .select('feed_given')
+              .eq('pond_id', state.selectedPond)
+              .eq('doc', state.doc)
+              .eq('round', round)
+              .order('created_at', ascending: false)
+              .limit(1)
+              .single();
+
+          actualDbFeedSaved = (dbResult['feed_given'] as num).toDouble();
+          AppLogger.info(
+              '✅ DB read successful: actual stored feed = ${actualDbFeedSaved.toStringAsFixed(2)}kg');
+        } catch (dbReadError) {
+          AppLogger.error(
+              'Failed to read actual DB feed value after transaction',
+              dbReadError);
+          throw Exception(
+              'DB transaction succeeded but failed to read committed value: $dbReadError');
+        }
+
+        // 🔴 DEBUG: Log transaction success with actual DB value
+        FeedDebugLogger.logTransaction(
+          pondId: pondId,
+          doc: state.doc,
+          round: round,
+          transactionType: 'complete_feed_round_with_log',
+          success: true,
+          details:
+              'feed_round_and_log_saved_successfully, actual_db_feed=${actualDbFeedSaved.toStringAsFixed(2)}kg',
+        );
+
+        AppLogger.info(
+            'Feed transaction + DB read completed successfully for pond $pondId round $round, actual feed: ${actualDbFeedSaved.toStringAsFixed(2)}kg');
+      } catch (e) {
+        // 🔴 DEBUG: Log transaction error
+        FeedDebugLogger.logTransaction(
+          pondId: pondId,
+          doc: state.doc,
+          round: round,
+          transactionType: 'complete_feed_round_with_log',
+          success: false,
+          details: e.toString(),
+        );
+        AppLogger.error(
+            'Feed transaction failed for pond $pondId round $round', e);
+        rethrow;
       }
 
-      // Optimistic local update so UI reflects change immediately
-      final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
-      updatedStatus[round] = 'completed';
-      state = state.copyWith(
-        roundFeedStatus: updatedStatus,
-        lastFeedTime: DateTime.now(), // for FeedStatusEngine gap check
-      );
+      // 🔒 CRITICAL: Sequential execution - Transaction → DB Read → State Update → UI
+      try {
+        // Step 1: DB transaction (already completed above with immediate DB read)
+        // Step 2: Cache invalidation (after successful DB read)
+        _controller.invalidateDoc(state.selectedPond, state.doc);
 
-      if (qty > 0) {
-        // Fix #5: supply today's total planned feed so FeedHistoryLog.expected is
-        // correct for every pond, not just the currently-selected one.
-        final expectedFeedToday =
-            state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
-        await ref.read(feedHistoryProvider.notifier).logFeeding(
-              pondId: state.selectedPond,
-              doc: state.doc,
-              round: round,
-              qty: qty,
-              expectedFeed: expectedFeedToday,
-            );
-      }
+        // Step 3: Refresh from DB → provider state → Riverpod rebuild
+        await loadTodayFeed(state.selectedPond);
 
-      // 🔄 CACHE INVALIDATION: Feed completion affects intelligence calculations
-      _controller.invalidateDoc(state.selectedPond, state.doc);
+        // Step 4: UI update (only after all DB operations complete)
+        final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
+        updatedStatus[round] = 'completed';
+        state = state.copyWith(
+          roundFeedStatus: updatedStatus,
+          lastFeedTime: DateTime.now(), // for FeedStatusEngine gap check
+        );
 
-      // 🔄 Refresh from DB → provider state → Riverpod rebuild
-      await loadTodayFeed(state.selectedPond);
+        // Step 5: Log feeding (only after successful transaction AND DB read AND state update)
+        if (qty > 0 && transactionSuccess) {
+          await ref.read(feedHistoryProvider.notifier).logFeeding(
+                pondId: state.selectedPond,
+                doc: state.doc,
+                round: round,
+                qty: actualDbFeedSaved, // Use ACTUAL DB value, not input qty
+                expectedFeed: expectedFeedToday,
+              );
 
-      // If any tray was auto-skipped, refresh tray provider so UI shows skipped state
-      if (didSkipAnyTray) {
-        ref.invalidate(trayProvider(state.selectedPond));
+          // 🔴 DEBUG: Log successful feed completion with ACTUAL DB value
+          // Calculate percentage difference between planned and ACTUAL DB feed
+          final difference = plannedQty > 0
+              ? ((actualDbFeedSaved - plannedQty) / plannedQty * 100)
+              : 0.0;
+
+          FeedDebugLogger.logFeedAction(
+            pondId: pondId,
+            doc: state.doc,
+            round: round,
+            status: 'success',
+            source: 'user_action',
+            feedEntered: actualQty,
+            feedSaved: actualDbFeedSaved, // ACTUAL committed DB value ONLY
+            calculatedFeed: plannedQty,
+            difference: difference,
+          );
+
+          AppLogger.info(
+              '✅ Feed action logged with actual DB value: ${actualDbFeedSaved.toStringAsFixed(2)}kg');
+        }
+
+        // Step 6: Handle tray auto-skip refresh
+        if (didSkipAnyTray) {
+          ref.invalidate(trayProvider(state.selectedPond));
+        }
+      } catch (e) {
+        // 🔴 DEBUG: Log feed operation failure
+        FeedDebugLogger.logFeedError(
+          pondId: pondId,
+          doc: state.doc,
+          round: round,
+          operation: 'markFeedDone',
+          error: e.toString(),
+          context: {
+            'actualQty': actualQty,
+            'plannedQty': plannedQty,
+            'transactionSuccess': transactionSuccess,
+          },
+        );
+        AppLogger.error('Failed to complete feed operation', e);
+        rethrow;
       }
     } finally {
       _releaseLock(lockKey);
@@ -502,7 +639,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // 🧠 TRAY LOGIC (FIXED)
   // =========================================================
 
-  void logTray(int round) {
+  Future<void> logTray(int round) async {
     final pondId = state.selectedPond;
     final lockKey = '${pondId}_log_tray_$round';
 
@@ -547,6 +684,9 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         }
       }
 
+      // 🔒 FIX #8: Store original state for potential revert
+      final originalTrayResults = Map<int, TrayStatus>.from(state.trayResults);
+
       // Update UI state immediately
       ref.read(feedHistoryProvider.notifier).logTray(
             pondId: state.selectedPond,
@@ -562,54 +702,58 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         trayResults: newMap,
       );
 
-      // Persist tray log to DB + trigger SmartFeedEngine.
+      // 🔒 FIX #6: Persist tray log to DB with proper async/await to ensure engine timing
       // On success: reload trayProvider from DB so it's backed by persisted state.
       // On failure: set trayPersistFailed so the screen can show a retry banner.
       // The round is already unlocked in the current session because TrayLogScreen
       // called trayProvider.notifier.addTrayLog() before popping.
       final pondId = state.selectedPond;
       final doc = state.doc;
-      TrayService()
-          .saveTrayLog(
-        pondId: pondId,
-        date: latest.time,
-        doc: doc,
-        roundNumber: round,
-        trayStatuses: trayStatuses.map((s) => s.name).toList(),
-        observations: latest.observations?.map(
-              (k, v) => MapEntry(k.toString(), v),
-            ) ??
-            {},
-        aggregatedStatus: finalStatus,
-      )
-          .then((_) async {
-        try {
-          // 🔄 CACHE INVALIDATION: Tray update affects smart feed calculations
-          // This ensures the controller fetches fresh tray data next load
-          _controller.invalidate(pondId);
+      try {
+        await TrayService().saveTrayLog(
+          pondId: pondId,
+          date: latest.time,
+          doc: doc,
+          roundNumber: round,
+          trayStatuses: trayStatuses.map((s) => s.name).toList(),
+          observations: latest.observations?.map(
+                (k, v) => MapEntry(k.toString(), v),
+              ) ??
+              {},
+          aggregatedStatus: finalStatus,
+        );
 
-          // CRITICAL: After tray is logged, SmartFeedEngine updates feed_rounds
-          // with new factor adjustments. Reload feed amounts to display new suggestion.
-          // Without this, feed_rounds table is updated but UI shows stale data.
-          ref.invalidate(trayProvider(pondId));
+        // 🔄 CACHE INVALIDATION: Tray update affects smart feed calculations
+        // This ensures the controller fetches fresh tray data next load
+        _controller.invalidate(pondId);
 
-          // 🔥 FIX: Reload feed data so next feed suggestion shows SmartFeedEngine's adjustment
-          await loadTodayFeed(pondId);
+        // CRITICAL: After tray is logged, SmartFeedEngine updates feed_rounds
+        // with new factor adjustments. Reload feed amounts to display new suggestion.
+        // Without this, feed_rounds table is updated but UI shows stale data.
+        ref.invalidate(trayProvider(pondId));
 
-          // Update currentFeed in state after reload
-          final totalFeed =
-              state.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
-          state = state.copyWith(currentFeed: totalFeed);
-        } catch (e) {
-          AppLogger.error('Failed to persist tray log for pond $pondId', e);
-          // Surface error to farmer so they know to re-log if they restart the app.
-          state = state.copyWith(trayPersistFailed: true);
-        }
-      }).catchError((e) {
-        AppLogger.error('Failed to persist tray log for pond $pondId', e);
-        // Surface error to farmer so they know to re-log if they restart the app.
-        state = state.copyWith(trayPersistFailed: true);
-      });
+        // 🔥 FIX: Reload feed data so next feed suggestion shows SmartFeedEngine's adjustment
+        // 🔒 FIX #6: Ensure engine runs AFTER DB update with proper await
+        await loadTodayFeed(pondId);
+
+        // Update currentFeed in state after reload
+        final totalFeed =
+            state.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
+        state = state.copyWith(currentFeed: totalFeed);
+      } catch (e) {
+        AppLogger.error(
+            'Failed to persist tray log for pond $pondId, reverting UI state',
+            e);
+
+        // 🔴 CRITICAL: Revert UI state on failure
+        state = state.copyWith(
+          trayResults: originalTrayResults,
+          trayPersistFailed: true,
+        );
+
+        // Note: Feed history provider revert would require more complex logic
+        // The main UI state revert above is sufficient for most cases
+      }
     } catch (e) {
       AppLogger.error('Tray logging failed for pond $pondId round $round', e);
     } finally {

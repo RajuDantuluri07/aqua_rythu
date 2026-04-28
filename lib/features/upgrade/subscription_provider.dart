@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/core/models/subscription_model.dart';
+import 'package:aqua_rythu/core/services/subscription_gate.dart';
 
 // Mock subscription state - in real app this would come from backend/API
 class SubscriptionState {
@@ -30,15 +31,24 @@ class SubscriptionState {
 }
 
 class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
-  SubscriptionNotifier() : super(SubscriptionState(currentPlan: PlanType.FREE));
+  SubscriptionNotifier()
+      : super(SubscriptionState(currentPlan: PlanType.FREE)) {
+    SubscriptionGate.setPro(false);
+  }
+
+  @override
+  set state(SubscriptionState value) {
+    super.state = value;
+    SubscriptionGate.setPro(value.isPro);
+  }
 
   Future<void> upgradeToPro() async {
     state = state.copyWith(isLoading: true);
-    
+
     try {
       // Simulate API call
       await Future.delayed(const Duration(seconds: 2));
-      
+
       // In real app, this would call payment API and update backend
       state = state.copyWith(
         currentPlan: PlanType.PRO,
@@ -58,10 +68,13 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 }
 
 // Provider
-final subscriptionProvider = StateNotifierProvider<SubscriptionNotifier, SubscriptionState>(
+final subscriptionProvider =
+    StateNotifierProvider<SubscriptionNotifier, SubscriptionState>(
   (ref) => SubscriptionNotifier(),
 );
 
 // Convenience providers
-final isProProvider = Provider<bool>((ref) => ref.watch(subscriptionProvider).isPro);
-final planTypeProvider = Provider<PlanType>((ref) => ref.watch(subscriptionProvider).currentPlan);
+final isProProvider =
+    Provider<bool>((ref) => ref.watch(subscriptionProvider).isPro);
+final planTypeProvider =
+    Provider<PlanType>((ref) => ref.watch(subscriptionProvider).currentPlan);

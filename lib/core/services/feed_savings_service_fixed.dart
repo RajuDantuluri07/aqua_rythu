@@ -96,7 +96,7 @@ class FeedSavingsService {
           displayType: SavingsDisplayType.showSavings,
         );
       } else if (doc >= 15 && !hasEnoughData) {
-        return FeedSavingsResult(
+        return const FeedSavingsResult(
           moneySaved: 0,
           feedSavedKg: 0,
           hasEnoughData: false,
@@ -183,7 +183,7 @@ class FeedSavingsService {
           displayType: SavingsDisplayType.showSavings,
         );
       } else if (avgDoc >= 15 && !hasEnoughData) {
-        return FeedSavingsResult(
+        return const FeedSavingsResult(
           moneySaved: 0,
           feedSavedKg: 0,
           hasEnoughData: false,

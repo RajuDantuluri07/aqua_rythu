@@ -1,5 +1,6 @@
 import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/tray/tray_model.dart';
+import '../../core/services/subscription_gate.dart';
 
 /// Result returned by [TrayDecisionEngine.evaluate].
 class TrayDecisionResult {
@@ -110,6 +111,19 @@ class TrayDecisionEngine {
     required List<TrayLog> allTrayLogs,
     required int doc,
   }) {
+    // PRO gate: tray-based correction is a paid feature
+    // (FeatureIds.trayBasedCorrection). FREE users keep logging trays for
+    // history, but no correction signal is surfaced — always MAINTAIN.
+    if (!SubscriptionGate.isPro) {
+      return const TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        avgScore: 0,
+        roundsUsed: 0,
+        reason: 'Tray-based correction is a PRO feature — upgrade to unlock',
+      );
+    }
+
     // Tray data is STORED for DOC 15–29 but corrections activate at DOC ≥ 30.
     if (doc <= 29) {
       return TrayDecisionResult(

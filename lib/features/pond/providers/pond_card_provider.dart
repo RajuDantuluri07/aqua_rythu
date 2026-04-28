@@ -30,7 +30,7 @@ final pondCardProvider = FutureProvider.autoDispose
   // ── 4. ABW & growth factor ────────────────────────────────────────────────
   final abw = pond.currentAbw ?? 0.0;
   // Simplified: growth factor set to 1.0 since controller doesn't expose expected ABW
-  final growthFactor = 1.0;
+  const growthFactor = 1.0;
 
   // ── 5. Feed values ────────────────────────────────────────────────────────
   final todayFeed = feedResult?.baseFeed ?? 0.0;
