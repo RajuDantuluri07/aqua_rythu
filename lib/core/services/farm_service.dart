@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/pond_repository.dart';
 import '../repositories/feed_repository.dart';
 import '../repositories/tray_repository.dart';
-import 'feed_service.dart';
+import '../../features/pond/controllers/pond_dashboard_controller.dart';
 
 class FarmService {
   final pondRepo = PondRepository();
@@ -11,9 +11,9 @@ class FarmService {
 
   /// Daily orchestration: recalculate feed for the next DOC.
   Future<void> runDailyCycle(String pondId) async {
-    await FeedService().recalculateFeedPlan(pondId);
+    // Use proper controller instead of deprecated FeedService
+    await pondDashboardController.load(pondId);
   }
-
 
   final supabase = Supabase.instance.client;
 
@@ -28,11 +28,15 @@ class FarmService {
       throw Exception('User not logged in');
     }
 
-    final response = await supabase.from('farms').insert({
-      'name': name,
-      'location': location,
-      'user_id': user.id,
-    }).select().single();
+    final response = await supabase
+        .from('farms')
+        .insert({
+          'name': name,
+          'location': location,
+          'user_id': user.id,
+        })
+        .select()
+        .single();
 
     return response['id'].toString();
   }
@@ -61,10 +65,14 @@ class FarmService {
       throw Exception('User not logged in');
     }
 
-    await supabase.from('farms').update({
-      'name': name,
-      'location': location,
-    }).eq('id', farmId).eq('user_id', user.id);
+    await supabase
+        .from('farms')
+        .update({
+          'name': name,
+          'location': location,
+        })
+        .eq('id', farmId)
+        .eq('user_id', user.id);
   }
 
   Future<void> deleteFarm(String farmId) async {
@@ -75,12 +83,13 @@ class FarmService {
     }
 
     // First delete all ponds associated with this farm
-    await supabase
-        .from('ponds')
-        .delete()
-        .eq('farm_id', farmId);
+    await supabase.from('ponds').delete().eq('farm_id', farmId);
 
     // Then delete the farm
-    await supabase.from('farms').delete().eq('id', farmId).eq('user_id', user.id);
+    await supabase
+        .from('farms')
+        .delete()
+        .eq('id', farmId)
+        .eq('user_id', user.id);
   }
 }

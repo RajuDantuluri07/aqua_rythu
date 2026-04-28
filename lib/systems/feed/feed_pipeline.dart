@@ -41,6 +41,9 @@ class FeedPipeline {
     );
 
     try {
+      // TASK 2: TEMPORARY LOG - Verify feed pipeline is actually used
+      print("🚀 FEED PIPELINE CALLED for pond: ${pond.id}, DOC: ${pond.doc}");
+
       final validation = validatePondData(pond);
       if (!validation.isValid) {
         return FeedPipelineResult.error(

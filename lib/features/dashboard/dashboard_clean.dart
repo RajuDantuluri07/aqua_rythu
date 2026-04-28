@@ -132,6 +132,9 @@ class DashboardScreen extends ConsumerWidget {
             seedCount: pond.seedCount,
             feedState: feedState,
           ));
+          
+          // TASK 1: TEMPORARY LOG - Track feed values in Dashboard
+          print("📊 DASHBOARD FEED: Pond=${pond.name}, TodayFeed=${todayFeed.toStringAsFixed(2)}kg, DOC=${feedState.doc}");
         } catch (e) {
           // Fallback for controller errors
           rows.add(_PondRow(
@@ -1146,4 +1149,27 @@ class _PondCard extends StatelessWidget {
         return _textSub;
     }
   }
+}
+
+// ════════════════════════════════════════════════════
+// INSIGHT MODEL
+// ══════════════════════════════════════════════════════
+class _Insight {
+  final String title;
+  final String description;
+  final bool isCritical;
+  final String type;
+  final String? subtitle;
+  final String? ctaLabel;
+  final String? pondId;
+
+  const _Insight({
+    required this.title,
+    required this.description,
+    this.isCritical = false,
+    this.type = 'info',
+    this.subtitle,
+    this.ctaLabel,
+    this.pondId,
+  });
 }

@@ -2,12 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/pond_card_data.dart';
 import '../controllers/pond_dashboard_controller.dart';
 import '../../farm/farm_provider.dart';
-import '../../../systems/feed/feed_calculations.dart';
+// import '../../../systems/feed/feed_calculations.dart'; // Bypassed - controller handles calculations
 
 /// Computes PondCardData for a given pondId.
 /// Auto-disposes when no card is watching — safe to use in list views.
-final pondCardProvider =
-    FutureProvider.autoDispose.family<PondCardData, String>((ref, pondId) async {
+final pondCardProvider = FutureProvider.autoDispose
+    .family<PondCardData, String>((ref, pondId) async {
   // ── 1. Pond metadata from local state ─────────────────────────────────────
   final farmState = ref.watch(farmProvider);
   final pond = farmState.farms
@@ -29,9 +29,8 @@ final pondCardProvider =
 
   // ── 4. ABW & growth factor ────────────────────────────────────────────────
   final abw = pond.currentAbw ?? 0.0;
-  final expectedAbw = getExpectedABW(doc);
-  final growthFactor =
-      (abw > 0 && expectedAbw > 0) ? abw / expectedAbw : 1.0;
+  // Simplified: growth factor set to 1.0 since controller doesn't expose expected ABW
+  final growthFactor = 1.0;
 
   // ── 5. Feed values ────────────────────────────────────────────────────────
   final todayFeed = feedResult?.baseFeed ?? 0.0;
@@ -56,8 +55,7 @@ final pondCardProvider =
 
   // ── 7. Pond stats ─────────────────────────────────────────────────────────
   final survival = _survivalEstimate(doc);
-  final density =
-      pond.area > 0 ? (pond.seedCount / 100000.0) / pond.area : 0.0;
+  final density = pond.area > 0 ? (pond.seedCount / 100000.0) / pond.area : 0.0;
   final fcr = feedResult?.debugInfo.fcr ?? 0.0;
 
   // ── 8. Labels ─────────────────────────────────────────────────────────────

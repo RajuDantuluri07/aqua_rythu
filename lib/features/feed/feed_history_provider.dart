@@ -36,14 +36,16 @@ class FeedHistoryNotifier
   final Ref ref;
   final _feedService = FeedService();
 
-  /// 🔄 SMART FEED TRIGGER: Trigger recalculation after tray update
-  Future<void> _triggerSmartFeedRecalculation(String pondId) async {
-    try {
-      await _feedService.recalculateFeedPlan(pondId);
-    } catch (e) {
-      AppLogger.error('Feed recalculation trigger failed', e);
-    }
-  }
+  /// 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation
+  /// Feed recalculation now happens through controller.invalidate() which
+  /// ensures single source of truth for all feed calculations.
+  // Future<void> _triggerSmartFeedRecalculation(String pondId) async {
+  //   try {
+  //     await _feedService.recalculateFeedPlan(pondId);
+  //   } catch (e) {
+  //     AppLogger.error('Feed recalculation trigger failed', e);
+  //   }
+  // }
 
   // REMOVED: _expectedFeedForDoc - callers must now explicitly pass expectedFeed
 
@@ -159,8 +161,7 @@ class FeedHistoryNotifier
     // ✅ Update local state AFTER DB write succeeds
     state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
 
-    // 🔄 SMART FEED TRIGGER: Recalculate after feed logged
-    await _triggerSmartFeedRecalculation(pondId);
+    // 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation via cache invalidation
   }
 
   /// ✅ Persist feed log to database
@@ -240,8 +241,7 @@ class FeedHistoryNotifier
       state = Map<String, List<FeedHistoryLog>>.from(state)
         ..[pondId] = pondLogs;
 
-      // 🔄 SMART FEED TRIGGER: Recalculate after tray update
-      _triggerSmartFeedRecalculation(pondId);
+      // 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation via cache invalidation
     }
   }
 

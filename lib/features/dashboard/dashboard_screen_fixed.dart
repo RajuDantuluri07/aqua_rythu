@@ -6,10 +6,12 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
-import 'package:aqua_rythu/core/services/feed_savings_service.dart';
+import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
+import 'package:aqua_rythu/core/services/feed_savings_service_fixed.dart';
+import 'package:aqua_rythu/features/auth/auth_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// ── Design tokens ─────────────────────────────────────────────────────
+// ── Design tokens ─────────────────────────────────────────────
 const _bg = Color(0xFFF5F7FA);
 const _white = Colors.white;
 const _border = Color(0xFFE2E8F0);
@@ -21,7 +23,45 @@ const _amber = Color(0xFFF59E0B);
 const _redLight = Color(0xFFFEF2F2);
 const _amberLight = Color(0xFFFFFBEB);
 
-// ══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+
+// ── Data model for pond rows ───────────────────────────────────────
+class _PondRow {
+  final String id;
+  final String name;
+  final int doc;
+  final double abw;
+  final double fcr;
+  final double biomass;
+  final double todayFeed;
+  final double yesterdayFeed;
+  final String status;
+  final bool fcrTrendUp;
+  final bool feedTrendUp;
+  final bool hasAbwData;
+  final double area;
+  final int seedCount;
+  final PondViewState feedState;
+
+  const _PondRow({
+    required this.id,
+    required this.name,
+    required this.doc,
+    required this.abw,
+    required this.fcr,
+    required this.biomass,
+    required this.todayFeed,
+    required this.yesterdayFeed,
+    required this.status,
+    required this.fcrTrendUp,
+    required this.feedTrendUp,
+    required this.hasAbwData,
+    required this.area,
+    required this.seedCount,
+    required this.feedState,
+  });
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -30,7 +70,7 @@ class DashboardScreen extends ConsumerWidget {
     final farmState = ref.watch(farmProvider);
     final currentFarm = farmState.currentFarm;
 
-    // Show loading spinner while farms are being fetched on startup
+    // Show loading while farms are being fetched
     if (farmState.farms.isEmpty && farmState.selectedId.isEmpty) {
       return _loadingView();
     }
@@ -50,7 +90,7 @@ class DashboardScreen extends ConsumerWidget {
 
       for (final pond in ponds) {
         try {
-          // Get feed state from single source of truth
+          // Get feed state from controller
           final feedState = await pondDashboardController.load(pond.id);
 
           // Extract data from controller result
@@ -155,16 +195,13 @@ class DashboardScreen extends ConsumerWidget {
                 ? 'Monitor closely'
                 : 'Needs attention';
 
-        final int needsAttentionCount =
-            rows.where((r) => r.status != 'Good').length;
-
         // ── Feed Savings Calculation ─────────────────────────────────────
         final pondIds = rows.map((r) => r.id).toList();
         final avgDoc = rows.isEmpty ? 0 : 
             rows.map((r) => r.doc).reduce((a, b) => a + b) ~/ rows.length;
         
         // Get feed price from config
-        const feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
+        final feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
         
         // Calculate farm-level savings
         final feedSavingsService = FeedSavingsService(Supabase.instance.client);
@@ -176,7 +213,7 @@ class DashboardScreen extends ConsumerWidget {
           feedPricePerKg: feedPricePerKg,
         );
 
-        // ── Insights ─────────────────────────────────────────────────────
+        // ── Insights ─────────────────────────────────────────────
         final insights = _buildInsights(rows, currentFarm.ponds, today);
 
         return Scaffold(
@@ -210,7 +247,7 @@ class DashboardScreen extends ConsumerWidget {
                         ),
 
                         // ── Feed Savings Card ─────────────────────────────────────
-                        FutureBuilder<FeedSavingsService.FeedSavingsResult>(
+                        FutureBuilder<FeedSavingsResult>(
                           future: savingsResultFuture,
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -220,155 +257,140 @@ class DashboardScreen extends ConsumerWidget {
                                   child: CircularProgressIndicator(
                                     color: _green, strokeWidth: 2.5),
                                 ),
-                              ),
-                            );
+                              );
                             }
 
-                            final savingsResult = snapshot.data ?? const FeedSavingsService.FeedSavingsResult(
+                            final savingsResult = snapshot.data ?? const FeedSavingsResult(
                               moneySaved: 0,
                               feedSavedKg: 0,
                               hasEnoughData: false,
-                              displayType: FeedSavingsService.SavingsDisplayType.hide,
+                              displayType: SavingsDisplayType.hide,
                             );
 
                             final authState = ref.watch(authProvider);
                             final isPro = authState.email != null && authState.email!.contains('@');
 
-                            return Column(
-                              children: [
-                                // Original KPI grid
-                                _KpiGrid(
-                                  totalFeedFarm: totalFeedFarm,
-                                  feedToday: feedToday,
-                                  feedChangePct: feedChangePct,
-                                  totalFeedCost: totalFeedCost,
-                                  totalBiomass: totalBiomass,
-                                  biomassStatus: biomassStatus,
-                                ),
-
-                                // Feed Savings Card
-                                FeedSavingsCard(
-                                  savingsResult: savingsResult,
-                                  onTap: () async {
-                                    // Log analytics for savings visible
-                                    if (savingsResult.displayType.toString() == 'showSavings') {
-                                      // TODO: Add analytics tracking here
-                                    }
+                            return FeedSavingsCard(
+                              savingsResult: savingsResult,
+                              onTap: () async {
+                                // Log analytics for savings visible
+                                if (savingsResult.displayType.toString() == 'showSavings') {
+                                  // TODO: Add analytics tracking here
+                                }
                                     
-                                    // Navigate to upgrade if not PRO and savings are shown
-                                    if (!isPro && savingsResult.moneySaved > 0) {
-                                      Navigator.pushNamed(context, AppRoutes.upgradeToPro);
+                                // Navigate to upgrade if not PRO and savings are shown
+                                if (!isPro && savingsResult.moneySaved > 0) {
+                                  // TODO: Navigate to upgrade screen when available
+                                  // Navigator.pushNamed(context, AppRoutes.upgradeToPro);
+                                }
+                              },
+                            );
+                          },
+                        ),
+
+                        // ── Farm Insights ─────────────────────────────────────
+                        if (insights.isNotEmpty) ...[
+                          const SizedBox(height: 28),
+                          const Text(
+                            'Farm Insights',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: _textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...insights.map((ins) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _InsightCard(
+                                  insight: ins,
+                                  onTap: () => Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.pondDashboard,
+                                    arguments: ins.pondId,
+                                  ),
+                                ),
+                              )),
+                        ],
+
+                        // ── Pond list ─────────────────────────────────────────
+                        const SizedBox(height: 28),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${rows.length} ACTIVE PONDS',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: _textSub,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => Navigator.pushNamed(
+                                  context, AppRoutes.addPond),
+                              child: const Text(
+                                'VIEW ALL',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: _green,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        ...rows.map((r) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _PondCard(
+                                row: r,
+                                onTap: () => Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.pondDashboard,
+                                  arguments: r.id,
+                                ),
+                                onEdit: () => Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.editPond,
+                                  arguments: r.id,
+                                ),
+                                onDelete: () => _confirmDelete(
+                                  context,
+                                  r.name,
+                                  () async {
+                                    try {
+                                      await ref
+                                              .read(farmProvider.notifier)
+                                              .deletePond(currentFarm.id, r.id);
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                    SnackBar(content: Text('Failed to delete: $e'))
+                                                  );
+                                      }
                                     }
                                   },
                                 ),
-
-                                // Rest of dashboard
-                                if (insights.isNotEmpty) ...[
-                                  const SizedBox(height: 28),
-                                  const Text(
-                                    'Farm Insights',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      color: _textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ...insights.map((ins) => Padding(
-                                        padding: const EdgeInsets.only(bottom: 10),
-                                        child: _InsightCard(
-                                          insight: ins,
-                                          onTap: () => Navigator.pushNamed(
-                                            context,
-                                            AppRoutes.pondDashboard,
-                                            arguments: ins.pondId,
-                                          ),
-                                        ),
-                                      )),
-                                ],
-
-                                // Pond list
-                                const SizedBox(height: 28),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      '${rows.length} ACTIVE PONDS',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                        color: _textSub,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () => Navigator.pushNamed(
-                                          context, AppRoutes.addPond),
-                                      child: const Text(
-                                        'VIEW ALL',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: _green,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                ...rows.map((r) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
-                                      child: _PondCard(
-                                        row: r,
-                                        onTap: () => Navigator.pushNamed(
-                                          context,
-                                          AppRoutes.pondDashboard,
-                                          arguments: r.id,
-                                        ),
-                                        onEdit: () => Navigator.pushNamed(
-                                          context,
-                                          AppRoutes.editPond,
-                                          arguments: r.id,
-                                        ),
-                                        onDelete: () => _confirmDelete(
-                                          context,
-                                          r.name,
-                                          () async {
-                                            try {
-                                              await ref
-                                                  .read(farmProvider.notifier)
-                                                  .deletePond(currentFarm.id, r.id);
-                                            } catch (e) {
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                        SnackBar(
-                                                            content:
-                                                                Text('Failed to delete: $e')),
-                                                      );
-                                              }
-                                            }
-                                          },
-                                        ),
-                                      )),
-                              ],
-                            ),
-                          ];
-                        },
-                      ),
+                              ),
+                            )),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        )
+          bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+        );
       },
     );
   }
 
-  // ── Insights builder ─────────────────────────────────────────────────────
+  // ── Insights builder ─────────────────────────────────────────────
   static List<_Insight> _buildInsights(
     List<_PondRow> rows,
     List<Pond> ponds,
@@ -440,7 +462,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  // ── Loading state ──────────────────────────────────────────────────────
+  // ── Loading state ──────────────────────────────────────────────
   Widget _loadingView() {
     return const Scaffold(
       backgroundColor: _bg,
@@ -453,7 +475,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  // ── Empty states ───────────────────────────────────────────────────────
+  // ── Empty states ───────────────────────────────────────────────
   Widget _noFarmView(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
@@ -481,20 +503,21 @@ class DashboardScreen extends ConsumerWidget {
                     fontWeight: FontWeight.bold,
                     color: _textPrimary,
                 ),
-              SizedBox(height: 16),
-              Text(
+              ),
+              const SizedBox(height: 16),
+              const Text(
                 'Create or select a farm to get started.',
                 style: TextStyle(color: _textSub),
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.addFarm),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: _green, foregroundColor: _white),
-                  child: Text('+ Add Farm'),
+                  child: const Text('+ Add Farm'),
                 ),
               ),
             ],
@@ -546,22 +569,22 @@ class DashboardScreen extends ConsumerWidget {
                             fontWeight: FontWeight.w900,
                             color: _textPrimary,
                         ),
-                      SizedBox(height: 10),
-                      Text(
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
                           'Track feed, growth, and profit easily.\nAdd a pond to get started.',
                           style: TextStyle(
                               fontSize: 14, color: _textSub, height: 1.5),
                           textAlign: TextAlign.center,
                         ),
-                      SizedBox(height: 32),
+                      const SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () => Navigator.pushNamed(context, AppRoutes.addPond),
-                          icon: Icon(Icons.add_rounded, size: 20, color: _white),
-                          label: '+ Add Pond',
                           style: ElevatedButton.styleFrom(
                               backgroundColor: _green, foregroundColor: _white),
+                          child: const Text('+ Add Pond'),
                         ),
                       ),
                     ],
@@ -576,9 +599,9 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
 // HEADER
-// ════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 class _Header extends StatelessWidget {
   final FarmState farmState;
   final dynamic currentFarm;
@@ -705,21 +728,22 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
 // KPI GRID  (2 × 2)
-// ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
 class _KpiGrid extends StatelessWidget {
-  final double totalFeedFarm,
-      final double feedToday,
-      final double feedChangePct,
-      final double totalFeedCost,
-      final double totalBiomass;
+  final double totalFeedFarm;
+  final double feedToday;
+  final double feedChangePct;
+  final double totalFeedCost;
+  final double totalBiomass;
   final String biomassStatus;
 
   const _KpiGrid({
@@ -792,7 +816,6 @@ class _KpiGrid extends StatelessWidget {
     if (v.abs() >= 10000000) return '₹${(v / 10000000).toStringAsFixed(1)} Cr';
     if (v.abs() >= 100000) return '₹${(v / 100000).toStringAsFixed(1)} L';
     if (v.abs() >= 1000) return '₹${(v / 1000).toStringAsFixed(1)} K';
-    if (v.abs() >= 100) return '₹${(v / 1000).toStringAsFixed(1)} K';
     return '₹${v.toStringAsFixed(0)}';
   }
 }
@@ -817,8 +840,8 @@ class _KpiCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
         color: _white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -826,43 +849,44 @@ class _KpiCard extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
               color: _textSub,
-              letterSpacing: 0.4,
-              height: 1.4,
+              height: 1.3,
             ),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: value,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: valueColor ?? _textPrimary,
-                    letterSpacing: -0.5,
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: valueColor ?? _textPrimary,
+                  height: 1.0,
+                ),
+              ),
+              if (unit != null) ...[
+                const SizedBox(width: 4),
+                Text(
+                  unit!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _textSub,
                   ),
                 ),
-                if (unit != null)
-                  TextSpan(
-                    text: ' $unit',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _textSub,
-                    ),
-                  ),
               ],
-            ),
+            ],
           ),
           if (sub != null) ...[
             const SizedBox(height: 4),
             Text(
               sub!,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: subColor ?? _textSub,
               ),
@@ -874,9 +898,25 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════
-// INSIGHT CARD
-// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// INSIGHTS
+// ══════════════════════════════════════════════════════
+class _Insight {
+  final String title;
+  final String subtitle;
+  final String ctaLabel;
+  final String pondId;
+  final bool isCritical;
+
+  const _Insight({
+    required this.title,
+    required this.subtitle,
+    required this.ctaLabel,
+    required this.pondId,
+    required this.isCritical,
+  });
+}
+
 class _InsightCard extends StatelessWidget {
   final _Insight insight;
   final VoidCallback onTap;
@@ -888,117 +928,99 @@ class _InsightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: insight.isCritical ? _red.withOpacity(0.2) : _border,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: insight.isCritical ? _redLight : _amberLight,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: insight.isCritical ? _red.withOpacity(0.2) : _amber.withOpacity(0.2),
+          ),
         ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: insight.isCritical
-                        ? _red.withOpacity(0.1)
-                        : _green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    insight.isCritical
-                        ? Icons.warning_rounded
-                        : Icons.info_outline_rounded,
-                    color: insight.isCritical ? _red : _green,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        insight.title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        insight.subtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: _textSub,
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        insight.ctaLabel,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: _green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: insight.isCritical ? _red : _amber,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                insight.isCritical ? Icons.warning_rounded : Icons.info_rounded,
+                color: _white,
+                size: 20,
+              ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    insight.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: insight.isCritical ? _red : _amber,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    insight.subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _textSub,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_rounded,
+              color: insight.isCritical ? _red : _amber,
+              size: 16,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
 // POND CARD
-// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
 class _PondCard extends StatelessWidget {
   final _PondRow row;
   final VoidCallback onTap;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _PondCard({
     required this.row,
     required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
                 Expanded(
                   child: Column(
@@ -1008,118 +1030,193 @@ class _PondCard extends StatelessWidget {
                         row.name,
                         style: const TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                           color: _textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
+                          _StatusChip(status: row.status),
+                          const SizedBox(width: 8),
                           Text(
                             'DOC ${row.doc}',
                             style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _textSub,
-                            ),
-                          ),
-                          if (row.hasAbwData) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '${row.abw.toStringAsFixed(1)} g',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: _green,
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 8),
-                          Text(
-                            row.status,
-                            style: TextStyle(
                               fontSize: 12,
+                              color: _textSub,
                               fontWeight: FontWeight.w600,
-                              color: _getStatusColor(row.status),
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${row.todayFeed.toStringAsFixed(1)} kg',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: _textSub,
-                              ),
-                            ),
-                          ),
-                          if (row.feedTrendUp) ...[
-                            const Icon(Icons.trending_up_rounded,
-                                size: 14, color: _red),
-                          ] else if (row.fcrTrendUp) ...[
-                            const Icon(Icons.trending_down_rounded,
-                                size: 14, color: _green),
-                          ],
                         ],
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (onEdit != null)
-                      GestureDetector(
-                        onTap: onEdit,
-                        child: const Icon(
-                          Icons.edit_outlined,
-                          size: 16,
-                          color: _textSub,
-                        ),
+                PopupMenuButton<String>(
+                  offset: const Offset(0, 40),
+                  color: _white,
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'delete') {
+                      onDelete();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_rounded, size: 16, color: _textSub),
+                          SizedBox(width: 8),
+                          Text('Edit', style: TextStyle(fontSize: 13)),
+                        ],
                       ),
-                    if (onDelete != null)
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: onDelete,
-                        child: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 16,
-                          color: _red,
-                        ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_rounded, size: 16, color: _red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(fontSize: 13, color: _red)),
+                        ],
                       ),
+                    ),
                   ],
+                  child: const Icon(Icons.more_vert_rounded, color: _textSub),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _MetricCard(
+                    label: 'Today Feed',
+                    value: '${row.todayFeed.toStringAsFixed(1)} kg',
+                    color: _green,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MetricCard(
+                    label: 'FCR',
+                    value: row.fcr > 0 ? row.fcr.toStringAsFixed(2) : '-',
+                    color: row.fcr > 1.5 ? _red : _green,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MetricCard(
+                    label: 'ABW',
+                    value: row.hasAbwData ? '${row.abw.toStringAsFixed(1)} g' : 'No data',
+                    color: row.hasAbwData ? _textPrimary : _textSub,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Good':
-        return _green;
-      case 'Warning':
-        return _amber;
-      case 'Critical':
-        return _red;
+class _StatusChip extends StatelessWidget {
+  final String status;
+
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    String text;
+    
+    switch (status.toLowerCase()) {
+      case 'good':
+        color = _green;
+        text = 'Good';
+        break;
+      case 'warning':
+        color = _amber;
+        text = 'Warning';
+        break;
+      case 'critical':
+        color = _red;
+        text = 'Critical';
+        break;
+      case 'error':
+        color = _red;
+        text = 'Error';
+        break;
       default:
-        return _textSub;
+        color = _textSub;
+        text = status;
     }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              color: _textSub,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -1,10 +1,16 @@
 import 'dart:async';
-import '../../../systems/feed/master_feed_engine.dart';
 import '../../../core/utils/logger.dart';
-import '../../../core/services/feed_service.dart';
 import '../../../core/services/pond_service.dart';
+import '../../../core/services/feed_service.dart';
+import '../../../core/services/tray_service.dart';
 import '../../../systems/planning/feed_plan_generator.dart';
 import '../../../systems/planning/feed_plan_constants.dart';
+import '../../../systems/feed/feed_pipeline.dart';
+import '../../../systems/feed/feed_models.dart';
+import '../../../features/feed/models/orchestrator_result.dart';
+import '../../../features/feed/models/correction_result.dart';
+import '../../../features/feed/models/feed_debug_info.dart';
+import '../../../features/feed/enums/feed_stage.dart';
 
 /// ===========================================
 /// POND VIEW STATE - Immutable state snapshot
@@ -61,12 +67,15 @@ class PondViewState {
 class PondDashboardController {
   final FeedService _feedService;
   final PondService _pondService;
+  final TrayService _trayService;
 
   PondDashboardController({
     FeedService? feedService,
     PondService? pondService,
+    TrayService? trayService,
   })  : _feedService = feedService ?? FeedService(),
-        _pondService = pondService ?? PondService();
+        _pondService = pondService ?? PondService(),
+        _trayService = trayService ?? TrayService();
 
   /// Cached view states keyed by 'pondId:doc' to prevent duplicate data loading
   /// within the same dashboard refresh cycle.
@@ -147,9 +156,9 @@ class PondDashboardController {
       // Load today's feed rounds from DB
       final feedData = await _loadFeedRounds(pondId, doc, null);
 
-      // Run feed engine for ALL DOC (not just DOC >= 31)
+      // Run feed engine using FeedPipeline (single source of truth)
       OrchestratorResult? feedResult;
-      feedResult = await _computeFeed(pondId, doc);
+      feedResult = await _computeFeedViaPipeline(pondId, doc, pond);
       // Inject smart recommendation for pending rounds (only if smart mode)
       if (doc >= 31) {
         _injectSmartFeed(pondId, feedData, feedResult, doc);
@@ -203,9 +212,13 @@ class PondDashboardController {
   }
 
   /// ===========================================
-  /// FEED COMPUTATION (single call per pond)
+  /// FEED COMPUTATION via FeedPipeline (single source of truth)
   /// ===========================================
-  Future<OrchestratorResult> _computeFeed(String pondId, int doc) async {
+  Future<OrchestratorResult> _computeFeedViaPipeline(
+    String pondId,
+    int doc,
+    dynamic pond,
+  ) async {
     final cached = _orchestratorCache[_cacheKey(pondId, doc)];
     if (cached != null) {
       AppLogger.info(
@@ -214,36 +227,351 @@ class PondDashboardController {
     }
 
     try {
-      final result = await MasterFeedEngine.orchestrateForPond(pondId);
-      _orchestratorCache[_cacheKey(pondId, doc)] = result;
+      // Build PondData for FeedPipeline
+      final pondData = await _buildPondData(pondId, doc, pond);
+
+      // Call FeedPipeline.runAndSave()
+      final pipelineResponse = await FeedPipeline.runAndSave(pondData);
+
+      if (!pipelineResponse.success || pipelineResponse.result.isError) {
+        AppLogger.error(
+            'Controller: FeedPipeline failed for pond=$pondId doc=$doc - ${pipelineResponse.error}');
+        return _createSafeFallbackResult(
+            pondId, doc, pipelineResponse.error ?? 'Pipeline error');
+      }
+
+      final pipelineResult = pipelineResponse.result;
+
+      // Convert FeedPipelineResult to OrchestratorResult for UI compatibility
+      final orchestratorResult = _convertToOrchestratorResult(
+        pipelineResult,
+        doc,
+      );
+
+      // Apply fallback: if feed <= 0, use previousFeed or safe default
+      if (orchestratorResult.finalFeed <= 0) {
+        AppLogger.warn(
+            'Controller: FeedPipeline returned zero/negative feed for pond=$pondId doc=$doc, applying fallback');
+        final previousFeed = await _getPreviousFeedAmount(pondId, doc);
+        final safeFeed = previousFeed > 0 ? previousFeed : 1.0; // Safe default
+
+        return _createFallbackWithFeed(pondId, doc, safeFeed,
+            'Used previous/safe feed due to zero result');
+      }
+
+      _orchestratorCache[_cacheKey(pondId, doc)] = orchestratorResult;
       AppLogger.info(
-          'Controller: Computed feed for pond=$pondId doc=$doc final=${result.finalFeed.toStringAsFixed(3)}kg');
-      return result;
-    } on ArgumentError catch (e) {
-      // Validation errors - missing required data
-      AppLogger.error(
-          'Controller: Feed validation failed for pond=$pondId doc=$doc - ${e.message}');
-      // Return safe fallback result
-      return _createSafeFallbackResult(
-          pondId, doc, 'Validation error: ${e.message}');
-    } on StateError catch (e) {
-      // State errors - missing dependencies
-      AppLogger.error(
-          'Controller: Feed state error for pond=$pondId doc=$doc - ${e.message}');
-      return _createSafeFallbackResult(
-          pondId, doc, 'State error: ${e.message}');
-    } on TimeoutException catch (e) {
-      // Timeout errors
-      AppLogger.error(
-          'Controller: Feed computation timeout for pond=$pondId doc=$doc', e);
-      return _createSafeFallbackResult(pondId, doc, 'Computation timeout');
+          'Controller: Computed feed via FeedPipeline for pond=$pondId doc=$doc final=${orchestratorResult.finalFeed.toStringAsFixed(3)}kg');
+      return orchestratorResult;
     } catch (e) {
-      // Unexpected errors
       AppLogger.error(
-          'Controller: Unexpected feed computation error for pond=$pondId doc=$doc',
-          e);
-      return _createSafeFallbackResult(pondId, doc, 'Unexpected error');
+          'Controller: FeedPipeline error for pond=$pondId doc=$doc', e);
+      return _createSafeFallbackResult(pondId, doc, 'Pipeline error: $e');
     }
+  }
+
+  /// Build PondData from pond model for FeedPipeline
+  Future<PondData> _buildPondData(String pondId, int doc, dynamic pond) async {
+    // Extract data from pond object (handles both Pond model and Map)
+    final seedCount = pond.seedCount ?? (pond['seed_count'] ?? 100000);
+    final area = pond.area ?? (pond['area'] ?? 1.0);
+    final currentAbw = pond.currentAbw ?? (pond['current_abw']);
+
+    // Default feed cost per kg (can be made configurable)
+    const feedCostPerKg = 80.0;
+
+    // Default survival rate (can be fetched from mortality logs)
+    const survivalRate = 0.95;
+
+    // Fetch tray data for smart feed adjustments
+    double trayFactor = 1.0;
+    bool hasTrayData = false;
+    bool trayLeftover = false;
+    double trayConsistency = 1.0;
+
+    try {
+      final trayLogs = await _trayService.fetchTrayLogs(pondId);
+      if (trayLogs.isNotEmpty) {
+        // TASK 1: Safe timestamp sorting - use DateTime.parse instead of string compare
+        trayLogs.sort((a, b) => DateTime.parse(b['created_at'])
+            .compareTo(DateTime.parse(a['created_at'])));
+        final latest = trayLogs.first;
+        final statuses = latest['tray_statuses'] as List<dynamic>?;
+        if (statuses != null && statuses.isNotEmpty) {
+          // Calculate tray factor from statuses
+          int emptyCount = 0;
+          int fullCount = 0;
+          for (final status in statuses) {
+            if (status == 'empty') emptyCount++;
+            if (status == 'full') fullCount++;
+          }
+          final total = statuses.length;
+          final emptyRatio = emptyCount / total;
+          final fullRatio = fullCount / total;
+
+          // TASK 3: DOC-based smart control - disable tray logic for DOC <= 30
+          // Product rule: DOC 1-30 = blind feeding, no smart adjustments
+          if (doc <= 30) {
+            trayFactor = 1.0;
+            hasTrayData = false;
+            AppLogger.info(
+                'DOC $doc <= 30: Blind feeding mode - tray logic disabled');
+          } else {
+            hasTrayData = true;
+            // TASK 2: Reduce aggressive feed cut (0.85 → 0.90)
+            // Calculate tray factor with smoother adjustments
+            if (emptyRatio > 0.6) {
+              trayFactor = 1.10; // Mostly empty - increase feed
+              AppLogger.info(
+                  'Tray adjustment: Feed increased 10% - trays mostly empty (shrimp ate well)');
+            } else if (fullRatio > 0.6) {
+              trayFactor =
+                  0.90; // Mostly full - decrease feed (reduced from 0.85 for smoother adjustment)
+              AppLogger.info(
+                  'Tray adjustment: Feed reduced 10% - significant leftover in trays');
+            } else if (emptyRatio > 0.3) {
+              trayFactor = 1.05; // Some empty - slight increase
+              AppLogger.info(
+                  'Tray adjustment: Feed increased 5% - some trays empty');
+            } else if (fullRatio > 0.3) {
+              trayFactor = 0.95; // Some full - slight decrease
+              AppLogger.info(
+                  'Tray adjustment: Feed reduced 5% - some leftover in trays');
+            }
+            trayLeftover = fullRatio > 0.3;
+            trayConsistency =
+                1.0; // Could calculate from historical consistency
+          }
+        }
+      }
+    } catch (e) {
+      AppLogger.warn('Failed to fetch tray data for pond $pondId: $e');
+    }
+
+    return PondData(
+      id: pondId,
+      doc: doc,
+      shrimpCount: seedCount,
+      sampledAbw: currentAbw,
+      survivalRate: survivalRate,
+      feedCostPerKg: feedCostPerKg,
+      trayFactor: trayFactor,
+      growthFactor: 1.0, // TODO: Calculate from historical growth data
+      fcrFactor: 1.0, // TODO: Calculate from FCR history
+      hasTrayData: hasTrayData,
+      hasSampling: currentAbw != null,
+      hasWaterQuality: false, // TODO: Fetch from water quality logs
+      dataRecencyHours: 0,
+      trayConsistency: trayConsistency,
+      trayLeftover: trayLeftover,
+      growthSlow: false, // TODO: Determine from growth data
+      fcrHigh: false, // TODO: Determine from FCR data
+      waterQualityPoor: false,
+    );
+  }
+
+  /// TASK 2: Format reason in farmer-friendly language
+  String _formatFarmerReason(
+      String rawReason, double actualFeed, double baselineFeed) {
+    if (actualFeed == baselineFeed) {
+      return rawReason;
+    }
+
+    final change = ((actualFeed - baselineFeed) / baselineFeed * 100).round();
+    final changeAbs = change.abs();
+
+    // Tray-based adjustments
+    if (rawReason.toLowerCase().contains('tray')) {
+      if (change > 0) {
+        return "Shrimp finished feed → increased by $changeAbs%";
+      } else if (change < 0) {
+        return "Feed leftover in tray → reduced by $changeAbs%";
+      }
+    }
+
+    // Growth-based adjustments
+    if (rawReason.toLowerCase().contains('growth')) {
+      if (change > 0) {
+        return "Shrimp growing fast → increased by $changeAbs%";
+      } else if (change < 0) {
+        return "Growth slower than expected → reduced by $changeAbs%";
+      }
+    }
+
+    // Default fallback
+    if (change > 0) {
+      return "Optimized for growth → increased by $changeAbs%";
+    } else if (change < 0) {
+      return "Optimized for savings → reduced by $changeAbs%";
+    }
+
+    return rawReason;
+  }
+
+  /// Convert FeedPipelineResult to OrchestratorResult for UI compatibility
+  OrchestratorResult _convertToOrchestratorResult(
+    FeedPipelineResult pipelineResult,
+    int doc,
+  ) {
+    // TASK 2: Trust layer - use farmer-friendly reason text
+    String enhancedReason = _formatFarmerReason(
+      pipelineResult.reason,
+      pipelineResult.actualFeed,
+      pipelineResult.baselineFeed,
+    );
+
+    final correction = CorrectionResult(
+      baseFeed: pipelineResult.baselineFeed,
+      trayFactor: 1.0, // FeedPipeline doesn't expose individual factors
+      finalFeed: pipelineResult.actualFeed,
+      safetyStatus: pipelineResult.confidence,
+      reasons: [enhancedReason],
+      alerts: [],
+      isCriticalStop: pipelineResult.actualFeed <= 0,
+      isSmartApplied: pipelineResult.actualFeed != pipelineResult.baselineFeed,
+    );
+
+    final decision = FeedDecision(
+      action: pipelineResult.action,
+      deltaKg: pipelineResult.actualFeed - pipelineResult.baselineFeed,
+      reason: enhancedReason, // TASK 4: Expose enhanced reason to UI
+      recommendations: [pipelineResult.action],
+      decisionTrace: ['FeedPipeline v${FeedPipeline.version}'],
+    );
+
+    final recommendation = FeedRecommendation(
+      nextFeedKg: pipelineResult.actualFeed,
+      nextFeedTime: DateTime.now(),
+      instruction: pipelineResult.action,
+    );
+
+    const intelligence = IntelligenceResult(
+      expectedFeed: 0.0, // Not available from FeedPipeline
+      status: FeedStatus.onTrack,
+    );
+
+    final debugInfo = FeedDebugInfo(
+      doc: doc,
+      baseFeedPer100k: pipelineResult.baselineFeed,
+      adjustedFeed: pipelineResult.actualFeed,
+      minFeed: pipelineResult.actualFeed * 0.8,
+      maxFeed: pipelineResult.actualFeed * 1.2,
+      isBaseFeedClamped: false,
+      wasInputClamped: false,
+      baseFeed: pipelineResult.baselineFeed,
+      trayFactor: 1.0,
+      smartFactor: pipelineResult.actualFeed / pipelineResult.baselineFeed,
+      combinedFactor: pipelineResult.actualFeed / pipelineResult.baselineFeed,
+      rawCombinedFactor:
+          pipelineResult.actualFeed / pipelineResult.baselineFeed,
+      fcr: 1.5, // Default value
+      finalFeed: pipelineResult.actualFeed,
+      isSmartApplied: pipelineResult.actualFeed != pipelineResult.baselineFeed,
+      wasClamped: false,
+      hasSampling: pipelineResult.abw > 0,
+      feedStage: pipelineResult.confidence,
+    );
+
+    return OrchestratorResult(
+      baseFeed: pipelineResult.baselineFeed,
+      feedStage:
+          FeedStage.intelligent, // Assume intelligent if using FeedPipeline
+      intelligence: intelligence,
+      correction: correction,
+      decision: decision,
+      recommendation: recommendation,
+      engineVersion: 'FeedPipeline-${FeedPipeline.version}',
+      debugInfo: debugInfo,
+    );
+  }
+
+  /// Get previous feed amount from database for fallback
+  Future<double> _getPreviousFeedAmount(String pondId, int doc) async {
+    try {
+      final feedRounds = await _feedService.getFeedRounds(pondId, doc - 1);
+      if (feedRounds.isNotEmpty) {
+        final total = feedRounds.fold<double>(
+          0.0,
+          (sum, round) =>
+              sum + ((round['planned_amount'] as num?)?.toDouble() ?? 0.0),
+        );
+        return total;
+      }
+    } catch (e) {
+      AppLogger.warn(
+          'Controller: Failed to get previous feed for fallback: $e');
+    }
+    return 0.0;
+  }
+
+  /// Create fallback result with specific feed amount
+  OrchestratorResult _createFallbackWithFeed(
+    String pondId,
+    int doc,
+    double feedAmount,
+    String reason,
+  ) {
+    final correction = CorrectionResult(
+      baseFeed: feedAmount,
+      trayFactor: 1.0,
+      finalFeed: feedAmount,
+      safetyStatus: 'fallback',
+      reasons: [reason],
+      alerts: ['⚠️ Using fallback feed amount'],
+      isCriticalStop: false,
+      isSmartApplied: false,
+    );
+
+    final decision = FeedDecision(
+      action: 'Maintain Feeding',
+      deltaKg: 0.0,
+      reason: reason,
+      recommendations: ['Feed $feedAmount kg'],
+      decisionTrace: ['Fallback applied'],
+    );
+
+    final recommendation = FeedRecommendation(
+      nextFeedKg: feedAmount,
+      nextFeedTime: DateTime.now(),
+      instruction: 'Feed $feedAmount kg',
+    );
+
+    final intelligence = IntelligenceResult(
+      expectedFeed: feedAmount,
+      status: FeedStatus.onTrack,
+    );
+
+    final debugInfo = FeedDebugInfo(
+      doc: doc,
+      baseFeedPer100k: feedAmount,
+      adjustedFeed: feedAmount,
+      minFeed: feedAmount,
+      maxFeed: feedAmount,
+      isBaseFeedClamped: false,
+      wasInputClamped: false,
+      baseFeed: feedAmount,
+      trayFactor: 1.0,
+      smartFactor: 1.0,
+      combinedFactor: 1.0,
+      rawCombinedFactor: 1.0,
+      fcr: 1.5,
+      finalFeed: feedAmount,
+      isSmartApplied: false,
+      wasClamped: false,
+      hasSampling: false,
+      feedStage: 'fallback',
+    );
+
+    return OrchestratorResult(
+      baseFeed: feedAmount,
+      feedStage: FeedStage.blind,
+      intelligence: intelligence,
+      correction: correction,
+      decision: decision,
+      recommendation: recommendation,
+      engineVersion: 'FeedPipeline-fallback',
+      debugInfo: debugInfo,
+    );
   }
 
   /// ===========================================

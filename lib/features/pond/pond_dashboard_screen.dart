@@ -973,6 +973,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         .fold(0.0,
             (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
+    // TASK 1: TEMPORARY LOG - Track feed values in Pond Dashboard
+    print(
+        "🏡 POND DASHBOARD FEED: Pond=${currentPond?.name ?? 'Unknown'}, PlannedFeed=${plannedFeed.toStringAsFixed(2)}kg, ConsumedFeed=${consumedFeed.toStringAsFixed(2)}kg, DOC=$currentDoc");
+
     // Smart Feed auto-enables at DOC ≥ 30 (smart_feeding = doc >= 30).
     // The DB flag `isSmartFeedEnabled` is the farmer's manual preference; even if
     // never toggled, Smart Mode activates at DOC 30 because the round lock and

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:aqua_rythu/core/services/farm_service.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
-import 'package:aqua_rythu/core/services/feed_service.dart';
+// import 'package:aqua_rythu/core/services/feed_service.dart'; // Removed - recalculation now handled by controller
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/utils/doc_utils.dart';
@@ -39,16 +39,16 @@ class Pond {
   final SeedType seedType;
 
   // ── Harvest / Action Engine fields ─────────────────────────────────────────
-  final int? stockCount;          // current active stock (after harvests)
-  final bool hasSampling;         // whether at least one sample exists
-  final String harvestStage;      // 'none' | 'partial' | 'near' | 'completed'
-  final double activeStockPct;    // fraction of initial stock still in pond
+  final int? stockCount; // current active stock (after harvests)
+  final bool hasSampling; // whether at least one sample exists
+  final String harvestStage; // 'none' | 'partial' | 'near' | 'completed'
+  final double activeStockPct; // fraction of initial stock still in pond
   final DateTime? lastHarvestDate;
   final double? lastHarvestQty;
 
   // ── Daily Action Engine fields ──────────────────────────────────────────────
-  final String aerationType;      // 'low' | 'medium' | 'high' — affects capacity
-  final String? trayScore;        // 'good' | 'average' | 'poor' — latest tray result
+  final String aerationType; // 'low' | 'medium' | 'high' — affects capacity
+  final String? trayScore; // 'good' | 'average' | 'poor' — latest tray result
 
   Pond({
     required this.id,
@@ -525,13 +525,15 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
-  /// 🔄 SMART FEED TRIGGER: Trigger recalculation when DOC increments
-  void triggerSmartFeedRecalculationOnDocChange(String pondId) {
-    // Fire-and-forget Smart Feed recalculation
-    FeedService().recalculateFeedPlan(pondId).catchError((e) {
-      AppLogger.error('Feed recalculation trigger failed', e);
-    });
-  }
+  /// 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation
+  /// Feed recalculation now happens through controller.invalidate() which
+  /// ensures single source of truth for all feed calculations.
+  // void triggerSmartFeedRecalculationOnDocChange(String pondId) {
+  //   // Fire-and-forget Smart Feed recalculation
+  //   FeedService().recalculateFeedPlan(pondId).catchError((e) {
+  //     AppLogger.error('Feed recalculation trigger failed', e);
+  //   });
+  // }
 }
 
 final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {

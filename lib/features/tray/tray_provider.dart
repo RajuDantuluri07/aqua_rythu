@@ -16,16 +16,21 @@ class TrayNotifier extends StateNotifier<List<TrayLog>> {
       state = [];
       return;
     }
-    
+
     try {
       final rows = await TrayService().fetchTrayLogs(pondId);
       state = rows.map((row) => TrayLog.fromSupabase(row)).toList();
     } catch (e) {
-      AppLogger.error('TrayNotifier: failed to load tray logs for pond $pondId', e);
+      AppLogger.error(
+          'TrayNotifier: failed to load tray logs for pond $pondId', e);
     }
   }
 
   void addTrayLog(TrayLog log) {
+    // TASK 2: TEMPORARY LOG - Verify tray logging triggers feed pipeline
+    print(
+        " TRAY LOGGED: Pond=${pondId}, Round=${log.round}, Status=${log.trays.join(',')}, Leftover=${log.leftoverPercent}%");
+
     state = [...state, log];
   }
 
