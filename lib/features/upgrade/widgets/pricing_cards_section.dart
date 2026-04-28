@@ -4,11 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../subscription_provider.dart';
 import '../upgrade_insight_provider.dart';
 
-class PricingCardsSection extends ConsumerWidget {
+class PricingCardsSection extends ConsumerStatefulWidget {
   const PricingCardsSection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PricingCardsSection> createState() =>
+      _PricingCardsSectionState();
+}
+
+class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
+  bool _isPerCrop = true;
+
+  @override
+  Widget build(BuildContext context) {
     final subscriptionState = ref.watch(subscriptionProvider);
     final isPro = subscriptionState.isPro;
     final isLoading = subscriptionState.isLoading;
@@ -58,12 +66,15 @@ class PricingCardsSection extends ConsumerWidget {
                 _YearlyPlanCard(
                   isPro: isPro,
                   isLoading: isLoading,
+                  isPerCrop: _isPerCrop,
+                  onToggleChanged: (value) =>
+                      setState(() => _isPerCrop = value),
                   onTap: () => _startUpgrade(
                     context,
                     ref,
                     insight,
-                    source: 'pricing_yearly',
-                    plan: '999_year',
+                    source: _isPerCrop ? 'pricing_crop' : 'pricing_yearly',
+                    plan: _isPerCrop ? '499_crop' : '999_year',
                   ),
                 ),
               ];
@@ -268,11 +279,15 @@ class _CropPlanCard extends StatelessWidget {
 class _YearlyPlanCard extends StatelessWidget {
   final bool isPro;
   final bool isLoading;
+  final bool isPerCrop;
+  final ValueChanged<bool> onToggleChanged;
   final VoidCallback onTap;
 
   const _YearlyPlanCard({
     required this.isPro,
     required this.isLoading,
+    required this.isPerCrop,
+    required this.onToggleChanged,
     required this.onTap,
   });
 
@@ -291,25 +306,39 @@ class _YearlyPlanCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: blue.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: blue.withOpacity(0.18)),
-            ),
-            child: Text(
-              'MULTI CROP SAVER PLAN',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: blue,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.4,
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: blue.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: blue.withOpacity(0.18)),
+                  ),
+                  child: Text(
+                    isPerCrop
+                        ? 'MULTI CROP SAVER PLAN'
+                        : 'SERIOUS FARMERS PLAN',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: blue,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              _BillingToggle(
+                isPerCrop: isPerCrop,
+                onChanged: onToggleChanged,
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
-            'Multi Crop Saver Plan',
+            isPerCrop ? 'Multi Crop Saver Plan' : 'Serious Farmers Plan',
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w900,
               color: theme.colorScheme.onSurface,
@@ -320,7 +349,7 @@ class _YearlyPlanCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹999',
+                isPerCrop ? '₹999' : '₹2999',
                 style: theme.textTheme.displaySmall?.copyWith(
                   fontWeight: FontWeight.w900,
                   color: blue,
@@ -330,7 +359,7 @@ class _YearlyPlanCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 6, bottom: 5),
                 child: Text(
-                  '/ year',
+                  isPerCrop ? '/ year' : '/ year',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.colorScheme.onSurface.withOpacity(0.68),
                     fontWeight: FontWeight.w700,
@@ -343,19 +372,31 @@ class _YearlyPlanCard extends StatelessWidget {
           _SavingsBox(
             icon: Icons.auto_awesome_rounded,
             color: blue,
-            text: 'Best for 2-3 crops. Save ₹200-₹500 extra.',
+            text: isPerCrop
+                ? 'Best for 2-3 crops. Save ₹200-₹500 extra.'
+                : 'Best for serious farmers. Unlimited crops & farms.',
           ),
           const SizedBox(height: 14),
           const _PlanLine(text: 'Full access across crops'),
-          const _PlanLine(text: 'Best for multiple active ponds'),
-          const _PlanLine(text: 'Priority support for growth decisions'),
+          if (isPerCrop) ...const [
+            _PlanLine(text: 'Best for multiple active ponds'),
+            _PlanLine(text: 'Priority support for growth decisions'),
+          ] else ...const [
+            _PlanLine(text: 'Unlimited crops & farms'),
+            _PlanLine(text: 'Worker & supervisor access'),
+            _PlanLine(text: 'Advanced analytics & insights'),
+          ],
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: isPro || isLoading ? null : onTap,
               icon: const Icon(Icons.lock_open_rounded, size: 18),
-              label: Text(isPro ? 'Current Plan' : 'Unlock Full Access'),
+              label: Text(isPro
+                  ? 'Current Plan'
+                  : isPerCrop
+                      ? 'Unlock Full Access'
+                      : 'Unlock Business'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: blue,
                 side: BorderSide(color: blue, width: 1.4),
@@ -439,6 +480,81 @@ class _PlanLine extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface.withOpacity(0.76),
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillingToggle extends StatelessWidget {
+  final bool isPerCrop;
+  final ValueChanged<bool> onChanged;
+
+  const _BillingToggle({
+    required this.isPerCrop,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => onChanged(true),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color:
+                    isPerCrop ? theme.colorScheme.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Per crop',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: isPerCrop
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                  fontWeight: isPerCrop ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => onChanged(false),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color:
+                    !isPerCrop ? theme.colorScheme.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Serious',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: !isPerCrop
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                  fontWeight: !isPerCrop ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 11,
+                ),
               ),
             ),
           ),

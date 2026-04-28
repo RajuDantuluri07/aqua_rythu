@@ -162,7 +162,7 @@ class DashboardScreen extends ConsumerWidget {
             rows.map((r) => r.doc).reduce((a, b) => a + b) ~/ rows.length;
         
         // Get feed price from config
-        final feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
+        const feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
         
         // Calculate farm-level savings
         final feedSavingsService = FeedSavingsService(Supabase.instance.client);
@@ -251,17 +251,17 @@ class DashboardScreen extends ConsumerWidget {
 
                         // ── Farm Insights ─────────────────────────────────────
                         if (insights.isNotEmpty) ...[
-                          const SizedBox(height: 28),
+                          const SizedBox(height = 28),
                           const Text(
                             'Farm Insights',
-                            style: TextStyle(
+                            style = const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
                               color: _textPrimary,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          ...insights.map((ins) => Padding(
+                          const SizedBox(height = 12),
+                          ...insights.map((ins), {super.key} => Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _InsightCard(
                                   insight: ins,
@@ -275,10 +275,10 @@ class DashboardScreen extends ConsumerWidget {
                         ],
 
                         // ── Pond list ─────────────────────────────────────────
-                        const SizedBox(height: 28),
+                        const SizedBox(height = 28),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
+                          mainAxisAlignment = MainAxisAlignment.spaceBetween,
+                          children = [
                             Text(
                               '${rows.length} ACTIVE PONDS',
                               style: const TextStyle(
@@ -303,8 +303,8 @@ class DashboardScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        ...rows.map((r) => Padding(
+                        const SizedBox(height = 12),
+                        ...rows.map((r), {super.key} => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: _PondCard(
                                 row: r,
@@ -428,7 +428,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _loadingView() {
     return const Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+      bottomNavigationBar: AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: Center(
           child: CircularProgressIndicator(color: _green, strokeWidth: 2.5),
@@ -465,20 +465,20 @@ class DashboardScreen extends ConsumerWidget {
                     fontWeight: FontWeight.bold,
                     color: _textPrimary,
                 ),
-              const SizedBox(height: 16),
-              const Text(
+              SizedBox(height: 16),
+              Text(
                 'Create or select a farm to get started.',
                 style: TextStyle(color: _textSub),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.addFarm),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: _green, foregroundColor: _white),
-                  child: const Text('+ Add Farm'),
+                  child: Text('+ Add Farm'),
                 ),
               ),
             ],
@@ -530,14 +530,14 @@ class DashboardScreen extends ConsumerWidget {
                             fontWeight: FontWeight.w900,
                             color: _textPrimary,
                         ),
-                      const SizedBox(height: 10),
-                      const Text(
+                      SizedBox(height: 10),
+                      Text(
                         'Track feed, growth, and profit easily.\nAdd a pond to get started.',
                           style: TextStyle(
                               fontSize: 14, color: _textSub, height: 1.5),
                           textAlign: TextAlign.center,
                         ),
-                      const SizedBox(height: 32),
+                      SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -637,8 +637,8 @@ class _Header extends StatelessWidget {
                 }),
                 const PopupMenuDivider(),
                 PopupMenuItem<String>(
-                  value: '__add__',
-                  child: Row(
+                  value = '__add__',
+                  child = Row(
                     children: [
                       Container(
                         width: 22,
@@ -661,9 +661,9 @@ class _Header extends StatelessWidget {
                 ),
               ],
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                crossAxisAlignment = CrossAxisAlignment.start,
+                mainAxisSize = MainAxisSize.min,
+                children = [
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -915,7 +915,7 @@ class _InsightCard extends StatelessWidget {
                     children: [
                       Text(
                         insight.title,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: _textPrimary,
@@ -924,7 +924,7 @@ class _InsightCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         insight.subtitle,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
                           color: _textSub,
                           height: 1.3,
@@ -963,8 +963,6 @@ class _PondCard extends StatelessWidget {
   const _PondCard({
     required this.row,
     required this.onTap,
-    this.onEdit,
-    this.onDelete,
   });
 
   @override
@@ -1093,7 +1091,7 @@ class _PondCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    )
   }
 
   Color _getStatusColor(String status) {

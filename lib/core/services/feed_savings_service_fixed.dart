@@ -5,6 +5,30 @@ import 'app_config_service.dart';
 import 'tray_service.dart';
 import 'pond_service.dart';
 
+/// Feed savings result for a pond
+class FeedSavingsResult {
+  final double moneySaved;
+  final double feedSavedKg;
+  final bool hasEnoughData;
+  final String? displayMessage;
+  final SavingsDisplayType displayType;
+
+  const FeedSavingsResult({
+    required this.moneySaved,
+    required this.feedSavedKg,
+    required this.hasEnoughData,
+    this.displayMessage,
+    required this.displayType,
+  });
+}
+
+enum SavingsDisplayType {
+  showSavings,
+  partialData,
+  noData,
+  hide,
+}
+
 /// Feed Savings calculation service
 /// Calculates money saved through optimized feeding vs baseline FCR
 class FeedSavingsService {
@@ -12,30 +36,6 @@ class FeedSavingsService {
   static const double _baselineFCR = 1.6;
 
   FeedSavingsService(this._supabase);
-
-  /// Feed savings result for a pond
-  class FeedSavingsResult {
-    final double moneySaved;
-    final double feedSavedKg;
-    final bool hasEnoughData;
-    final String? displayMessage;
-    final SavingsDisplayType displayType;
-
-    const FeedSavingsResult({
-      required this.moneySaved,
-      required this.feedSavedKg,
-      required this.hasEnoughData,
-      this.displayMessage,
-      required this.displayType,
-    });
-  }
-
-  enum SavingsDisplayType {
-    showSavings,
-    partialData,
-    noData,
-    hide,
-  }
 
   /// Calculate feed savings for a single pond
   Future<FeedSavingsResult> calculatePondSavings({
@@ -72,8 +72,8 @@ class FeedSavingsService {
       final samplingAvailable = await _hasSamplingData(pondId);
 
       // Confidence gate
-      final hasEnoughData = (doc >= 20) && 
-                           (trayLogsCount >= 3 || samplingAvailable);
+      final hasEnoughData =
+          (doc >= 20) && (trayLogsCount >= 3 || samplingAvailable);
 
       // Calculate savings
       final expectedFeed = currentBiomassKg * _baselineFCR;
@@ -91,7 +91,8 @@ class FeedSavingsService {
           moneySaved: moneySaved,
           feedSavedKg: feedSavedKg,
           hasEnoughData: true,
-          displayMessage: 'You saved ₹${_formatCurrency(moneySaved)} in feed so far',
+          displayMessage:
+              'You saved ₹${_formatCurrency(moneySaved)} in feed so far',
           displayType: SavingsDisplayType.showSavings,
         );
       } else if (doc >= 15 && !hasEnoughData) {
@@ -107,12 +108,17 @@ class FeedSavingsService {
           moneySaved: moneySaved,
           feedSavedKg: feedSavedKg,
           hasEnoughData: hasEnoughData,
-          displayMessage: moneySaved > 0 ? 'You saved ₹${_formatCurrency(moneySaved)} in feed so far' : null,
-          displayType: moneySaved > 0 ? SavingsDisplayType.showSavings : SavingsDisplayType.hide,
+          displayMessage: moneySaved > 0
+              ? 'You saved ₹${_formatCurrency(moneySaved)} in feed so far'
+              : null,
+          displayType: moneySaved > 0
+              ? SavingsDisplayType.showSavings
+              : SavingsDisplayType.hide,
         );
       }
     } catch (e) {
-      AppLogger.error('FeedSavingsService.calculatePondSavings failed for pond=$pondId', e);
+      AppLogger.error(
+          'FeedSavingsService.calculatePondSavings failed for pond=$pondId', e);
       return const FeedSavingsResult(
         moneySaved: 0,
         feedSavedKg: 0,
@@ -153,8 +159,8 @@ class FeedSavingsService {
       }
 
       // Confidence gate
-      final hasEnoughData = (avgDoc >= 20) && 
-                           (totalTrayLogs >= 3 || anySamplingAvailable);
+      final hasEnoughData =
+          (avgDoc >= 20) && (totalTrayLogs >= 3 || anySamplingAvailable);
 
       // Calculate savings
       final expectedFeed = totalBiomassKg * _baselineFCR;
@@ -172,7 +178,8 @@ class FeedSavingsService {
           moneySaved: moneySaved,
           feedSavedKg: feedSavedKg,
           hasEnoughData: true,
-          displayMessage: 'You saved ₹${_formatCurrency(moneySaved)} in feed so far',
+          displayMessage:
+              'You saved ₹${_formatCurrency(moneySaved)} in feed so far',
           displayType: SavingsDisplayType.showSavings,
         );
       } else if (avgDoc >= 15 && !hasEnoughData) {
@@ -188,8 +195,12 @@ class FeedSavingsService {
           moneySaved: moneySaved,
           feedSavedKg: feedSavedKg,
           hasEnoughData: hasEnoughData,
-          displayMessage: moneySaved > 0 ? 'You saved ₹${_formatCurrency(moneySaved)} in feed so far' : null,
-          displayType: moneySaved > 0 ? SavingsDisplayType.showSavings : SavingsDisplayType.hide,
+          displayMessage: moneySaved > 0
+              ? 'You saved ₹${_formatCurrency(moneySaved)} in feed so far'
+              : null,
+          displayType: moneySaved > 0
+              ? SavingsDisplayType.showSavings
+              : SavingsDisplayType.hide,
         );
       }
     } catch (e) {
@@ -206,8 +217,8 @@ class FeedSavingsService {
   /// Get savings color based on amount
   static String getSavingsColor(double moneySaved) {
     if (moneySaved >= 5000) return '#16A34A'; // strong green
-    if (moneySaved >= 2000) return '#22C55E'; // medium green  
-    if (moneySaved >= 500) return '#4ADE80';  // light green
+    if (moneySaved >= 2000) return '#22C55E'; // medium green
+    if (moneySaved >= 500) return '#4ADE80'; // light green
     return '#86EFAC'; // subtle green
   }
 

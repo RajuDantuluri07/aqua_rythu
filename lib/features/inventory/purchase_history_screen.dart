@@ -6,12 +6,14 @@ class PurchaseHistoryScreen extends StatefulWidget {
   final String itemId;
   final String itemName;
   final String unit;
+  final String packLabel;
 
   const PurchaseHistoryScreen({
     super.key,
     required this.itemId,
     required this.itemName,
     required this.unit,
+    this.packLabel = 'pack',
   });
 
   @override
@@ -123,6 +125,18 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
     final supplierName = purchase['supplier_name'] as String?;
     final invoiceNumber = purchase['invoice_number'] as String?;
     final notes = purchase['notes'] as String?;
+    final packs = (purchase['packs'] as num?)?.toDouble();
+    final packSizeAtPurchase = (purchase['pack_size_at_purchase'] as num?)?.toDouble();
+    final costPerPack = (purchase['cost_per_pack'] as num?)?.toDouble();
+
+    final hasPacks = packs != null && packs > 0 && packSizeAtPurchase != null;
+    final packWord = packs == 1.0 ? widget.packLabel : '${widget.packLabel}s';
+    final quantityLabel = hasPacks
+        ? '${_fmt(packs)} $packWord (${_fmt(quantity)} ${widget.unit})'
+        : '${_fmt(quantity)} ${widget.unit}';
+    final priceLabel = hasPacks && costPerPack != null
+        ? '₹${costPerPack.toStringAsFixed(0)}/${widget.packLabel}'
+        : '₹${pricePerUnit.toStringAsFixed(2)}/${widget.unit}';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -166,7 +180,7 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '₹${totalCost.toStringAsFixed(2)}',
+                    '₹${totalCost.toStringAsFixed(0)}',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -184,15 +198,15 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
                 Expanded(
                   child: _buildDetailItem(
                     'Quantity',
-                    '${quantity.toStringAsFixed(1)} ${widget.unit}',
+                    quantityLabel,
                     Icons.inventory_2,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildDetailItem(
-                    'Price per ${widget.unit}',
-                    '₹${pricePerUnit.toStringAsFixed(2)}',
+                    'Price',
+                    priceLabel,
                     Icons.price_check,
                   ),
                 ),
@@ -242,6 +256,9 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
       ),
     );
   }
+
+  String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
   Widget _buildDetailItem(String label, String value, IconData icon) {
     return Column(

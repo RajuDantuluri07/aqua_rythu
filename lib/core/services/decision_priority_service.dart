@@ -272,8 +272,8 @@ class DecisionPriorityService {
       title: '🚨 Safety Alert: ${primaryIssue.type.name}',
       description: primaryIssue.description,
       confidenceRange: const ConfidenceRange(0.8, 0.95),
-      valueRange:
-          const ValueRange(0, 0), // Safety decisions don't have direct monetary value
+      valueRange: const ValueRange(
+          0, 0), // Safety decisions don't have direct monetary value
       urgency: DecisionUrgency.urgent,
       actionItems: [
         primaryIssue.immediateAction,
@@ -298,7 +298,7 @@ class DecisionPriorityService {
       type: SafeDecisionType.maintenance,
       title: '📋 Daily Decision Limit Reached',
       description:
-          'Maximum decisions (${SafeDecisionEngine.MAX_DECISIONS_PER_DAY}) reached for today. Preventing decision fatigue.',
+          'Maximum decisions (${SafeDecisionEngine.maxDecisionsPerDay}) reached for today. Preventing decision fatigue.',
       confidenceRange: ConfidenceRange(0.9, 1.0),
       valueRange: ValueRange(0, 0),
       urgency: DecisionUrgency.low,

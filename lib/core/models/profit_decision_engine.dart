@@ -555,6 +555,21 @@ class ProfitDecision {
 
     return buffer.toString();
   }
+
+  /// Create a copy with updated values
+  ProfitDecision copyWith({
+    FarmProfile? farmProfile,
+    Map<ProfitDecisionType, ProfitRecommendation>? decisions,
+    DateTime? generatedAt,
+    double? overallConfidence,
+  }) {
+    return ProfitDecision(
+      farmProfile: farmProfile ?? this.farmProfile,
+      decisions: decisions ?? this.decisions,
+      generatedAt: generatedAt ?? this.generatedAt,
+      overallConfidence: overallConfidence ?? this.overallConfidence,
+    );
+  }
 }
 
 class ProfitRecommendation {

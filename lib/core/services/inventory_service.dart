@@ -15,23 +15,33 @@ class InventoryService {
     }
   }
 
-  // Get inventory stock for a specific crop/farm
-  Future<List<Map<String, dynamic>>> getInventoryStock(
-      String? cropId, String? farmId) async {
+  // Get inventory stock for a farm (farm-level items only: crop_id IS NULL)
+  Future<List<Map<String, dynamic>>> getInventoryStock(String farmId) async {
     try {
-      var query = supabase.from('inventory_stock_view').select('*');
-
-      if (cropId != null) {
-        query = query.eq('crop_id', cropId);
-      }
-      if (farmId != null) {
-        query = query.eq('farm_id', farmId);
-      }
-
-      final result = await query.order('category');
+      final result = await supabase
+          .from('inventory_stock_view')
+          .select('*')
+          .eq('farm_id', farmId)
+          .isFilter('crop_id', null)
+          .order('category');
       return List<Map<String, dynamic>>.from(result);
     } catch (e) {
       AppLogger.error('Failed to get inventory stock: $e');
+      return [];
+    }
+  }
+
+  // Get per-pond feed usage breakdown for a feed item
+  Future<List<Map<String, dynamic>>> getPondUsageBreakdown(String itemId) async {
+    try {
+      final result = await supabase
+          .from('inventory_pond_usage_view')
+          .select('*')
+          .eq('item_id', itemId)
+          .order('total_used', ascending: false);
+      return List<Map<String, dynamic>>.from(result);
+    } catch (e) {
+      AppLogger.error('Failed to get pond usage breakdown: $e');
       return [];
     }
   }
@@ -67,13 +77,14 @@ class InventoryService {
     }
   }
 
-  // Check if inventory is setup for a crop
-  Future<bool> isInventorySetupForCrop(String cropId) async {
+  // Check if inventory is setup for a farm
+  Future<bool> isInventorySetupForFarm(String farmId) async {
     try {
       final result = await supabase
           .from('inventory_items')
           .select('id')
-          .eq('crop_id', cropId);
+          .eq('farm_id', farmId)
+          .isFilter('crop_id', null);
       return (result as List?)?.isNotEmpty ?? false;
     } catch (e) {
       AppLogger.error('Failed to check inventory setup: $e');
@@ -81,28 +92,32 @@ class InventoryService {
     }
   }
 
-  // Get feed item for a crop
-  Future<Map<String, dynamic>?> getFeedItemForCrop(String cropId) async {
+  // Get farm-level feed item
+  Future<Map<String, dynamic>?> getFeedItemForFarm(String farmId) async {
     try {
       final result = await supabase
           .from('inventory_items')
           .select('*')
-          .eq('crop_id', cropId)
+          .eq('farm_id', farmId)
           .eq('category', 'feed')
           .eq('is_auto_tracked', true)
+          .isFilter('crop_id', null)
           .maybeSingle();
       return result;
     } catch (e) {
-      AppLogger.error('Failed to get feed item for crop: $e');
+      AppLogger.error('Failed to get feed item for farm: $e');
       return null;
     }
   }
 
-  // Add stock to inventory and record purchase
+  // Add stock to inventory and record purchase.
+  // Pass either (quantity + pricePerUnit) for raw, or (packs + costPerPack) for pack-based.
   Future<void> addStock({
     required String itemId,
-    required double quantity,
-    required double pricePerUnit,
+    double? quantity,
+    double? pricePerUnit,
+    double? packs,
+    double? costPerPack,
     DateTime? purchaseDate,
     String? supplierName,
     String? invoiceNumber,
@@ -117,11 +132,29 @@ class InventoryService {
         'p_supplier_name': supplierName,
         'p_invoice_number': invoiceNumber,
         'p_notes': notes,
+        'p_packs': packs,
+        'p_cost_per_pack': costPerPack,
       });
-      AppLogger.info('Added $quantity units to inventory item $itemId');
+      AppLogger.info(
+          'Added stock to $itemId (packs=$packs, qty=$quantity)');
     } catch (e) {
       AppLogger.error('Failed to add stock: $e');
       rethrow;
+    }
+  }
+
+  // Fetch a single item from the stock view (with pack fields).
+  Future<Map<String, dynamic>?> getStockItem(String itemId) async {
+    try {
+      final result = await supabase
+          .from('inventory_stock_view')
+          .select('*')
+          .eq('id', itemId)
+          .maybeSingle();
+      return result;
+    } catch (e) {
+      AppLogger.error('Failed to get stock item: $e');
+      return null;
     }
   }
 

@@ -144,7 +144,7 @@ class FeedBaseResolver {
       },
     );
 
-    return BaseFeedResult(
+    return const BaseFeedResult(
       feedAmount: fallbackFeed,
       source: BaseFeedSource.fallback,
       explanation:

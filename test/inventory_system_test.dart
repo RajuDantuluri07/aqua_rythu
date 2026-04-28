@@ -16,7 +16,7 @@ void main() {
         expect(expectedStock, equals(40.0));
 
         // Verify stock status
-        final stockStatus = expectedStock < 0
+        const stockStatus = expectedStock < 0
             ? 'NEGATIVE'
             : expectedStock <= 2
                 ? 'LOW'
@@ -35,7 +35,7 @@ void main() {
         expect(difference, equals(-5.0));
 
         // Verify loss status (difference < -2 = LOSS)
-        final status = difference < -2
+        const status = difference < -2
             ? 'LOSS'
             : difference > 2
                 ? 'EXTRA'

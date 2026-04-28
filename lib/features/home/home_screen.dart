@@ -8,7 +8,6 @@ import '../feed/feed_history_provider.dart';
 import '../growth/growth_provider.dart';
 import '../pond/enums/seed_type.dart';
 import '../tray/tray_provider.dart';
-import '../upgrade/subscription_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../core/language/app_localizations.dart';
@@ -372,6 +371,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     pondCount: ponds.length,
                     onIconSecretTap: _handleFarmNameTap,
                     onNameTap: () => FarmSwitcherSheet.show(context),
+                    onUpgradeTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const UpgradeToProScreen()),
+                    ),
                   ),
                   _HeroStrip(
                     totalFeed: totalFeed,
@@ -442,6 +446,7 @@ class _AppBar extends StatelessWidget {
   final int pondCount;
   final VoidCallback onNameTap;
   final VoidCallback onIconSecretTap;
+  final VoidCallback onUpgradeTap;
 
   const _AppBar({
     required this.farmName,
@@ -449,6 +454,7 @@ class _AppBar extends StatelessWidget {
     required this.pondCount,
     required this.onNameTap,
     required this.onIconSecretTap,
+    required this.onUpgradeTap,
   });
 
   @override
@@ -516,6 +522,34 @@ class _AppBar extends StatelessWidget {
               ),
             ),
           ),
+          GestureDetector(
+            onTap: onUpgradeTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8A33D),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.workspace_premium_rounded,
+                      size: 13, color: Colors.black),
+                  SizedBox(width: 4),
+                  Text(
+                    'PRO',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           _BellButton(),
         ],
       ),

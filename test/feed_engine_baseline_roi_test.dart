@@ -405,7 +405,7 @@ void main() {
 
   group('Feed Pipeline Integration Tests', () {
     test('Case 1: Normal optimization pipeline', () async {
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-1',
         doc: 45,
         shrimpCount: 10000,
@@ -432,7 +432,7 @@ void main() {
     });
 
     test('Case 2: Feed increased scenario', () async {
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-2',
         doc: 60,
         shrimpCount: 10000,
@@ -456,7 +456,7 @@ void main() {
     });
 
     test('Case 3: No data - low confidence', () async {
-      final pond = PondData(
+      const pond = PondData(
         id: 'test-pond-3',
         doc: 30,
         shrimpCount: 10000,
@@ -481,7 +481,7 @@ void main() {
     });
 
     test('Pond data validation', () {
-      final invalidPond = PondData(
+      const invalidPond = PondData(
         id: '', // Invalid ID
         doc: -1, // Invalid DOC
         shrimpCount: 0, // Invalid count
@@ -497,7 +497,7 @@ void main() {
     });
 
     test('Error handling in pipeline', () async {
-      final invalidPond = PondData(
+      const invalidPond = PondData(
         id: 'test-pond-error',
         doc: 45,
         shrimpCount: -1000, // Should cause error

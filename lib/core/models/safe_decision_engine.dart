@@ -8,12 +8,12 @@ import 'real_world_anchors.dart';
 import 'growth_curve.dart';
 
 class SafeDecisionEngine {
-  static const double MAX_FEED_CHANGE_PER_DAY = 0.10; // 10% max change per day
-  static const double MAX_FEED_CHANGE_PER_WEEK = 0.20; // 20% max change per week
-  static const double MIN_CONFIDENCE_FOR_STRONG_ACTION = 0.8;
-  static const double MIN_CONFIDENCE_FOR_MODERATE_ACTION = 0.6;
-  static const int MAX_DECISIONS_PER_DAY = 3; // Prevent decision fatigue
-  
+  static const double maxFeedChangePerDay = 0.10; // 10% max change per day
+  static const double maxFeedChangePerWeek = 0.20; // 20% max change per week
+  static const double minConfidenceForStrongAction = 0.8;
+  static const double minConfidenceForModerateAction = 0.6;
+  static const int maxDecisionsPerDay = 3; // Prevent decision fatigue
+
   /// Generate safe profit decisions with ranges and constraints
   static SafeProfitDecision generateSafeDecision({
     required FarmAnchors anchors,
@@ -22,7 +22,7 @@ class SafeDecisionEngine {
     required DecisionHistory history,
   }) {
     final decisions = <SafeDecisionType, SafeRecommendation>{};
-    
+
     // Check if farm is stable enough for decisions
     if (!anchors.isStable) {
       return SafeProfitDecision(
@@ -31,11 +31,16 @@ class SafeDecisionEngine {
         primaryDecision: const SafePrimaryDecision(
           type: SafeDecisionType.maintenance,
           title: '🔒 Farm Stability Mode',
-          description: 'Farm conditions require stabilization. Focus on basic operations.',
+          description:
+              'Farm conditions require stabilization. Focus on basic operations.',
           confidenceRange: ConfidenceRange(0.3, 0.5),
           valueRange: ValueRange(0, 0),
           urgency: DecisionUrgency.low,
-          actionItems: ['Monitor water quality daily', 'Check shrimp health', 'Maintain current feeding'],
+          actionItems: [
+            'Monitor water quality daily',
+            'Check shrimp health',
+            'Maintain current feeding'
+          ],
           safetyConstraints: ['No major changes until stability improves'],
           timeToImplement: Duration(days: 7),
         ),
@@ -46,17 +51,24 @@ class SafeDecisionEngine {
 
     // Generate safe feed decisions
     decisions[SafeDecisionType.feedOptimization] = _generateSafeFeedDecision(
-      anchors, pondData, history,
+      anchors,
+      pondData,
+      history,
     );
 
     // Generate safe harvest decisions
     decisions[SafeDecisionType.harvestTiming] = _generateSafeHarvestDecision(
-      anchors, pondData, marketConditions, history,
+      anchors,
+      pondData,
+      marketConditions,
+      history,
     );
 
     // Generate safe cost-benefit decisions
     decisions[SafeDecisionType.costOptimization] = _generateSafeCostDecision(
-      anchors, pondData, history,
+      anchors,
+      pondData,
+      history,
     );
 
     // Select primary decision based on priority and safety
@@ -80,7 +92,7 @@ class SafeDecisionEngine {
     final feedAnalysis = <String, dynamic>{};
     final recommendations = <String>[];
     final safetyConstraints = <String>[];
-    
+
     double totalPotentialSavings = 0;
     const confidenceRange = ConfidenceRange(0.4, 0.8);
 
@@ -91,23 +103,25 @@ class SafeDecisionEngine {
       final expectedFcr = pond.expectedFcr!;
       final fcrGap = currentFcr - expectedFcr;
 
-      if (fcrGap > 0.2) { // Significant FCR improvement needed
+      if (fcrGap > 0.2) {
+        // Significant FCR improvement needed
         // Calculate safe feed reduction range
         final currentFeed = pond.todayFeed ?? 0;
-        final maxReduction = currentFeed * MAX_FEED_CHANGE_PER_DAY;
+        final maxReduction = currentFeed * maxFeedChangePerDay;
         final targetReduction = min(maxReduction, currentFeed * fcrGap * 0.5);
-        
+
         final minSavings = targetReduction * 0.5 * 35; // Conservative estimate
         final maxSavings = targetReduction * 35;
-        
+
         totalPotentialSavings += (minSavings + maxSavings) / 2;
-        
+
         feedAnalysis[pond.pondId] = {
           'currentFcr': currentFcr,
           'expectedFcr': expectedFcr,
           'fcrGap': fcrGap,
           'currentFeed': currentFeed,
-          'recommendedReduction': ValueRange(targetReduction * 0.5, targetReduction.toDouble()),
+          'recommendedReduction':
+              ValueRange(targetReduction * 0.5, targetReduction.toDouble()),
           'potentialSavings': ValueRange(minSavings, maxSavings),
         };
 
@@ -120,23 +134,28 @@ class SafeDecisionEngine {
         ]);
 
         if (targetReduction > 0) {
-          recommendations.add('${pond.pondName}: Reduce feed by ${(targetReduction * 0.5).toStringAsFixed(0)}-${targetReduction.toStringAsFixed(0)}kg/day');
+          recommendations.add(
+              '${pond.pondName}: Reduce feed by ${(targetReduction * 0.5).toStringAsFixed(0)}-${targetReduction.toStringAsFixed(0)}kg/day');
         }
       }
     }
 
     // Adjust confidence based on farm stability
-    final adjustedConfidence = confidenceRange.adjustForStability(anchors.overallStability);
+    final adjustedConfidence =
+        confidenceRange.adjustForStability(anchors.overallStability);
 
     return SafeRecommendation(
       type: SafeDecisionType.feedOptimization,
       title: 'Safe Feed Optimization',
-      description: totalPotentialSavings > 0 
-          ? 'Potential savings: ₹${(totalPotentialSavings/1000).toStringAsFixed(0)}-${((totalPotentialSavings*1.5)/1000).toStringAsFixed(0)}K through gradual feed optimization'
+      description: totalPotentialSavings > 0
+          ? 'Potential savings: ₹${(totalPotentialSavings / 1000).toStringAsFixed(0)}-${((totalPotentialSavings * 1.5) / 1000).toStringAsFixed(0)}K through gradual feed optimization'
           : 'Feed efficiency is within acceptable range. Monitor current practices.',
       confidenceRange: adjustedConfidence,
-      valueRange: ValueRange(totalPotentialSavings * 0.7, totalPotentialSavings * 1.3),
-      urgency: totalPotentialSavings > 5000 ? DecisionUrgency.high : DecisionUrgency.medium,
+      valueRange:
+          ValueRange(totalPotentialSavings * 0.7, totalPotentialSavings * 1.3),
+      urgency: totalPotentialSavings > 5000
+          ? DecisionUrgency.high
+          : DecisionUrgency.medium,
       actionItems: recommendations,
       safetyConstraints: safetyConstraints,
       implementationCost: 0,
@@ -154,7 +173,7 @@ class SafeDecisionEngine {
     final harvestAnalysis = <String, dynamic>{};
     final recommendations = <String>[];
     final safetyConstraints = <String>[];
-    
+
     double totalPotentialRevenue = 0;
     const confidenceRange = ConfidenceRange(0.5, 0.9);
 
@@ -163,21 +182,25 @@ class SafeDecisionEngine {
 
       final currentAbw = pond.currentAbw!;
       final currentBiomass = pond.estimatedBiomass ?? 0;
-      
+
       // Calculate safe harvest window (not exact timing)
-      final minDaysToHarvest = max(0, _calculateDaysToTargetSize(pond, 18.0) - 3);
+      final minDaysToHarvest =
+          max(0, _calculateDaysToTargetSize(pond, 18.0) - 3);
       final maxDaysToHarvest = _calculateDaysToTargetSize(pond, 22.0) + 3;
-      
+
       // Calculate revenue range
-      final minRevenue = currentBiomass * marketConditions.currentPrice * 0.95; // 5% market fluctuation
+      final minRevenue = currentBiomass *
+          marketConditions.currentPrice *
+          0.95; // 5% market fluctuation
       final maxRevenue = currentBiomass * marketConditions.forecastPrice * 1.05;
-      
+
       totalPotentialRevenue += (minRevenue + maxRevenue) / 2;
 
       harvestAnalysis[pond.pondId] = {
         'currentAbw': currentAbw,
         'currentBiomass': currentBiomass,
-        'harvestWindow': ValueRange(minDaysToHarvest, maxDaysToHarvest),
+        'harvestWindow': ValueRange(
+            minDaysToHarvest.toDouble(), maxDaysToHarvest.toDouble()),
         'revenueRange': ValueRange(minRevenue, maxRevenue),
       };
 
@@ -190,27 +213,34 @@ class SafeDecisionEngine {
       ]);
 
       if (currentAbw >= 18.0 && minDaysToHarvest <= 7) {
-        recommendations.add('${pond.pondName}: Harvest ready - window $minDaysToHarvest-$maxDaysToHarvest days');
+        recommendations.add(
+            '${pond.pondName}: Harvest ready - window $minDaysToHarvest-$maxDaysToHarvest days');
       } else if (minDaysToHarvest <= 21) {
-        recommendations.add('${pond.pondName}: Consider harvest in $minDaysToHarvest-${maxDaysToHarvest > 14 ? 14 : maxDaysToHarvest} days');
+        recommendations.add(
+            '${pond.pondName}: Consider harvest in $minDaysToHarvest-${maxDaysToHarvest > 14 ? 14 : maxDaysToHarvest} days');
       }
     }
 
     // Adjust confidence based on market volatility
-    final marketVolatility = (marketConditions.forecastPrice - marketConditions.currentPrice) / marketConditions.currentPrice;
-    final adjustedConfidence = marketVolatility > 0.1 
+    final marketVolatility =
+        (marketConditions.forecastPrice - marketConditions.currentPrice) /
+            marketConditions.currentPrice;
+    final adjustedConfidence = marketVolatility > 0.1
         ? ConfidenceRange(confidenceRange.min * 0.8, confidenceRange.max * 0.8)
         : confidenceRange;
 
     return SafeRecommendation(
       type: SafeDecisionType.harvestTiming,
       title: 'Safe Harvest Planning',
-      description: totalPotentialRevenue > 0 
-          ? 'Revenue opportunity: ₹${(totalPotentialRevenue/100000).toStringAsFixed(1)}-${((totalPotentialRevenue*1.2)/100000).toStringAsFixed(1)}L with optimal timing'
+      description: totalPotentialRevenue > 0
+          ? 'Revenue opportunity: ₹${(totalPotentialRevenue / 100000).toStringAsFixed(1)}-${((totalPotentialRevenue * 1.2) / 100000).toStringAsFixed(1)}L with optimal timing'
           : 'Monitor growth for optimal harvest timing.',
       confidenceRange: adjustedConfidence,
-      valueRange: ValueRange(totalPotentialRevenue * 0.8, totalPotentialRevenue * 1.2),
-      urgency: recommendations.isNotEmpty ? DecisionUrgency.medium : DecisionUrgency.low,
+      valueRange:
+          ValueRange(totalPotentialRevenue * 0.8, totalPotentialRevenue * 1.2),
+      urgency: recommendations.isNotEmpty
+          ? DecisionUrgency.medium
+          : DecisionUrgency.low,
       actionItems: recommendations,
       safetyConstraints: safetyConstraints,
       implementationCost: 5000, // Harvest preparation costs
@@ -227,7 +257,7 @@ class SafeDecisionEngine {
     final costAnalysis = <String, dynamic>{};
     final recommendations = <String>[];
     final safetyConstraints = <String>[];
-    
+
     double totalPotentialSavings = 0;
     const confidenceRange = ConfidenceRange(0.3, 0.7);
 
@@ -242,12 +272,14 @@ class SafeDecisionEngine {
 
     // Analyze cost optimization opportunities with safety constraints
     if (totalOtherCosts > totalFeedCost * 0.4) {
-      final potentialSavings = totalOtherCosts * 0.1; // Conservative 10% reduction
+      final potentialSavings =
+          totalOtherCosts * 0.1; // Conservative 10% reduction
       totalPotentialSavings += potentialSavings;
-      
+
       costAnalysis['otherCosts'] = {
         'current': totalOtherCosts,
-        'potentialSavings': ValueRange(potentialSavings * 0.5, potentialSavings * 1.5),
+        'potentialSavings':
+            ValueRange(potentialSavings * 0.5, potentialSavings * 1.5),
       };
 
       safetyConstraints.addAll([
@@ -257,18 +289,22 @@ class SafeDecisionEngine {
         'Review labor contracts before changes',
       ]);
 
-      recommendations.add('Review operational costs for ${((potentialSavings/1000).toStringAsFixed(0))}-${(((potentialSavings*1.5)/1000).toStringAsFixed(0)}K potential savings');
+      recommendations.add(
+          'Review operational costs for ${((potentialSavings / 1000).toStringAsFixed(0))}-${(((potentialSavings * 1.5) / 1000).toStringAsFixed(0))}K potential savings');
     }
 
     return SafeRecommendation(
       type: SafeDecisionType.costOptimization,
       title: 'Safe Cost Management',
-      description: totalPotentialSavings > 0 
-          ? 'Cost optimization opportunity: ₹${(totalPotentialSavings/1000).toStringAsFixed(0)}-${((totalPotentialSavings*1.5)/1000).toStringAsFixed(0)}K'
+      description: totalPotentialSavings > 0
+          ? 'Cost optimization opportunity: ₹${(totalPotentialSavings / 1000).toStringAsFixed(0)}-${((totalPotentialSavings * 1.5) / 1000).toStringAsFixed(0)}K'
           : 'Cost structure is optimal. Maintain current operations.',
       confidenceRange: confidenceRange,
-      valueRange: ValueRange(totalPotentialSavings * 0.6, totalPotentialSavings * 1.4),
-      urgency: totalPotentialSavings > 3000 ? DecisionUrgency.medium : DecisionUrgency.low,
+      valueRange:
+          ValueRange(totalPotentialSavings * 0.6, totalPotentialSavings * 1.4),
+      urgency: totalPotentialSavings > 3000
+          ? DecisionUrgency.medium
+          : DecisionUrgency.low,
       actionItems: recommendations,
       safetyConstraints: safetyConstraints,
       implementationCost: 1000, // Analysis and planning costs
@@ -290,7 +326,8 @@ class SafeDecisionEngine {
 
     for (final type in priorityOrder) {
       final decision = decisions[type];
-      if (decision != null && decision.confidenceRange.min >= MIN_CONFIDENCE_FOR_MODERATE_ACTION) {
+      if (decision != null &&
+          decision.confidenceRange.min >= minConfidenceForModerateAction) {
         return SafePrimaryDecision(
           type: type,
           title: decision.title,
@@ -309,11 +346,16 @@ class SafeDecisionEngine {
     return const SafePrimaryDecision(
       type: SafeDecisionType.maintenance,
       title: '📊 Monitor Farm Performance',
-      description: 'All parameters within safe ranges. Continue current practices with regular monitoring.',
+      description:
+          'All parameters within safe ranges. Continue current practices with regular monitoring.',
       confidenceRange: ConfidenceRange(0.7, 0.9),
       valueRange: ValueRange(0, 0),
       urgency: DecisionUrgency.low,
-      actionItems: ['Continue regular monitoring', 'Maintain current practices', 'Watch for changes'],
+      actionItems: [
+        'Continue regular monitoring',
+        'Maintain current practices',
+        'Watch for changes'
+      ],
       safetyConstraints: ['No major changes without consultation'],
       timeToImplement: Duration(days: 7),
     );
@@ -329,7 +371,7 @@ class SafeDecisionEngine {
     // Adjust based on decision confidence
     if (decisions.isNotEmpty) {
       final avgConfidence = decisions.values
-          .fold<double>(0, (sum, d) => sum + d.confidenceRange.average());
+          .fold<double>(0, (sum, d) => sum + d.confidenceRange.average);
       safetyScore = (safetyScore + avgConfidence) / 2;
     }
 
@@ -337,12 +379,13 @@ class SafeDecisionEngine {
   }
 
   // Helper methods
-  static int _calculateDaysToTargetSize(PondProfitData pond, double targetSize) {
+  static int _calculateDaysToTargetSize(
+      PondProfitData pond, double targetSize) {
     if (pond.currentAbw == null) return 999;
-    
+
     final currentAbw = pond.currentAbw!;
     final growthRate = GrowthCurve.getGrowthRate(pond.doc);
-    
+
     if (growthRate <= 0) return 999;
     return ((targetSize - currentAbw) / growthRate).ceil();
   }
@@ -457,14 +500,14 @@ class SafePrimaryDecision {
   /// Get formatted value range text
   String get valueRangeText {
     if (valueRange.max <= 0) return 'No direct value';
-    
+
     final min = valueRange.min;
     final max = valueRange.max;
-    
+
     if (min >= 100000) {
-      return '₹${(min/100000).toStringAsFixed(1)}-${(max/100000).toStringAsFixed(1)}L';
+      return '₹${(min / 100000).toStringAsFixed(1)}-${(max / 100000).toStringAsFixed(1)}L';
     } else if (min >= 1000) {
-      return '₹${(min/1000).toStringAsFixed(1)}-${(max/1000).toStringAsFixed(1)}K';
+      return '₹${(min / 1000).toStringAsFixed(1)}-${(max / 1000).toStringAsFixed(1)}K';
     } else {
       return '₹${min.toStringAsFixed(0)}-${max.toStringAsFixed(0)}';
     }
@@ -511,7 +554,8 @@ class DecisionHistory {
     required this.decisionsToday,
   });
 
-  bool get canMakeMoreDecisions => decisionsToday < SafeDecisionEngine.MAX_DECISIONS_PER_DAY;
+  bool get canMakeMoreDecisions =>
+      decisionsToday < SafeDecisionEngine.maxDecisionsPerDay;
 
   factory DecisionHistory.empty() {
     return const DecisionHistory(decisions: [], decisionsToday: 0);

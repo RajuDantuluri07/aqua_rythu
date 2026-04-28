@@ -10,7 +10,6 @@ const _accent = Color(0xFF22C55E);
 const _muted = Color(0xFF64748B);
 const _listInk = Color(0xFF1E293B);
 const _strike = Color(0xFF94A3B8);
-const _lockRed = Color(0xFFEF4444);
 const _btnFree = Color(0xFFF1F5F9);
 const _toggleBg = Color(0xFFF1F5F9);
 
@@ -61,8 +60,6 @@ class _State extends ConsumerState<UpgradeToProScreen> {
                 style: TextStyle(fontSize: 14, color: _muted, height: 1.4),
               ),
               const SizedBox(height: 22),
-              _billingToggle(),
-              const SizedBox(height: 24),
               isWide
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,13 +198,6 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             'Sampling entry (ABW)',
             'Basic dashboard',
           ]),
-          _lockedList(const [
-            'Smart feed adjustment',
-            'FCR & savings tracking',
-            'Growth intelligence',
-            'Alerts & risk detection',
-            'Reports & insights',
-          ]),
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
@@ -216,7 +206,7 @@ class _State extends ConsumerState<UpgradeToProScreen> {
               onPressed: () => Navigator.of(context).pop(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _btnFree,
-                foregroundColor: Color(0xFF1E293B),
+                foregroundColor: const Color(0xFF1E293B),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -250,7 +240,6 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             'Feed savings & ₹ impact tracking',
             'FCR monitoring & improvement',
             'Growth intelligence (ideal vs actual)',
-            'Disease & risk alerts',
             'Multi-pond comparison',
             'Full crop report (PDF)',
           ]
@@ -285,6 +274,8 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(child: _billingToggle()),
+                const SizedBox(height: 14),
                 Text(
                   title,
                   style: const TextStyle(
@@ -436,33 +427,4 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     );
   }
 
-  Widget _lockedList(List<String> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: items
-          .map(
-            (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Icon(Icons.lock_rounded, size: 15, color: _lockRed),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      f,
-                      style: const TextStyle(
-                          fontSize: 13.5, color: _lockRed, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
 }

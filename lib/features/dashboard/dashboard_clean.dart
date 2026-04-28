@@ -23,6 +23,44 @@ const _redLight = Color(0xFFFEF2F2);
 const _amberLight = Color(0xFFFFFBEB);
 
 // ══════════════════════════════════════════════════
+
+// ── Data model for pond rows ───────────────────────────────────────
+class _PondRow {
+  final String id;
+  final String name;
+  final int doc;
+  final double abw;
+  final double fcr;
+  final double biomass;
+  final double todayFeed;
+  final double yesterdayFeed;
+  final String status;
+  final bool fcrTrendUp;
+  final bool feedTrendUp;
+  final bool hasAbwData;
+  final double area;
+  final int seedCount;
+  final PondViewState feedState;
+
+  const _PondRow({
+    required this.id,
+    required this.name,
+    required this.doc,
+    required this.abw,
+    required this.fcr,
+    required this.biomass,
+    required this.todayFeed,
+    required this.yesterdayFeed,
+    required this.status,
+    required this.fcrTrendUp,
+    required this.feedTrendUp,
+    required this.hasAbwData,
+    required this.area,
+    required this.seedCount,
+    required this.feedState,
+  });
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -208,7 +246,7 @@ class DashboardScreen extends ConsumerWidget {
                         ),
 
                         // ── Feed Savings Card ─────────────────────────────────────
-                        FutureBuilder<FeedSavingsService.FeedSavingsResult>(
+                        FutureBuilder<FeedSavingsResult>(
                           future: savingsResultFuture,
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -218,15 +256,14 @@ class DashboardScreen extends ConsumerWidget {
                                   child: CircularProgressIndicator(
                                     color: _green, strokeWidth: 2.5),
                                 ),
-                              ),
-                            );
+                              );
                             }
 
-                            final savingsResult = snapshot.data ?? const FeedSavingsService.FeedSavingsResult(
+                            final savingsResult = snapshot.data ?? const FeedSavingsResult(
                               moneySaved: 0,
                               feedSavedKg: 0,
                               hasEnoughData: false,
-                              displayType: FeedSavingsService.SavingsDisplayType.hide,
+                              displayType: SavingsDisplayType.hide,
                             );
 
                             final authState = ref.watch(authProvider);

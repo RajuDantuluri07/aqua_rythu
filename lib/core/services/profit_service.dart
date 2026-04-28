@@ -11,20 +11,30 @@ class ProfitService {
   final InventoryService _inventoryService = InventoryService();
   final HarvestService _harvestService = HarvestService();
 
-  /// Calculate daily feed cost for a crop
-  Future<double> getDailyFeedCost(String cropId) async {
+  /// Calculate daily feed cost — looks up farm-level feed item via pondId or farmId
+  Future<double> getDailyFeedCost(String cropId, {String? farmId}) async {
     try {
-      // Get the feed item for this crop
-      final feedItem = await _inventoryService.getFeedItemForCrop(cropId);
-      if (feedItem == null) {
-        AppLogger.warn('No feed item found for crop: $cropId');
+      String? resolvedFarmId = farmId;
+      if (resolvedFarmId == null) {
+        final row = await supabase
+            .from('ponds')
+            .select('farm_id')
+            .eq('id', cropId)
+            .maybeSingle();
+        resolvedFarmId = row?['farm_id'] as String?;
+      }
+      if (resolvedFarmId == null) {
+        AppLogger.warn('Cannot resolve farm for cropId: $cropId');
         return 0.0;
       }
 
-      // Calculate daily feed cost using inventory service
-      final dailyFeedCost =
-          await _inventoryService.calculateDailyFeedCost(feedItem['id']);
-      return dailyFeedCost;
+      final feedItem = await _inventoryService.getFeedItemForFarm(resolvedFarmId);
+      if (feedItem == null) {
+        AppLogger.warn('No feed item found for farm: $resolvedFarmId');
+        return 0.0;
+      }
+
+      return await _inventoryService.calculateDailyFeedCost(feedItem['id']);
     } catch (e) {
       AppLogger.error('Failed to get daily feed cost: $e');
       return 0.0;

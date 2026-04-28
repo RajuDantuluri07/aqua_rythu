@@ -34,15 +34,12 @@ class FeedService {
       await supabase.from('feed_logs').insert({
         'pond_id': pondId,
         'feed_given': actualFeedGiven,
-        'feed_quantity': actualFeedGiven, // For inventory auto-deduction
-        'feed_type': 'feed', // Default feed type for inventory
         'base_feed': baseFeed,
         'created_at': date.toIso8601String(),
         'doc': doc,
         if (leftoverPercent != null) 'tray_leftover': leftoverPercent,
         if (stockingType != null) 'stocking_type': stockingType,
         if (density != null) 'density': density,
-        'engine_version': engineVersion,
       });
     });
   }
@@ -50,12 +47,19 @@ class FeedService {
   /// Check inventory stock and log warnings for negative/low stock
   Future<void> _checkInventoryStock(String pondId, double feedAmount) async {
     try {
-      // Get feed item for this pond
-      final feedItem = await _inventoryService.getFeedItemForCrop(pondId);
-      if (feedItem == null) return; // No inventory setup, skip check
+      // Resolve farm_id from pond
+      final pondRow = await supabase
+          .from('ponds')
+          .select('farm_id')
+          .eq('id', pondId)
+          .maybeSingle();
+      final farmId = pondRow?['farm_id'] as String?;
+      if (farmId == null) return;
 
-      // Get current stock
-      final stock = await _inventoryService.getInventoryStock(pondId, null);
+      final feedItem = await _inventoryService.getFeedItemForFarm(farmId);
+      if (feedItem == null) return;
+
+      final stock = await _inventoryService.getInventoryStock(farmId);
       final feedStock = stock.firstWhere(
         (item) => item['category'] == 'feed' && item['is_auto_tracked'] == true,
         orElse: () => <String, dynamic>{},
@@ -411,13 +415,10 @@ class FeedService {
       await supabase.from('feed_logs').insert({
         'pond_id': pondId,
         'feed_given': amount,
-        'feed_quantity': amount, // For inventory auto-deduction
-        'feed_type': 'feed', // Default feed type for inventory
         'created_at': DateTime.now().toIso8601String(),
         'doc': doc,
         'round': round,
         'is_manual': isManual,
-        'engine_version': 'v1',
       });
     });
   }

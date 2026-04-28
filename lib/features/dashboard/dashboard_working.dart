@@ -6,7 +6,6 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
-import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
 import 'package:aqua_rythu/core/services/feed_savings_service_fixed.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -162,7 +161,7 @@ class DashboardScreen extends ConsumerWidget {
             rows.map((r) => r.doc).reduce((a, b) => a + b) ~/ rows.length;
         
         // Get feed price from config
-        final feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
+        const feedPricePerKg = kFeedCostPerKg; // Use constant for now - can be replaced with config later
         
         // Calculate farm-level savings
         final feedSavingsService = FeedSavingsService(Supabase.instance.client);
@@ -290,7 +289,7 @@ class DashboardScreen extends ConsumerWidget {
                                                   .showSnackBar(
                                                             content:
                                                                 Text('Failed to delete: $e')),
-                                                      );
+                                                      )
                                       }
                                     }
                                   },
@@ -386,7 +385,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _loadingView() {
     return const Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+      bottomNavigationBar: AppBottomBar(currentIndex: 0),
       body: SafeArea(
         child: Center(
           child: CircularProgressIndicator(color: _green, strokeWidth: 2.5),
@@ -423,18 +422,18 @@ class DashboardScreen extends ConsumerWidget {
                     fontWeight: FontWeight.bold,
                     color: _textPrimary,
                 ),
-              const SizedBox(height: 16),
-              const Text(
+              SizedBox(height: 16),
+              Text(
                 'Create or select a farm to get started.',
                 style: TextStyle(color: _textSub),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.addFarm),
-                  icon: const Icon(Icons.add_rounded, size: 20, color: _white),
+                  icon: Icon(Icons.add_rounded, size: 20, color: _white),
                   label: '+ Add Farm',
                   style: ElevatedButton.styleFrom(
                       backgroundColor: _green, foregroundColor: _white),
@@ -475,19 +474,19 @@ class DashboardScreen extends ConsumerWidget {
                     fontWeight: FontWeight.w900,
                     color: _textPrimary,
                 ),
-              const SizedBox(height: 10),
-              const Text(
+              SizedBox(height: 10),
+              Text(
                 'Track feed, growth, and profit easily.\nAdd a pond to get started.',
                   style: TextStyle(
                       fontSize: 14, color: _textSub, height: 1.5),
                   textAlign: TextAlign.center,
                 ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.addPond),
-                  icon: const Icon(Icons.add_rounded, size: 20, color: _white),
+                  icon: Icon(Icons.add_rounded, size: 20, color: _white),
                   label: '+ Add Pond',
                   style: ElevatedButton.styleFrom(
                       backgroundColor: _green, foregroundColor: _white),
@@ -580,8 +579,8 @@ class _Header extends StatelessWidget {
                 }),
                 const PopupMenuDivider(),
                 PopupMenuItem<String>(
-                  value: '__add__',
-                  child: Row(
+                  value = '__add__',
+                  child = Row(
                     children: [
                       Container(
                         width: 22,
@@ -604,9 +603,9 @@ class _Header extends StatelessWidget {
                 ),
               ],
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                crossAxisAlignment = CrossAxisAlignment.start,
+                mainAxisSize = MainAxisSize.min,
+                children = [
                   Flexible(
                     child: Text(
                           currentFarm.name,
@@ -854,7 +853,7 @@ class _InsightCard extends StatelessWidget {
                     children: [
                       Text(
                         insight.title,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: _textPrimary,
@@ -863,7 +862,7 @@ class _InsightCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         insight.subtitle,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
                           color: _textSub,
                           height: 1.3,
@@ -1031,7 +1030,7 @@ class _PondCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    )
   }
 
   Color _getStatusColor(String status) {

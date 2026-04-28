@@ -83,7 +83,7 @@ class SystemSyncService {
       {required String cropId, required String farmId}) async {
     try {
       final inventoryStock =
-          await _inventoryService.getInventoryStock(cropId, farmId);
+          await _inventoryService.getInventoryStock(farmId);
 
       // Find feed items in inventory
       final feedItems = inventoryStock.where(
@@ -147,10 +147,7 @@ class SystemSyncService {
           .fetchFeedLogs(''); // Get all feed logs for the period
 
       // Get inventory data
-      final inventoryStock = await _inventoryService.getInventoryStock(
-        cropId,
-        farmId,
-      );
+      final inventoryStock = await _inventoryService.getInventoryStock(farmId);
 
       // Calculate totals
       final totalFeedAmount = feedLogs.fold(0.0,

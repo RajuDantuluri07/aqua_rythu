@@ -366,7 +366,7 @@ class GrowthAdjustmentFactors {
     for (final phase in sortedPhases) {
       final distance = (phase - doc).abs();
       if (nearestDistance == null || distance < nearestDistance) {
-        nearestDistance = distance;
+        nearestDistance = distance.toDouble();
         nearestPhase = phase;
       }
     }
@@ -506,7 +506,7 @@ class HistoricalPerformance {
     final variance = performances.fold<double>(
             0.0, (sum, p) => sum + (p - mean) * (p - mean)) /
         performances.length;
-    final standardDeviation = variance > 0 ? variance.sqrt() : 0.0;
+    final standardDeviation = variance > 0 ? sqrt(variance) : 0.0;
 
     // Lower variance = higher reliability
     final reliability = max(0.3, 1.0 - (standardDeviation / mean));
