@@ -67,10 +67,12 @@ class TrayDecisionEngine {
     switch (s) {
       case TrayStatus.empty:
         return 1.0;
-      case TrayStatus.full:
-        return -1.0;
-      case TrayStatus.partial:
+      case TrayStatus.light:
         return 0.0;
+      case TrayStatus.medium:
+        return -0.5;
+      case TrayStatus.heavy:
+        return -1.0;
     }
   }
 
@@ -199,7 +201,7 @@ class TrayDecisionEngine {
 
     final allTrays = currentWindow.expand((l) => l.trays).toList();
     final emptyCount = allTrays.where((t) => t == TrayStatus.empty).length;
-    final fullCount = allTrays.where((t) => t == TrayStatus.full).length;
+    final heavyCount = allTrays.where((t) => t == TrayStatus.heavy).length;
     final totalCount = allTrays.length;
     final roundWord = roundsUsed == 1 ? 'round' : 'rounds';
 
@@ -212,7 +214,7 @@ class TrayDecisionEngine {
               '($emptyCount/$totalCount trays) — increasing feed';
     } else if (action == 'REDUCE') {
       reason = '$roundsUsed $roundWord with feed left '
-          '($fullCount/$totalCount trays full) — reducing feed';
+          '($heavyCount/$totalCount trays heavy) — reducing feed';
     } else {
       reason =
           'Mixed tray response across $roundsUsed $roundWord — stable feed';

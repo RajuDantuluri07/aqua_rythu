@@ -32,6 +32,8 @@ class FeedDecision {
   final String reason;
   final List<String> recommendations;
   final List<String> decisionTrace;
+  final String confidence;
+  final String confidenceReason;
 
   const FeedDecision({
     required this.action,
@@ -39,6 +41,8 @@ class FeedDecision {
     required this.reason,
     required this.recommendations,
     required this.decisionTrace,
+    this.confidence = 'Normal',
+    this.confidenceReason = 'Normal feeding confidence',
   });
 }
 

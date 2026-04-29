@@ -328,7 +328,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                             ),
                           ),
                         Text(
-                          "${widget.finalFeedKg.toStringAsFixed(1)} kg",
+                          widget.finalFeedKg <= 0
+                              ? "Do not feed"
+                              : "${widget.finalFeedKg.toStringAsFixed(1)} kg",
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
@@ -637,7 +639,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    "${widget.recommendedFeedKg.toStringAsFixed(1)} kg",
+                    widget.recommendedFeedKg <= 0
+                        ? "Do not feed"
+                        : "${widget.recommendedFeedKg.toStringAsFixed(1)} kg",
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
@@ -678,6 +682,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             const SizedBox(height: 10),
             _simpleStatusLine(),
 
+            if (_shouldShowTrustSignals()) ...[
+              const SizedBox(height: 10),
+              _feedTrustSignals(),
+            ],
+
             // Confirm Feed Button — Enhanced for farmer accessibility
             const SizedBox(height: 16),
             SizedBox(
@@ -712,7 +721,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   size: 22,
                 ),
                 label: Text(
-                  _isSubmitting ? "Saving..." : "Confirm Feed",
+                  _isSubmitting
+                      ? "Saving..."
+                      : widget.recommendedFeedKg <= 0
+                          ? "Confirm No Feed"
+                          : "Confirm Feed",
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
@@ -782,6 +795,99 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     );
   }
 
+  bool _shouldShowTrustSignals() {
+    return widget.decision != null &&
+        (widget.decision!.recommendations.isNotEmpty ||
+            widget.decision!.confidence.isNotEmpty ||
+            widget.recommendedFeedKg <= 0);
+  }
+
+  Widget _feedTrustSignals() {
+    final decision = widget.decision;
+    final reasons = decision?.recommendations ?? const <String>[];
+    final isStopped = widget.recommendedFeedKg <= 0 ||
+        decision?.action.toLowerCase().contains('stop') == true;
+    final showReasons = reasons.isNotEmpty || isStopped;
+    final confidence = decision?.confidence ?? 'Normal';
+    final confidenceReason =
+        decision?.confidenceReason ?? 'Normal feeding confidence';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showReasons) ...[
+          Text(
+            isStopped ? 'Stopped due to:' : 'Reduced due to:',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: _slate500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          if (reasons.isEmpty && decision != null)
+            _reasonBullet(decision.reason)
+          else
+            ...reasons.map(_reasonBullet),
+          const SizedBox(height: 6),
+        ],
+        Row(
+          children: [
+            const Icon(Icons.verified_user_outlined,
+                size: 14, color: _slate400),
+            const SizedBox(width: 5),
+            Text(
+              'Confidence: $confidence',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: _slate500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          confidenceReason,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: _slate400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _reasonBullet(String reason) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '• ',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: _slate500,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              reason,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _slate500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Simple status line — replaces analytics/FCR block ────────────────────
   // Shows one clear farming signal. No numbers, no comparisons, no trends.
   Widget _simpleStatusLine() {
@@ -796,7 +902,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     final bool smallReduction =
         widget.correctionPercent != null && widget.correctionPercent! < -2;
 
-    if (highLeftover || bigReduction) {
+    if (widget.recommendedFeedKg <= 0) {
+      message = 'Do not feed';
+      color = _red;
+      icon = Icons.block_rounded;
+    } else if (highLeftover || bigReduction) {
       message = 'Reduce feed slightly';
       color = _amber;
       icon = Icons.trending_down_rounded;
@@ -833,7 +943,6 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     for (final status in widget.trayStatuses!) {
       counts[status] = (counts[status] ?? 0) + 1;
     }
-    final total = widget.trayStatuses!.length;
     final avgLeftover = widget.leftoverPercent ?? 0;
 
     return [
@@ -1352,7 +1461,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  "${widget.finalFeedKg.toStringAsFixed(1)} kg",
+                  widget.finalFeedKg <= 0
+                      ? "Do not feed"
+                      : "${widget.finalFeedKg.toStringAsFixed(1)} kg",
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -1461,7 +1572,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   String _trayLabel(TrayStatus s) {
     switch (s) {
-      case TrayStatus.empty:
+      case TrayStatus.completed:
         return 'EMPTY';
       case TrayStatus.partial:
         return 'HALF';
@@ -1472,7 +1583,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   Color _trayColor(TrayStatus s) {
     switch (s) {
-      case TrayStatus.empty:
+      case TrayStatus.completed:
         return _green;
       case TrayStatus.partial:
         return _amber;

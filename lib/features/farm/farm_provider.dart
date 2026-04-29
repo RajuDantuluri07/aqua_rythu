@@ -147,12 +147,21 @@ class Pond {
   }
 
   /// Calculates Day of Culture (DOC) as whole days since stocking.
+  /// @deprecated Use calculateDocWithRef or calculateDoc with explicit time parameter
+  /// This getter uses device time and is NOT tamper-proof
   int get doc {
     return calculateDoc(DateTime.now());
   }
 
+  /// Calculates DOC using server time for tamper-proof calculation
+  /// Returns null if server time is not yet available (loading state)
+  int? calculateDocWithRef(WidgetRef ref) {
+    return calculateDocFromStockingDate(stockingDate, ref: ref);
+  }
+
+  /// Calculates DOC with explicit time parameter (for testing or server time)
   int calculateDoc(DateTime now) {
-    return calculateDocFromStockingDate(stockingDate, now: now);
+    return calculateDocFromStockingDateLegacy(stockingDate, now: now);
   }
 
   /// Computed today's feed amount based on feed history

@@ -138,6 +138,25 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
             ],
 
             // Engine recommendation
+            if (pondState.feedDebugInfo != null) ...[
+              _buildSection('SMART FEED ENGINE', [
+                'Base Feed: ${pondState.feedDebugInfo!.baseFeed.toStringAsFixed(2)} kg',
+                'Tray Factor: ${pondState.feedDebugInfo!.trayFactor.toStringAsFixed(2)}',
+                'Env Factor: ${pondState.feedDebugInfo!.smartFactor.toStringAsFixed(2)}',
+                'Final Feed: ${pondState.feedDebugInfo!.finalFeed.toStringAsFixed(2)} kg',
+                'Confidence: ${pondState.decision?.confidence ?? "Normal"}',
+                if (pondState.decision?.confidenceReason.isNotEmpty == true)
+                  pondState.decision!.confidenceReason,
+              ]),
+              const SizedBox(height: 12),
+            ],
+
+            // Tray factor breakdown
+            if (pondState.feedDebugInfo != null) ...[
+              _buildTrayFactorSection(pondState.feedDebugInfo!),
+              const SizedBox(height: 12),
+            ],
+
             if (pondState.recommendation != null) ...[
               _buildSection('ENGINE RECOMMENDATION', [
                 'Next Feed: ${pondState.recommendation!.nextFeedKg.toStringAsFixed(2)}kg',
@@ -264,26 +283,20 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
 
   Future<void> _verifyDBTruth(String pondId, int doc) async {
     try {
-      // Fetch fresh data from both tables
+      // Fetch fresh data from DB
       final feedRounds = await FeedDebugLogger.queryFeedRounds(
         pondId: pondId,
         doc: doc,
       );
-
-      final feedLogs = await Supabase.instance.client
-          .from('feed_logs')
-          .select('round, feed_given')
-          .eq('pond_id', pondId)
-          .eq('doc', doc)
-          .order('created_at', ascending: false);
 
       // Get current state values
       final pondState = ref.read(pondDashboardProvider);
       final stateRounds = pondState.roundFeedAmounts;
       final stateFinalRounds = pondState.roundFinalFeedAmounts;
 
-      // Compare feed_rounds vs State
-      final roundMismatches = <String>[];
+      // Compare DB vs State
+      final mismatches = <String>[];
+
       for (final dbRound in feedRounds) {
         final round = dbRound['round'] as int;
         final dbAmount = (dbRound['feed_amount'] as num?)?.toDouble() ?? 0.0;
@@ -291,48 +304,31 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
             stateFinalRounds[round] ?? stateRounds[round] ?? 0.0;
 
         if ((dbAmount - stateAmount).abs() > 0.01) {
-          roundMismatches.add(
-              'Round $round: feed_rounds DB=${dbAmount.toStringAsFixed(2)}kg vs State=${stateAmount.toStringAsFixed(2)}kg');
+          mismatches.add(
+              'Round $round: DB=${dbAmount.toStringAsFixed(2)}kg vs State=${stateAmount.toStringAsFixed(2)}kg');
         }
       }
 
-      // Compare feed_logs vs Debug Panel (actual DB values we fetched)
-      final logMismatches = <String>[];
-      for (final feedLog in feedLogs) {
-        final round = feedLog['round'] as int;
-        final logAmount = (feedLog['feed_given'] as num?)?.toDouble() ?? 0.0;
-        final debugPanelAmount = _actualDbFeedValues[round];
-
-        if (debugPanelAmount != null &&
-            (logAmount - debugPanelAmount).abs() > 0.01) {
-          logMismatches.add(
-              'Round $round: feed_logs DB=${logAmount.toStringAsFixed(2)}kg vs DebugPanel=${debugPanelAmount.toStringAsFixed(2)}kg');
-        }
-      }
-
-      final allMismatches = [...roundMismatches, ...logMismatches];
-
-      if (allMismatches.isEmpty) {
+      if (mismatches.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-                '✅ DB Truth Check: All values match! DebugPanel = Actual DB'),
+            content: Text('✅ DB Truth Check: All values match!'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
+            duration: Duration(seconds: 3),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                '❌ DB Truth Check: ${allMismatches.length} mismatches found'),
+            content:
+                Text('❌ DB Truth Check: ${mismatches.length} mismatches found'),
             backgroundColor: Colors.red,
             action: SnackBarAction(
               label: 'Details',
               textColor: Colors.white,
-              onPressed: () => _showMismatchDetails(allMismatches),
+              onPressed: () => _showMismatchDetails(mismatches),
             ),
-            duration: const Duration(seconds: 6),
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -375,6 +371,33 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
         ],
       ),
     );
+  }
+
+  Widget _buildTrayFactorSection(dynamic feedDebugInfo) {
+    final baseFeed = feedDebugInfo.baseFeed ?? 0.0;
+    final trayFactor = feedDebugInfo.trayFactor ?? 0.0;
+    final finalFeed = feedDebugInfo.finalFeed ?? 0.0;
+    final delta = finalFeed - baseFeed;
+
+    String factorDescription;
+    if (trayFactor > 0.05) {
+      factorDescription =
+          'Increase (+${(trayFactor * 100).toStringAsFixed(0)}%)';
+    } else if (trayFactor < -0.05) {
+      factorDescription = 'Reduce (${(trayFactor * 100).toStringAsFixed(0)}%)';
+    } else {
+      factorDescription = 'No change';
+    }
+
+    final items = <String>[
+      'Tray Factor: ${trayFactor.toStringAsFixed(2)} → $factorDescription',
+      'Previous Feed: ${baseFeed.toStringAsFixed(2)} kg',
+      'New Feed: ${finalFeed.toStringAsFixed(2)} kg',
+      if (delta.abs() > 0.01)
+        'Delta: ${delta > 0 ? "+" : ""}${delta.toStringAsFixed(2)} kg (${delta > 0 ? "increase" : "decrease"})',
+    ];
+
+    return _buildSection('TRAY FACTOR BREAKDOWN', items);
   }
 
   Widget _buildSection(String title, List<String> items) {

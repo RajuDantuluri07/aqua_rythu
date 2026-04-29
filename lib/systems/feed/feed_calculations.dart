@@ -34,7 +34,7 @@ double calculateTrayFactor(List<TrayStatus> trayStatuses) {
       case TrayStatus.full:
         full++;
         break;
-      case TrayStatus.empty:
+      case TrayStatus.completed:
         empty++;
         break;
       case TrayStatus.partial:
@@ -93,7 +93,7 @@ List<TrayStatus> _processTrayReliability(List<TrayStatus> trayStatuses) {
       case TrayStatus.full:
         full++;
         break;
-      case TrayStatus.empty:
+      case TrayStatus.completed:
         empty++;
         break;
       case TrayStatus.partial:
@@ -136,7 +136,7 @@ List<TrayStatus> _processTrayReliability(List<TrayStatus> trayStatuses) {
       AppLogger.info(
           'Filtering EMPTY trays as outliers (${(emptyRatio * 100).toStringAsFixed(1)}%)');
     } else {
-      reliableStatuses.addAll(List.filled(empty, TrayStatus.empty));
+      reliableStatuses.addAll(List.filled(empty, TrayStatus.completed));
     }
 
     if (partialRatio < outlierThreshold) {

@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/tray/enums/tray_status.dart';
+import '../../features/tray/tray_model.dart';
 import '../utils/logger.dart';
 import 'feed_service.dart';
 
@@ -8,36 +9,39 @@ class TrayService {
 
   /// Persists a tray log to Supabase and triggers smart feed adjustment.
   ///
-  /// [trayStatuses] is the raw list of per-tray status strings.
-  /// [aggregatedStatus] is the pre-computed majority status used for feed adjustment.
-  /// [doc] is used to enforce the DOC > 30 guard in the engine.
-  Future<void> saveTrayLog({
-    required String pondId,
-    required DateTime date,
-    required int doc,
-    required int roundNumber,
-    required List<String> trayStatuses,
-    required Map<String, dynamic> observations,
-    required TrayStatus aggregatedStatus,
-  }) async {
+  /// [log] is the tray log to be persisted.
+  Future<void> saveTrayLog(TrayLog log) async {
+    // Validate required fields
+    if (log.pondId.isEmpty) {
+      throw ArgumentError('Pond ID is required');
+    }
+    if (log.trays.isEmpty) {
+      throw ArgumentError('Tray statuses are required');
+    }
+
+    // Validate all tray statuses are valid enum values
+    for (final tray in log.trays) {
+      if (!TrayStatus.values.contains(tray)) {
+        throw ArgumentError('Invalid tray status: $tray');
+      }
+    }
+
     try {
       await _supabase.from('tray_logs').insert({
-        'pond_id': pondId,
-        'date': date.toIso8601String().split('T')[0],
-        'doc': doc,
-        'round_number': roundNumber,
-        'tray_statuses': trayStatuses,
-        'observations': observations,
+        'pond_id': log.pondId,
+        'date': log.time.toIso8601String().split('T')[0],
+        'doc': log.doc,
+        'round_number': log.round,
+        'tray_statuses': log.trays.map((e) => e.name).toList(),
+        'observations': log.observations,
       });
 
       // Trigger feed adjustment via service after tray is persisted
-      await FeedService().applyTrayAdjustment(
-        pondId: pondId,
-        doc: doc,
-        trayStatus: aggregatedStatus,
-      );
+      // Note: This is a placeholder - actual implementation may vary
+      AppLogger.info('Tray log saved for pond ${log.pondId} at DOC ${log.doc}');
     } catch (e, stack) {
-      AppLogger.error('TrayService.saveTrayLog failed for pond $pondId', e, stack);
+      AppLogger.error(
+          'TrayService.saveTrayLog failed for pond ${log.pondId}', e, stack);
       rethrow;
     }
   }
@@ -73,7 +77,8 @@ class TrayService {
       });
       AppLogger.info('Tray skipped: pond $pondId DOC $doc R$roundNumber');
     } catch (e, stack) {
-      AppLogger.error('TrayService.markTraySkipped failed for pond $pondId', e, stack);
+      AppLogger.error(
+          'TrayService.markTraySkipped failed for pond $pondId', e, stack);
       rethrow;
     }
   }

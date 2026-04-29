@@ -21,7 +21,10 @@ final pondCardProvider = FutureProvider.autoDispose
   final viewState = await pondDashboardController.load(pondId);
   final feedResult = viewState.feedResult;
 
-  final doc = pond.doc;
+  // Use server time for tamper-proof DOC calculation
+  final serverDoc = pond.calculateDocWithRef(ref);
+  final doc =
+      serverDoc ?? pond.doc; // Fallback to device time if server not ready
 
   // ── 3. Sampling freshness ─────────────────────────────────────────────────
   final hasSampling = pond.latestSampleDate != null &&

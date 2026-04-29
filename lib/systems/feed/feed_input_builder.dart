@@ -404,15 +404,19 @@ class FeedInputBuilder {
   static double _statusesToLeftoverPct(List<String> statuses) {
     if (statuses.isEmpty) return -1.0;
     if (statuses.every((s) => s == 'skipped')) return -1.0;
-    int full = 0, empty = 0;
+
+    var total = 0.0;
     for (final s in statuses) {
-      if (s == 'full') full++;
-      if (s == 'empty') empty++;
+      if (s == 'full') {
+        total += 70.0;
+      } else if (s == 'partial') {
+        total += 30.0;
+      } else if (s == 'empty') {
+        total += 0.0;
+      }
     }
-    final majority = statuses.length / 2;
-    if (full > majority) return 70.0;
-    if (empty > majority) return 0.0;
-    return 30.0;
+
+    return total / statuses.length;
   }
 
   // ── Fix #1: intelligence activation helpers ────────────────────────────────
@@ -499,7 +503,7 @@ class FeedInputBuilder {
   // ────────────────────────────────────────────────────────────────────────────
 
   static int _computeDoc(String stockingDateStr) {
-    final stocking = DateTime.parse(stockingDateStr);
-    return calculateDocFromStockingDate(stocking);
+    final stocking = DateTime.parse(stockingDateStr).toUtc();
+    return calculateDocFromStockingDateLegacy(stocking);
   }
 }

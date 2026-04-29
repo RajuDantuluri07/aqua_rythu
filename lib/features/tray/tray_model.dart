@@ -7,6 +7,7 @@ class TrayLog {
   final int round;
   final List<TrayStatus> trays;
   final Map<int, List<String>>? observations;
+
   /// True when the tray check was automatically skipped (farmer moved to next
   /// round without logging). Stored as tray_statuses = ['skipped'] in DB.
   final bool isSkipped;
@@ -27,11 +28,13 @@ class TrayLog {
     final total = trays.fold<double>(0.0, (sum, tray) {
       switch (tray) {
         case TrayStatus.empty:
-          return sum;
-        case TrayStatus.partial:
-          return sum + 30.0;
-        case TrayStatus.full:
-          return sum + 70.0;
+          return sum; // 0%
+        case TrayStatus.light:
+          return sum + 15.0; // ~15%
+        case TrayStatus.medium:
+          return sum + 40.0; // ~40%
+        case TrayStatus.heavy:
+          return sum + 70.0; // ~70%
       }
     });
 
@@ -83,7 +86,8 @@ class TrayLog {
               try {
                 return TrayStatus.values.byName(e);
               } catch (_) {
-                return TrayStatus.partial;
+                // Try migration for old enum values
+                return migrateOldTrayStatus(e);
               }
             }).toList(),
       observations: (row['observations'] as Map<String, dynamic>?)?.map(

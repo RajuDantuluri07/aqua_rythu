@@ -11,6 +11,7 @@ import '../tray/tray_provider.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../systems/planning/feed_plan_generator.dart';
 import '../../systems/feed/feed_models.dart';
+import '../feed/models/feed_debug_info.dart';
 import 'controllers/pond_dashboard_controller.dart';
 
 /// =======================
@@ -52,6 +53,9 @@ class PondDashboardState {
   /// Current feed decision from the engine
   final FeedDecision? decision;
 
+  /// Current feed debug data from the engine
+  final FeedDebugInfo? feedDebugInfo;
+
   /// True when DOC >= 31 and anchor feed has not been set yet.
   /// Screen listens and shows the anchor feed input dialog once.
   final bool needsAnchorFeedInput;
@@ -72,6 +76,7 @@ class PondDashboardState {
     this.roundIsManuallyEdited = const {},
     this.recommendation,
     this.decision,
+    this.feedDebugInfo,
     this.needsAnchorFeedInput = false,
   });
 
@@ -92,6 +97,7 @@ class PondDashboardState {
     Map<int, bool>? roundIsManuallyEdited,
     FeedRecommendation? recommendation,
     FeedDecision? decision,
+    FeedDebugInfo? feedDebugInfo,
     bool? needsAnchorFeedInput,
   }) {
     return PondDashboardState(
@@ -113,6 +119,7 @@ class PondDashboardState {
           roundIsManuallyEdited ?? this.roundIsManuallyEdited,
       recommendation: recommendation ?? this.recommendation,
       decision: decision ?? this.decision,
+      feedDebugInfo: feedDebugInfo ?? this.feedDebugInfo,
       needsAnchorFeedInput: needsAnchorFeedInput ?? this.needsAnchorFeedInput,
     );
   }
@@ -238,6 +245,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       clearLastFeedTime: lastFeedTime == null,
       recommendation: newRecommendation,
       decision: newDecision,
+      feedDebugInfo: viewState.feedResult?.debugInfo,
       needsAnchorFeedInput: needsAnchor,
     );
 
@@ -680,7 +688,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         } else if (avg >= 1.5) {
           finalStatus = TrayStatus.partial;
         } else {
-          finalStatus = TrayStatus.empty;
+          finalStatus = TrayStatus.completed;
         }
       }
 

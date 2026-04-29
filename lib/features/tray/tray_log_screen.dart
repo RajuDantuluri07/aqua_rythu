@@ -62,7 +62,16 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   }
 
   void _handleNext() {
-    if (_selectedStatus == null) return;
+    // Validation: Require tray status selection
+    if (_selectedStatus == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a tray status'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     // Save current step data
     _results.add(_selectedStatus!);
@@ -198,7 +207,7 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
                     const SizedBox(height: 20),
 
                     // Status Options
-                    ...TrayStatus.values.map((status) {
+                    ...trayStatusInputValues.map((status) {
                       final isSelected = _selectedStatus == status;
                       return _buildStatusCard(status, isSelected);
                     }),

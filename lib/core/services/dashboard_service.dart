@@ -23,8 +23,9 @@ class DashboardService {
     final ponds = List<Map<String, dynamic>>.from(response);
 
     for (final pond in ponds) {
-      final stockingDate = DateTime.parse(pond['stocking_date'] as String);
-      final todayDoc = calculateDocFromStockingDate(stockingDate);
+      final stockingDate =
+          DateTime.parse(pond['stocking_date'] as String).toUtc();
+      final todayDoc = calculateDocFromStockingDateLegacy(stockingDate);
       final pondId = pond['id'] as String;
 
       // Read actual consumed from feed_logs (last row = running cumulative total).
@@ -39,8 +40,7 @@ class DashboardService {
           .limit(1)
           .maybeSingle();
 
-      pond['today_feed'] =
-          (feedRow?['feed_given'] as num?)?.toDouble() ?? 0.0;
+      pond['today_feed'] = (feedRow?['feed_given'] as num?)?.toDouble() ?? 0.0;
     }
 
     return ponds;

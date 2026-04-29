@@ -107,7 +107,7 @@ class ConfidenceService {
         case TrayStatus.full:
           full++;
           break;
-        case TrayStatus.empty:
+        case TrayStatus.completed:
           empty++;
           break;
         case TrayStatus.partial:

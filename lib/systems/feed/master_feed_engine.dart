@@ -45,6 +45,9 @@ import 'engine_constants.dart';
 import 'feed_calculations.dart';
 import 'feed_models.dart';
 import 'feed_base_resolver.dart';
+import 'feed_base_service.dart';
+import 'tray_factor_service.dart';
+import 'env_factor_service.dart';
 export '../../../features/feed/models/correction_result.dart';
 export '../../../features/feed/models/feed_debug_info.dart';
 export '../../../features/feed/models/orchestrator_result.dart';
@@ -153,6 +156,9 @@ void _logFeed(FeedDebugData d) {
 
 class MasterFeedEngine {
   static const String version = 'v2.0.0';
+  static final FeedBaseService _feedBaseService = FeedBaseService();
+  static final TrayFactorService _trayFactorService = TrayFactorService();
+  static final EnvFactorService _envFactorService = EnvFactorService();
 
   // ── BASE FEED (DOC RAMP + DENSITY SCALING) ────────────────────────────────
 
@@ -327,19 +333,6 @@ class MasterFeedEngine {
     final bool forceBlindFeeding =
         !feedEngineConfig.smartFeedEnabled || !SubscriptionGate.isPro;
 
-    // ── STEP 1: Critical DO safety — enforced for ALL DOC ─────────────────
-    if (input.dissolvedOxygen < 3.5) {
-      AppLogger.error(
-        '[MasterFeedEngine] Critical DO (${input.dissolvedOxygen} mg/L) '
-        'at DOC ${input.doc} — stopping feed',
-      );
-      return OrchestratorResult.stopFeed(
-        reason: 'Critical DO',
-        engineVersion: version,
-        doc: input.doc,
-      );
-    }
-
     // ── STEP 1: Base Feed (using new BaseFeedResolver) ───────────────────
     final stage1Debug = computeWithDebug(
       doc: input.doc,
@@ -369,40 +362,83 @@ class MasterFeedEngine {
     // Force blind feeding if admin disabled smart feed
     final bool useBlindFeeding = forceBlindFeeding || !shouldUseSmartFeeding;
 
-    // ── STEP 3: Factor Pipeline ───────────────────────────────────────────────
-    double trayFactor = 1.0;
+    // ── STEP 3: Factor Pipeline (Base + Tray + Environment) ────────────────
+    final baseFeedKg = _feedBaseService.getBaseFeedKg(
+      input.doc,
+      input.seedCount,
+      previousDayFeedKg: input.actualFeedYesterday,
+    );
+    final currentTrayLeftover =
+        _trayFactorService.getLeftoverPercentFromStatuses(input.trayStatuses);
+    final historicalLeftover =
+        _latestKnownLeftover(input.recentTrayLeftoverPct);
+    final leftoverPercent = currentTrayLeftover ?? historicalLeftover ?? -1.0;
 
-    if (!useBlindFeeding) {
-      // Smart mode: apply tray factor ONLY
-      trayFactor = calculateTrayFactor(input.trayStatuses);
+    double trayFactor = _trayFactorService.getTrayFactor(leftoverPercent);
+    if (useBlindFeeding) {
+      trayFactor = 1.0;
     }
 
-    // ── STEP 4: Apply Tray Factor Only ───────────────────────────────────────
-    double feed = baseFeed * trayFactor;
+    const isRaining = false;
+    final phFluctuation = input.phChange.abs() >= 0.5;
+    final envFactor = _envFactorService.getEnvFactor(
+      isRaining: isRaining,
+      temperature: input.temperature,
+      dissolvedOxygen: input.dissolvedOxygen,
+      phFluctuation: phFluctuation,
+    );
+    final envReasons = _envFactorService.getEnvReasons(
+      isRaining: isRaining,
+      temperature: input.temperature,
+      dissolvedOxygen: input.dissolvedOxygen,
+      phFluctuation: phFluctuation,
+    );
+
+    // ── STEP 4: Final feed integration ───────────────────────────────────────
+    final rawIntegratedFeed = baseFeedKg * trayFactor * envFactor;
+    double feed = rawIntegratedFeed;
 
     // ── STEP 3.5: Apply Global Multiplier from Admin Panel ───────────────────
     feed = feed * feedEngineConfig.globalFeedMultiplier;
 
-    // ── STEP 4: Safety Clamp (prevent spikes — ±30% from baseFeed) ────────
-    final minFeed = baseFeed * FeedEngineConstants.minFeedFactor; // 0.7
-    final maxFeed = baseFeed * FeedEngineConstants.maxFeedFactor; // 1.3
-    feed = feed.clamp(minFeed, maxFeed);
+    // ── STEP 4: Safety Clamp (allow true stop, cap unrealistic spikes) ─────
+    const minFeed = 0.0;
+    final maxFeed = baseFeedKg * FeedEngineConstants.maxFeedFactor;
+    if (feed.isNaN || feed.isInfinite || feed < minFeed) {
+      feed = minFeed;
+    }
+    if (maxFeed > 0 && feed > maxFeed) {
+      feed = maxFeed;
+    }
 
-    final bool wasClamped = (baseFeed * trayFactor - feed).abs() > 0.001;
+    final bool wasClamped = (rawIntegratedFeed - feed).abs() > 0.001;
     final clampReason = wasClamped
-        ? (baseFeed * trayFactor) > maxFeed
-            ? 'Feed increase capped at +30%'
-            : 'Feed reduction capped at -30%'
+        ? rawIntegratedFeed > maxFeed
+            ? 'Feed capped at maximum allowed feed'
+            : 'Feed raised to zero-safe minimum'
         : null;
 
     // Apply feed safety clamping before final calculation
     final safetyResult = FeedSafetyService().validateFeedCalculation(
       calculatedFeed: double.tryParse(feed.toStringAsFixed(3)) ?? feed,
       pondId: input.pondId,
+      baseFeed: baseFeedKg,
       calculationType: 'master_feed_engine',
     );
 
-    final finalFeed = safetyResult.safeAmount;
+    var finalFeed = safetyResult.safeAmount;
+    if (finalFeed.isNaN || finalFeed.isInfinite || finalFeed < 0) {
+      finalFeed = 0.0;
+    }
+    if (maxFeed > 0 && finalFeed > maxFeed) {
+      finalFeed = maxFeed;
+    }
+    final isCriticalStop = finalFeed == 0.0 &&
+        (trayFactor == 0.0 || envFactor == 0.0 || rawIntegratedFeed == 0.0);
+    final reductionReasons = _buildReductionReasons(
+        trayFactor, envFactor, leftoverPercent, envReasons);
+    final confidenceLevel = buildFeedConfidenceLevel(trayFactor, envFactor);
+    final confidenceReason = buildFeedConfidenceReason(trayFactor, envFactor);
 
     // ── STEP 5: Build minimal result objects for backward compatibility ────
     final feedStage = FeedStageResolver.resolve(
@@ -418,29 +454,43 @@ class MasterFeedEngine {
 
     // Updated correction result with tray factor only
     final correction = CorrectionResult(
-      baseFeed: baseFeed,
+      baseFeed: baseFeedKg,
       trayFactor: trayFactor,
       finalFeed: finalFeed,
       safetyStatus: finalFeed > 0 ? 'normal' : 'stopped',
-      reasons: _buildFactorReasons(trayFactor, useBlindFeeding),
+      reasons: _buildFactorReasons(
+        trayFactor,
+        envFactor,
+        leftoverPercent,
+        useBlindFeeding,
+        envReasons,
+      ),
       alerts: const [],
-      isCriticalStop: false,
+      isCriticalStop: isCriticalStop,
       isSmartApplied: !useBlindFeeding,
-      wasClamped: wasClamped,
-      clampReason: clampReason,
+      wasClamped: wasClamped || safetyResult.wasClamped,
+      clampReason: safetyResult.reason ?? clampReason,
     );
 
     // Minimal decision
     final decision = FeedDecision(
       action: finalFeed > 0 ? 'Maintain Feeding' : 'Stop Feeding',
-      deltaKg: finalFeed - baseFeed,
-      reason: 'V1 simplified flow — tray adjustment only',
-      recommendations: const [],
+      deltaKg: finalFeed - baseFeedKg,
+      reason: buildFeedExplanation(
+        trayFactor,
+        envFactor,
+        leftoverPercent,
+        envReasons: envReasons,
+      ),
+      recommendations: reductionReasons,
       decisionTrace: [
-        'Base (DOC ramp): ${baseFeed.toStringAsFixed(3)} kg',
-        'Tray factor: ${trayFactor.toStringAsFixed(3)}',
-        '= Final: ${finalFeed.toStringAsFixed(3)} kg',
+        'Base Feed: ${baseFeedKg.toStringAsFixed(3)} kg',
+        'Tray Factor: ${trayFactor.toStringAsFixed(3)}',
+        'Env Factor: ${envFactor.toStringAsFixed(3)}',
+        'Final Feed: ${finalFeed.toStringAsFixed(3)} kg',
       ],
+      confidence: confidenceLevel,
+      confidenceReason: confidenceReason,
     );
 
     // Minimal recommendation
@@ -448,23 +498,27 @@ class MasterFeedEngine {
     final recommendation = FeedRecommendation(
       nextFeedKg: finalFeed / feedsPerDay,
       nextFeedTime: DateTime.now().add(const Duration(hours: 4)),
-      instruction: 'Feed ${(finalFeed / feedsPerDay).toStringAsFixed(1)} kg',
+      instruction: finalFeed == 0.0
+          ? 'Do not feed'
+          : 'Feed ${(finalFeed / feedsPerDay).toStringAsFixed(1)} kg',
     );
 
     AppLogger.info(
       'FEED_PIPELINE_V1_SIMPLIFIED',
       {
         'doc': input.doc,
-        'baseFeed': baseFeed,
+        'baseFeed': baseFeedKg,
         'trayFactor': trayFactor,
+        'envFactor': envFactor,
         'finalFeed': finalFeed,
-        'isClamped': wasClamped,
+        'confidence': confidenceLevel,
+        'isClamped': wasClamped || safetyResult.wasClamped,
       },
     );
 
     // ── STEP 5: Return result ─────────────────────────────────────────────
     return OrchestratorResult(
-      baseFeed: baseFeed,
+      baseFeed: baseFeedKg,
       feedStage: feedStage,
       intelligence: intelligence,
       correction: correction,
@@ -475,20 +529,20 @@ class MasterFeedEngine {
         doc: input.doc,
         baseFeedPer100k: stage1Debug.baseFeed,
         adjustedFeed: stage1Debug.adjustedFeed,
-        minFeed: stage1Debug.minFeed,
-        maxFeed: stage1Debug.maxFeed,
+        minFeed: minFeed,
+        maxFeed: maxFeed,
         isBaseFeedClamped: stage1Debug.isClamped,
         wasInputClamped: stage1Debug.wasInputClamped,
-        baseFeed: baseFeed,
+        baseFeed: baseFeedKg,
         trayFactor: trayFactor,
-        smartFactor: trayFactor,
-        combinedFactor: trayFactor,
-        rawCombinedFactor: baseFeed * trayFactor,
+        smartFactor: envFactor,
+        combinedFactor: trayFactor * envFactor,
+        rawCombinedFactor: rawIntegratedFeed,
         fcr: 1.0,
         finalFeed: finalFeed,
         isSmartApplied: false,
-        wasClamped: wasClamped,
-        clampReason: clampReason,
+        wasClamped: wasClamped || safetyResult.wasClamped,
+        clampReason: safetyResult.reason ?? clampReason,
         hasSampling: input.abw != null,
         feedStage: feedStage.name,
         v2Debug: null, // ❌ DISABLED
@@ -529,6 +583,15 @@ class MasterFeedEngine {
 
   // ── PRIVATE HELPERS ───────────────────────────────────────────────────────
 
+  static double? _latestKnownLeftover(List<double> leftovers) {
+    for (final leftover in leftovers.reversed) {
+      if (!leftover.isNaN && !leftover.isInfinite && leftover >= 0) {
+        return leftover;
+      }
+    }
+    return null;
+  }
+
   /// Simple tray factor based on tray status.
   ///
   /// ✅ DETERMINISTIC:
@@ -554,7 +617,7 @@ class MasterFeedEngine {
         case TrayStatus.full:
           full++;
           break;
-        case TrayStatus.empty:
+        case TrayStatus.completed:
           empty++;
           break;
         case TrayStatus.partial:
@@ -573,8 +636,8 @@ class MasterFeedEngine {
   }
 
   /// Build list of factor reasons for UI display
-  static List<String> _buildFactorReasons(
-      double trayFactor, bool useBlindFeeding) {
+  static List<String> _buildFactorReasons(double trayFactor, double envFactor,
+      double leftoverPercent, bool useBlindFeeding, List<String> envReasons) {
     final reasons = <String>[];
 
     if (useBlindFeeding) {
@@ -582,11 +645,75 @@ class MasterFeedEngine {
       return reasons;
     }
 
+    reasons.add('Base Feed: system DOC curve applied');
+
     if (trayFactor != 1.0) {
-      reasons.add('Tray appetite adjustment: ${factorToPercent(trayFactor)}');
+      reasons.add(
+          'Tray Factor: ${trayFactor.toStringAsFixed(2)} (leftover ${leftoverPercent.toStringAsFixed(1)}%)');
+    }
+
+    if (envFactor != 1.0) {
+      final reasonText =
+          envReasons.isEmpty ? '' : ' (${envReasons.join(', ')})';
+      reasons.add('Env Factor: ${envFactor.toStringAsFixed(2)}$reasonText');
     }
 
     return reasons;
+  }
+
+  static List<String> _buildReductionReasons(
+    double trayFactor,
+    double envFactor,
+    double leftoverPercent,
+    List<String> envReasons,
+  ) {
+    final reasons = <String>[];
+
+    if (trayFactor < 1.0) {
+      final trayReason = _trayFactorService.getTrayReason(leftoverPercent);
+      if (trayReason != null) reasons.add(trayReason);
+    }
+
+    if (envFactor < 1.0) {
+      reasons.addAll(envReasons);
+    }
+
+    return reasons;
+  }
+
+  static String buildFeedExplanation(
+    double trayFactor,
+    double envFactor,
+    double leftoverPercent, {
+    List<String> envReasons = const [],
+  }) {
+    if (trayFactor == 0.0 || envFactor == 0.0) {
+      if (envFactor == 0.0) {
+        final reason = envReasons.isEmpty ? 'water stress' : envReasons.first;
+        return 'Feeding stopped due to $reason';
+      }
+      return 'Do not feed due to high tray leftover';
+    }
+
+    if (trayFactor < 1.0) {
+      return 'Feed reduced due to ${leftoverPercent.toStringAsFixed(0)}% tray leftover';
+    }
+
+    if (envFactor < 1.0) {
+      return 'Feed reduced due to water environment condition';
+    }
+
+    return 'Feed on track';
+  }
+
+  static String buildFeedConfidenceLevel(double trayFactor, double envFactor) {
+    return (envFactor < 1.0 || trayFactor < 1.0) ? 'Medium' : 'Normal';
+  }
+
+  static String buildFeedConfidenceReason(double trayFactor, double envFactor) {
+    return (envFactor < 1.0 || trayFactor < 1.0)
+        ? 'Low confidence due to stress'
+        : 'Normal feeding confidence';
   }
 
   /// Build factor explanations for UI display

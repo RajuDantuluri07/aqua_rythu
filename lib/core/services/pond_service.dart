@@ -75,8 +75,7 @@ class PondService {
       AppLogger.info("Created pond: $pondId");
 
       // Persist seed/stocking type (RPC doesn't accept this param yet)
-      final resolvedSeedType =
-          seedType ?? SeedTypeX.fromPlSize(plSize);
+      final resolvedSeedType = seedType ?? SeedTypeX.fromPlSize(plSize);
       await supabase.from('ponds').update({
         'stocking_type': resolvedSeedType.dbValue,
       }).eq('id', pondId);
@@ -117,7 +116,7 @@ class PondService {
       endDoc: 25,
       stockingCount: pond['seed_count'] ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
-      stockingDate: DateTime.parse(pond['stocking_date']),
+      stockingDate: DateTime.parse(pond['stocking_date']).toUtc(),
     );
 
     AppLogger.info(
@@ -152,7 +151,7 @@ class PondService {
         id: row['id'] as String,
         name: row['name'] as String,
         area: (row['area'] as num?)?.toDouble() ?? 0.0,
-        stockingDate: DateTime.parse(row['stocking_date'] as String),
+        stockingDate: DateTime.parse(row['stocking_date'] as String).toUtc(),
         seedCount: row['seed_count'] ?? 100000,
         plSize: row['pl_size'] ?? 10,
         numTrays: row['num_trays'] ?? 4,
@@ -197,8 +196,8 @@ class PondService {
     required String pondId,
     required String stockingDate,
   }) async {
-    final stockDate = DateTime.parse(stockingDate);
-    final doc = calculateDocFromStockingDate(stockDate);
+    final stockDate = DateTime.parse(stockingDate).toUtc();
+    final doc = calculateDocFromStockingDateLegacy(stockDate);
 
     AppLogger.debug("Calculated DOC: $doc for pond $pondId");
 
@@ -259,7 +258,8 @@ class PondService {
 
       // 2. Update pond with new cycle details
       await supabase.from('ponds').update({
-        'stocking_date': newStockingDate.toIso8601String().split('T')[0],
+        'stocking_date':
+            newStockingDate.toUtc().toIso8601String().split('T')[0],
         'seed_count': seedCount,
         'pl_size': plSize,
         'num_trays': numTrays,
