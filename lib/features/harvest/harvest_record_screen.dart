@@ -48,8 +48,20 @@ class _HarvestRecordScreenState extends ConsumerState<HarvestRecordScreen> {
     });
 
     try {
-      final totalWeight = double.parse(_totalWeightController.text);
-      final pricePerKg = double.parse(_pricePerKgController.text);
+      final totalWeight = double.tryParse(_totalWeightController.text.trim());
+      final pricePerKg = double.tryParse(_pricePerKgController.text.trim());
+
+      if (totalWeight == null || pricePerKg == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid input. Please enter valid numbers.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
       final harvestService = HarvestService();
       await harvestService.createHarvest(
@@ -157,8 +169,8 @@ class _HarvestRecordScreenState extends ConsumerState<HarvestRecordScreen> {
                       // Total Weight Field
                       TextFormField(
                         controller: _totalWeightController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Total Harvest Weight (kg)',
                           border: OutlineInputBorder(),
@@ -181,8 +193,8 @@ class _HarvestRecordScreenState extends ConsumerState<HarvestRecordScreen> {
                       // Price per kg Field
                       TextFormField(
                         controller: _pricePerKgController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Selling Price (₹ per kg)',
                           border: OutlineInputBorder(),

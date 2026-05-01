@@ -698,7 +698,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                         HapticFeedback.mediumImpact(); // Tactile feedback
                         setState(() => _isSubmitting = true);
                         try {
-                          widget.onMarkDone!();
+                          await Future.sync(() => widget.onMarkDone!());
                         } finally {
                           if (mounted) setState(() => _isSubmitting = false);
                         }
@@ -1365,8 +1365,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ? null
             : () async {
                 setState(() => _isSubmitting = true);
-                widget.onMarkDone?.call();
-                if (mounted) setState(() => _isSubmitting = false);
+                try {
+                  await Future.sync(() => widget.onMarkDone?.call());
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
               },
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: _slate300, width: 1.5),
@@ -1606,8 +1609,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ? null
             : () async {
                 setState(() => _isSubmitting = true);
-                widget.onMarkDone?.call();
-                if (mounted) setState(() => _isSubmitting = false);
+                try {
+                  await Future.sync(() => widget.onMarkDone?.call());
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
               },
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF16A34A),

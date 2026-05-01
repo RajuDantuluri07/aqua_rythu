@@ -37,7 +37,20 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
     setState(() => _loading = true);
 
     try {
-      final qty = double.parse(_qtyCtrl.text.trim());
+      final qty = double.tryParse(_qtyCtrl.text.trim());
+
+      if (qty == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid quantity. Please enter a valid number.'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
       final count = _countCtrl.text.trim().isNotEmpty
           ? int.tryParse(_countCtrl.text.trim())
           : null;
@@ -139,8 +152,8 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
                       color: const Color(0xFFE8F5EE),
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    child: const Icon(Icons.water_drop,
-                        color: _green, size: 22),
+                    child:
+                        const Icon(Icons.water_drop, color: _green, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -184,11 +197,11 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _typeOption('partial', 'Partial Harvest',
-                    Icons.moving_outlined, _amber),
+                _typeOption('partial', 'Partial Harvest', Icons.moving_outlined,
+                    _amber),
                 const SizedBox(width: 10),
-                _typeOption('full', 'Final Harvest',
-                    Icons.agriculture_outlined, _green),
+                _typeOption('full', 'Final Harvest', Icons.agriculture_outlined,
+                    _green),
               ],
             ),
 
@@ -201,8 +214,7 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
               controller: _qtyCtrl,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: _inputDeco(
-                  'e.g. 500', Icons.scale_outlined),
+              decoration: _inputDeco('e.g. 500', Icons.scale_outlined),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Enter quantity';
                 final n = double.tryParse(v.trim());
@@ -220,8 +232,7 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
               controller: _countCtrl,
               keyboardType: TextInputType.number,
               decoration: _inputDeco(
-                  'Auto-calculated if left empty',
-                  Icons.numbers_outlined),
+                  'Auto-calculated if left empty', Icons.numbers_outlined),
             ),
 
             // ABW auto-fill note
@@ -236,13 +247,11 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline,
-                        size: 14, color: _green),
+                    const Icon(Icons.info_outline, size: 14, color: _green),
                     const SizedBox(width: 6),
                     Text(
                       'ABW ${abw.toStringAsFixed(1)}g auto-filled from last sampling',
-                      style: const TextStyle(
-                          fontSize: 12, color: _green),
+                      style: const TextStyle(fontSize: 12, color: _green),
                     ),
                   ],
                 ),
@@ -285,8 +294,7 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
     );
   }
 
-  Widget _typeOption(
-      String value, String label, IconData icon, Color color) {
+  Widget _typeOption(String value, String label, IconData icon, Color color) {
     final selected = _harvestType == value;
     return Expanded(
       child: GestureDetector(
@@ -297,13 +305,12 @@ class _HarvestLogScreenState extends ConsumerState<HarvestLogScreen> {
           decoration: BoxDecoration(
             color: selected ? color : Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: selected ? color : const Color(0xFFE0E0E0)),
+            border:
+                Border.all(color: selected ? color : const Color(0xFFE0E0E0)),
           ),
           child: Column(
             children: [
-              Icon(icon,
-                  color: selected ? Colors.white : color, size: 22),
+              Icon(icon, color: selected ? Colors.white : color, size: 22),
               const SizedBox(height: 6),
               Text(
                 label,
@@ -382,8 +389,8 @@ class _SuccessSheet extends StatelessWidget {
             height: 56,
             decoration: const BoxDecoration(
                 color: Color(0xFFE8F5EE), shape: BoxShape.circle),
-            child: const Icon(Icons.check_circle_rounded,
-                color: _green, size: 30),
+            child:
+                const Icon(Icons.check_circle_rounded, color: _green, size: 30),
           ),
           const SizedBox(height: 14),
           Text(
@@ -425,8 +432,7 @@ class _SuccessSheet extends StatelessWidget {
                 elevation: 0,
               ),
               child: const Text('Done',
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -439,20 +445,15 @@ class _SuccessSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: urgent
-            ? const Color(0xFFFFF3E0)
-            : const Color(0xFFF5F7FA),
+        color: urgent ? const Color(0xFFFFF3E0) : const Color(0xFFF5F7FA),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-            color: urgent
-                ? const Color(0xFFFFCC80)
-                : const Color(0xFFE8ECF0)),
+            color: urgent ? const Color(0xFFFFCC80) : const Color(0xFFE8ECF0)),
       ),
       child: Row(
         children: [
           Icon(icon,
-              color: urgent ? const Color(0xFFE65100) : _green,
-              size: 20),
+              color: urgent ? const Color(0xFFE65100) : _green, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

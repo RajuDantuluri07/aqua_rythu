@@ -24,7 +24,7 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
-  
+
   ExpenseCategory _selectedCategory = ExpenseCategory.labour;
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
@@ -56,15 +56,29 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
     });
 
     try {
-      final amount = double.parse(_amountController.text);
-      
+      final amount = double.tryParse(_amountController.text.trim());
+
+      if (amount == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid amount. Please enter a valid number.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       await ref.read(expensesProvider(widget.cropId).notifier).updateExpense(
-        expenseId: widget.expense.id!,
-        category: _selectedCategory,
-        amount: amount,
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        date: _selectedDate,
-      );
+            expenseId: widget.expense.id!,
+            category: _selectedCategory,
+            amount: amount,
+            notes: _notesController.text.trim().isEmpty
+                ? null
+                : _notesController.text.trim(),
+            date: _selectedDate,
+          );
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -146,7 +160,8 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
               // Amount Field
               TextFormField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'Amount (₹)',
                   border: OutlineInputBorder(),
@@ -225,7 +240,8 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       )
                     : const Text(
@@ -245,7 +261,8 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Expense'),
-        content: Text('Are you sure you want to delete this ${widget.expense.category.label} expense of ₹${widget.expense.amount.toStringAsFixed(2)}?'),
+        content: Text(
+            'Are you sure you want to delete this ${widget.expense.category.label} expense of ₹${widget.expense.amount.toStringAsFixed(2)}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -266,8 +283,10 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
 
   Future<void> _deleteExpense() async {
     try {
-      await ref.read(expensesProvider(widget.cropId).notifier).deleteExpense(widget.expense.id!);
-      
+      await ref
+          .read(expensesProvider(widget.cropId).notifier)
+          .deleteExpense(widget.expense.id!);
+
       if (mounted) {
         Navigator.of(context).pop(); // Go back to expense list
         ScaffoldMessenger.of(context).showSnackBar(

@@ -357,7 +357,11 @@ class PondDashboardController {
       final rows = await _feedService.getFeedRounds(pondId, doc);
 
       for (final row in rows) {
-        final round = row['round'] as int;
+        final round = row['round'] as int?;
+        if (round == null) {
+          AppLogger.error('Missing round in feed row for pond $pondId');
+          continue;
+        }
 
         // Validate required fields
         if (row['planned_amount'] == null) {
@@ -370,8 +374,8 @@ class PondDashboardController {
           continue; // Skip invalid row
         }
 
-        final amount = (row['planned_amount'] as num).toDouble();
-        final status = row['status'] as String;
+        final amount = (row['planned_amount'] as num?)?.toDouble() ?? 0.0;
+        final status = row['status'] as String? ?? 'pending';
         final id = row['id'] as String? ?? '';
 
         // Validate amount

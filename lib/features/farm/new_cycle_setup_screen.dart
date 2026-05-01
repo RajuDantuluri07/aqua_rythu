@@ -41,8 +41,21 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
   Future<void> _startCycle() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final seedCount = int.parse(_seedCtrl.text);
-    final plSize = int.parse(_plSizeCtrl.text);
+    final seedCount = int.tryParse(_seedCtrl.text.trim());
+    final plSize = int.tryParse(_plSizeCtrl.text.trim());
+
+    if (seedCount == null || plSize == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Invalid input. Please check your values."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => _isLoading = false);
+      return;
+    }
 
     setState(() => _isLoading = true);
 
