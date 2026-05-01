@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../farm/farm_provider.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
+import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import '../../routes/app_routes.dart';
 import 'enums/seed_type.dart';
+import 'package:aqua_rythu/features/upgrade/widgets/pond_limit_bottom_sheet.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -122,9 +124,14 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
 
   Future<void> _savePond() async {
     if (_formKey.currentState?.validate() ?? false) {
-      final selectedFarmId = widget.farmId ?? ref.read(farmProvider).currentFarm?.id;
+      // Set loading state immediately for instant feedback
+      setState(() => _isLoading = true);
+
+      final selectedFarmId =
+          widget.farmId ?? ref.read(farmProvider).currentFarm?.id;
 
       if (selectedFarmId == null) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text("No Farm Selected"),
@@ -137,18 +144,29 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         return;
       }
 
+      // Check pond limit before creation
+      final currentFarm = ref.read(farmProvider).farms.firstWhere(
+            (f) => f.id == selectedFarmId,
+            orElse: () => Farm(id: '', name: '', location: '', ponds: []),
+          );
+      final currentPondCount = currentFarm.ponds.length;
+      if (LimitTriggerService.hasHitPondLimit(currentPondCount)) {
+        setState(() => _isLoading = false);
+        await PondLimitBottomSheet.show(context, pondCount: currentPondCount);
+        return;
+      }
+
       // Sanitize input: replace commas with dots for universal parsing
       final sanitizedArea = _areaController.text.replaceAll(',', '.');
       final area = double.tryParse(sanitizedArea) ?? 0.0;
-      
-      final seedCount = _seedCountController.text.isEmpty 
-          ? 100000 
+
+      final seedCount = _seedCountController.text.isEmpty
+          ? 100000
           : int.parse(_seedCountController.text);
-      final plSize = _plSizeController.text.isEmpty 
-          ? 10 
+      final plSize = _plSizeController.text.isEmpty
+          ? 10
           : int.parse(_plSizeController.text);
 
-      setState(() => _isLoading = true);
       try {
         final pondService = PondService();
 
@@ -164,7 +182,9 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
         );
 
         // Refresh the provider to sync the new pond from Supabase
-        await ref.read(farmProvider.notifier).loadFarms(setAsSelectedId: selectedFarmId);
+        await ref
+            .read(farmProvider.notifier)
+            .loadFarms(setAsSelectedId: selectedFarmId);
 
         if (!mounted) return;
 
@@ -221,8 +241,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'Seed Type',
-                  style: TextStyle(
-                      fontSize: 13, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -236,8 +255,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w500)),
                 subtitle: Text(type.description,
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade500)),
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                 onChanged: (v) {
                   if (v != null) setState(() => _seedType = v);
                 },
@@ -277,7 +296,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
               BorderSide(color: Theme.of(context).primaryColor, width: 2),
         ),
       ),
-      validator: validator ?? (required ? (v) => v!.isEmpty ? "Required" : null : null),
+      validator: validator ??
+          (required ? (v) => v!.isEmpty ? "Required" : null : null),
     );
   }
 

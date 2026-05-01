@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:aqua_rythu/core/services/payment_service.dart';
 import '../subscription_provider.dart';
 
 class UpgradeCTASection extends ConsumerWidget {
-  const UpgradeCTASection({super.key});
+  const UpgradeCTASection({super.key, required this.paymentService});
+
+  final PaymentService paymentService;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -99,13 +102,7 @@ class UpgradeCTASection extends ConsumerWidget {
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              // TODO: Navigate to payment screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Payment integration coming soon!'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
+              paymentService.startPayment();
             },
             child: const Text('Proceed to Payment'),
           ),

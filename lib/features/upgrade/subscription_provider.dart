@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/models/subscription_model.dart';
 import 'package:aqua_rythu/core/services/subscription_gate.dart';
 
@@ -34,6 +36,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   SubscriptionNotifier()
       : super(SubscriptionState(currentPlan: PlanType.FREE)) {
     SubscriptionGate.setPro(false);
+    _loadSubscription();
   }
 
   @override
@@ -60,6 +63,35 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         isLoading: false,
       );
     }
+  }
+
+  Future<void> handlePaymentSuccess(PaymentSuccessResponse response) async {
+    // Unlock PRO
+    state = state.copyWith(
+      currentPlan: PlanType.PRO,
+      isLoading: false,
+    );
+
+    // Update gate
+    SubscriptionGate.setPro(true);
+
+    // Persist locally
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_pro_user', true);
+  }
+
+  Future<void> _loadSubscription() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isPro = prefs.getBool('is_pro_user') ?? false;
+
+    if (isPro) {
+      SubscriptionGate.setPro(true);
+      state = state.copyWith(currentPlan: PlanType.PRO);
+    }
+  }
+
+  Future<void> loadSubscription() async {
+    await _loadSubscription();
   }
 
   void resetToFree() {

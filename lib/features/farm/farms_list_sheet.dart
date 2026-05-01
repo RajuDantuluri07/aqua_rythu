@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/core/services/farm_member_service.dart';
+import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'farm_provider.dart';
 import 'farm_detail_sheet.dart';
 import '../profile/farm_settings_screen.dart';
+import 'package:aqua_rythu/features/upgrade/widgets/farm_limit_bottom_sheet.dart';
 
 class FarmsListSheet extends ConsumerWidget {
   const FarmsListSheet({super.key});
@@ -88,7 +90,13 @@ class FarmsListSheet extends ConsumerWidget {
                               style: TextStyle(color: Color(0xFF888888))),
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
-                            onPressed: () {
+                            onPressed: () async {
+                              // Check farm limit before opening form
+                              if (LimitTriggerService.hasHitFarmLimit(
+                                  farms.length)) {
+                                await FarmLimitBottomSheet.show(context);
+                                return;
+                              }
                               Navigator.of(context).pop();
                               Navigator.of(context)
                                   .pushNamed(AppRoutes.addFarm);
@@ -120,7 +128,13 @@ class FarmsListSheet extends ConsumerWidget {
                             width: double.infinity,
                             height: 50,
                             child: OutlinedButton.icon(
-                              onPressed: () {
+                              onPressed: () async {
+                                // Check farm limit before opening form
+                                if (LimitTriggerService.hasHitFarmLimit(
+                                    farms.length)) {
+                                  await FarmLimitBottomSheet.show(context);
+                                  return;
+                                }
                                 Navigator.of(context).pop();
                                 Navigator.of(context)
                                     .pushNamed(AppRoutes.addFarm);

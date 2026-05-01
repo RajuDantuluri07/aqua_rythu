@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/features/farm/farm_provider.dart';
 import 'package:aqua_rythu/core/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import 'package:aqua_rythu/features/pond/add_pond_screen.dart';
+import 'package:aqua_rythu/features/upgrade/widgets/farm_limit_bottom_sheet.dart';
 
 class AddFarmScreen extends ConsumerStatefulWidget {
   const AddFarmScreen({super.key});
@@ -26,7 +28,16 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
 
   Future<void> _saveFarm() async {
     if (_formKey.currentState?.validate() ?? false) {
+      // Set loading state immediately for instant feedback
       setState(() => _isLoading = true);
+
+      // Check farm limit before creation
+      final currentFarmCount = ref.read(farmProvider).farms.length;
+      if (LimitTriggerService.hasHitFarmLimit(currentFarmCount)) {
+        setState(() => _isLoading = false);
+        await FarmLimitBottomSheet.show(context);
+        return;
+      }
 
       try {
         final farmService = FarmService();
@@ -38,7 +49,9 @@ class _AddFarmScreenState extends ConsumerState<AddFarmScreen> {
 
         // Refresh the provider to sync with Supabase
         // We pass farmId to make it the active selection
-        await ref.read(farmProvider.notifier).loadFarms(setAsSelectedId: farmId);
+        await ref
+            .read(farmProvider.notifier)
+            .loadFarms(setAsSelectedId: farmId);
 
         if (!mounted) return;
 

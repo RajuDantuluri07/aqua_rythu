@@ -50,6 +50,8 @@ import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card.dart';
 import 'package:aqua_rythu/features/pond/widgets/seed_type_badge.dart';
 import 'package:aqua_rythu/features/upgrade/access_control_hooks.dart';
 import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
+import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
+import 'package:aqua_rythu/features/upgrade/widgets/pond_limit_bottom_sheet.dart';
 
 class PondDashboardScreen extends ConsumerStatefulWidget {
   const PondDashboardScreen({super.key});
@@ -1151,8 +1153,22 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 children: [
                   const LanguageSwitcherDark(),
                   GestureDetector(
-                    onTap: () =>
-                        Navigator.pushNamed(context, AppRoutes.addPond),
+                    onTap: () async {
+                      // Check pond limit before opening form
+                      final farmState = ref.read(farmProvider);
+                      final currentFarm = farmState.currentFarm;
+                      if (currentFarm != null) {
+                        final pondCount = currentFarm.ponds.length;
+                        if (LimitTriggerService.hasHitPondLimit(pondCount)) {
+                          await PondLimitBottomSheet.show(
+                            context,
+                            pondCount: pondCount,
+                          );
+                          return;
+                        }
+                      }
+                      Navigator.pushNamed(context, AppRoutes.addPond);
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:aqua_rythu/core/services/payment_service.dart';
 
 import 'subscription_provider.dart';
 import 'upgrade_insight_provider.dart';
@@ -15,11 +17,51 @@ class UpgradeToProScreen extends ConsumerStatefulWidget {
 
 class _State extends ConsumerState<UpgradeToProScreen> {
   _BillingCycle _cycle = _BillingCycle.perCrop;
+  late final PaymentService _paymentService;
 
   @override
   void initState() {
     super.initState();
     UpgradeMetrics.track('paywall_view', {'screen': 'upgrade_to_pro'});
+    _paymentService = PaymentService();
+    _initPaymentService();
+  }
+
+  void _initPaymentService() {
+    _paymentService.init(
+      onSuccess: (PaymentSuccessResponse response) {
+        ref.read(subscriptionProvider.notifier).handlePaymentSuccess(response);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment successful! PRO unlocked.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      },
+      onError: (PaymentFailureResponse response) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Payment failed: ${response.message}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+      onExternalWallet: (ExternalWalletResponse response) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('External wallet: ${response.walletName}'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _paymentService.dispose();
+    super.dispose();
   }
 
   @override
@@ -61,41 +103,67 @@ class _State extends ConsumerState<UpgradeToProScreen> {
 
   Widget _billingToggle() {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: const Color(0xFFEAECEF),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _toggleBtn('Per Crop', _cycle == _BillingCycle.perCrop,
               () => setState(() => _cycle = _BillingCycle.perCrop)),
-          _toggleBtn('Yearly (Save more)', _cycle == _BillingCycle.yearly,
-              () => setState(() => _cycle = _BillingCycle.yearly)),
+          _toggleBtn('Yearly (Save ₹500/year)', _cycle == _BillingCycle.yearly,
+              () => setState(() => _cycle = _BillingCycle.yearly),
+              isYearly: true),
         ],
       ),
     );
   }
 
-  Widget _toggleBtn(String label, bool active, VoidCallback onTap) {
+  Widget _toggleBtn(String label, bool active, VoidCallback onTap,
+      {bool isYearly = false}) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: active ? const Color(0xFF16A34A) : Colors.transparent,
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(16),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: active ? Colors.white : const Color(0xFF111111),
-          ),
-        ),
+        child: isYearly
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Yearly',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: active ? Colors.white : const Color(0xFF111111),
+                    ),
+                  ),
+                  Text(
+                    'Save ₹500/year',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w400,
+                      color: active
+                          ? Colors.white.withOpacity(0.8)
+                          : const Color(0xFF666666),
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : const Color(0xFF111111),
+                ),
+              ),
       ),
     );
   }
@@ -128,6 +196,7 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             ),
             const SizedBox(height: 16),
             _includedList(const [
+              '1 farm upto 3 ponds',
               'Feed schedule (DOC based)',
               'Manual tray logging',
               'Sampling (ABW)',
@@ -162,9 +231,12 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     final sub = ref.watch(subscriptionProvider);
     final isPerCrop = _cycle == _BillingCycle.perCrop;
 
-    final priceMain = isPerCrop ? '₹999' : '₹2999';
-    final priceStrike = isPerCrop ? '₹2000' : '';
-    final priceUnit = isPerCrop ? 'per crop' : 'per year (~₹250/month)';
+    final priceMain = isPerCrop ? '₹999' : '₹2499';
+    final priceStrike = isPerCrop ? '' : '₹3000';
+    final priceUnit = isPerCrop ? 'per crop' : 'per year';
+    final perCropEquivalent = isPerCrop ? '' : '~₹833 per crop';
+    final decisionHelper =
+        isPerCrop ? '' : 'Best for farmers doing 2–3 crops/year';
 
     return Container(
       decoration: BoxDecoration(
@@ -183,22 +255,10 @@ class _State extends ConsumerState<UpgradeToProScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFDCFCE7),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              '🔥 Most Popular',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF15803D),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          Center(
+            child: _billingToggle(),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           const Text(
             'PRO',
             style: TextStyle(
@@ -206,40 +266,60 @@ class _State extends ConsumerState<UpgradeToProScreen> {
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF111111)),
           ),
-          const SizedBox(height: 12),
-          _billingToggle(),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(height: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                priceMain,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF111111),
-                ),
-              ),
-              if (priceStrike.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    priceStrike,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    priceMain,
                     style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF888888),
-                      decoration: TextDecoration.lineThrough,
-                      decorationColor: Color(0xFF888888),
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF111111),
                     ),
                   ),
+                  if (priceStrike.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        priceStrike,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF888888),
+                          decoration: TextDecoration.lineThrough,
+                          decorationColor: Color(0xFF888888),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                priceUnit,
+                style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
+              ),
+              if (perCropEquivalent.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  perCropEquivalent,
+                  style:
+                      const TextStyle(fontSize: 12, color: Color(0xFF888888)),
+                ),
+              ],
+              if (decisionHelper.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  decisionHelper,
+                  style:
+                      const TextStyle(fontSize: 13, color: Color(0xFF666666)),
                 ),
               ],
             ],
-          ),
-          Text(
-            priceUnit,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
           ),
           const SizedBox(height: 12),
           Container(
@@ -259,6 +339,8 @@ class _State extends ConsumerState<UpgradeToProScreen> {
           ),
           const SizedBox(height: 12),
           _includedList(const [
+            'Unlimited farms & unlimited ponds',
+            'Roles (Farmer / Partner / Supervisor / Workers)',
             'Smart feed engine (tray + growth + FCR)',
             'Feed savings with ₹ impact',
             'FCR improvement',
@@ -271,10 +353,8 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             width: double.infinity,
             height: 46,
             child: ElevatedButton(
-              onPressed: sub.isLoading
-                  ? null
-                  : () =>
-                      ref.read(subscriptionProvider.notifier).upgradeToPro(),
+              onPressed:
+                  sub.isLoading ? null : () => _paymentService.startPayment(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF16A34A),
                 foregroundColor: Colors.white,
