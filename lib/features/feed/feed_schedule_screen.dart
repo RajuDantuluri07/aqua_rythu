@@ -280,63 +280,6 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     );
   }
 
-  Widget _buildTotalSummaryCard(double total) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.l),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: AppRadius.rBase,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF22C55E).withOpacity(0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.s),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.25),
-              borderRadius: AppRadius.rs,
-            ),
-            child: const Icon(Icons.bar_chart_rounded,
-                color: Colors.white, size: 26),
-          ),
-          AppSpacing.wBase,
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Total Projected Feed",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Text(
-            "${total.toStringAsFixed(1)} kg",
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSaveButton(
       BuildContext context, FeedScheduleState feedScheduleState) {
     return Container(
@@ -778,42 +721,4 @@ class _FeedRowState extends ConsumerState<_FeedRow> {
     );
   }
 
-  Widget _buildFeedSummarySection(feedScheduleState, int currentDoc) {
-    // Recalculate summary total from all day rounds to ensure UI consistency
-    final totalFeed = feedScheduleState.days
-        .fold(0.0, (sum, day) => sum + day.rounds.fold(0.0, (s, r) => s + r));
-
-    // TASK 1: TEMPORARY LOG - Track feed values in Feed Schedule
-    print(
-        "📅 FEED SCHEDULE: Pond=${widget.pondId}, TotalFeed=${totalFeed.toStringAsFixed(2)}kg, Days=${feedScheduleState.days.length}");
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Total Feed: ${totalFeed.toStringAsFixed(2)} kg',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Across ${feedScheduleState.days.length} days',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
