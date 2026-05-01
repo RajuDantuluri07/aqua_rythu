@@ -1052,9 +1052,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       final recentTray =
           trayLogs.where((l) => !l.isSkipped && l.trays.isNotEmpty).firstOrNull;
       if (recentTray != null) {
-        final full = recentTray.trays.where((t) => t == TrayStatus.full).length;
+        final full =
+            recentTray.trays.where((t) => t == TrayStatus.heavy).length;
         final empty =
-            recentTray.trays.where((t) => t == TrayStatus.completed).length;
+            recentTray.trays.where((t) => t == TrayStatus.empty).length;
         final total = recentTray.trays.length;
         if (full > total / 2) {
           traySignal = 'full';

@@ -4,15 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'subscription_provider.dart';
 import 'upgrade_insight_provider.dart';
 
-const _bg = Color(0xFFFFFFFF);
-const _card = Color(0xFFF8FAFC);
-const _accent = Color(0xFF22C55E);
-const _muted = Color(0xFF64748B);
-const _listInk = Color(0xFF1E293B);
-const _strike = Color(0xFF94A3B8);
-const _btnFree = Color(0xFFF1F5F9);
-const _toggleBg = Color(0xFFF1F5F9);
-
 enum _BillingCycle { perCrop, yearly }
 
 class UpgradeToProScreen extends ConsumerStatefulWidget {
@@ -33,55 +24,32 @@ class _State extends ConsumerState<UpgradeToProScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 600;
-
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: const Color(0xFFF6F7F9),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _topBar(),
-              const SizedBox(height: 8),
               const Text(
-                'Upgrade to PRO',
+                'Upgrade Your Farm Intelligence',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 26,
+                  fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E293B),
-                  letterSpacing: -0.4,
+                  color: Color(0xFF111111),
                 ),
               ),
-              const SizedBox(height: 5),
-              const Text(
-                'Make better decisions. Save feed. Increase profit.',
-                style: TextStyle(fontSize: 14, color: _muted, height: 1.4),
-              ),
-              const SizedBox(height: 22),
-              isWide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _basicCard()),
-                        const SizedBox(width: 20),
-                        Expanded(child: _proCard()),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _basicCard(),
-                        const SizedBox(height: 24),
-                        _proCard(),
-                      ],
-                    ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 20),
+              _basicCard(),
+              const SizedBox(height: 16),
+              _proCard(),
+              const SizedBox(height: 10),
               const Center(
                 child: Text(
-                  'Farmers typically recover cost in 7–14 days  •  Based on feed optimization',
+                  'Farmers typically recover cost in 7–10 days',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: _muted),
+                  style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
                 ),
               ),
             ],
@@ -91,44 +59,11 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     );
   }
 
-  Widget _topBar() {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
-          child: Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.close_rounded,
-                size: 18, color: Colors.grey.shade700),
-          ),
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: () {},
-          child: const Text(
-            'RESTORE',
-            style: TextStyle(
-              fontSize: 11,
-              color: _muted,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _billingToggle() {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _toggleBg,
+        color: const Color(0xFFEAECEF),
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
@@ -136,7 +71,7 @@ class _State extends ConsumerState<UpgradeToProScreen> {
         children: [
           _toggleBtn('Per Crop', _cycle == _BillingCycle.perCrop,
               () => setState(() => _cycle = _BillingCycle.perCrop)),
-          _toggleBtn('For Serious Farmers', _cycle == _BillingCycle.yearly,
+          _toggleBtn('Yearly (Save more)', _cycle == _BillingCycle.yearly,
               () => setState(() => _cycle = _BillingCycle.yearly)),
         ],
       ),
@@ -148,17 +83,17 @@ class _State extends ConsumerState<UpgradeToProScreen> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? _accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          color: active ? const Color(0xFF16A34A) : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            color: active ? Colors.black : _muted,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : const Color(0xFF111111),
           ),
         ),
       ),
@@ -166,58 +101,59 @@ class _State extends ConsumerState<UpgradeToProScreen> {
   }
 
   Widget _basicCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Basic (Free)',
-            style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B)),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            '₹0',
-            style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B)),
-          ),
-          const SizedBox(height: 16),
-          _includedList(const [
-            'Feed schedule (DOC 1–30)',
-            '1 farm / 3 ponds',
-            'Manual tray logging',
-            'Sampling entry (ABW)',
-            'Basic dashboard',
-          ]),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _btnFree,
-                foregroundColor: const Color(0xFF1E293B),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text(
-                'Continue Free',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+    return Opacity(
+      opacity: 0.85,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 20,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'BASIC (Free)',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111111)),
+            ),
+            const SizedBox(height: 16),
+            _includedList(const [
+              'Feed schedule (DOC based)',
+              'Manual tray logging',
+              'Sampling (ABW)',
+              'Basic dashboard',
+            ]),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE5E7EB),
+                  foregroundColor: const Color(0xFF111111),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text(
+                  'Continue Free',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -226,174 +162,142 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     final sub = ref.watch(subscriptionProvider);
     final isPerCrop = _cycle == _BillingCycle.perCrop;
 
-    final title = isPerCrop ? 'PRO' : 'BUSINESS';
     final priceMain = isPerCrop ? '₹999' : '₹2999';
-    final priceStrike = isPerCrop ? '₹2000' : '₹5999';
-    final priceUnit = isPerCrop ? '/ crop' : '/ year';
-    final tagText = isPerCrop
-        ? 'Launch Price • Increasing soon'
-        : 'Best for multi-farm users';
+    final priceStrike = isPerCrop ? '₹2000' : '';
+    final priceUnit = isPerCrop ? 'per crop' : 'per year (~₹250/month)';
 
-    final features = isPerCrop
-        ? const [
-            'Smart feed engine (tray + growth + FCR)',
-            'Feed savings & ₹ impact tracking',
-            'FCR monitoring & improvement',
-            'Growth intelligence (ideal vs actual)',
-            'Multi-pond comparison',
-            'Full crop report (PDF)',
-          ]
-        : const [
-            'Everything in PRO',
-            'Unlimited crops',
-            'Multiple farms',
-            'Worker / supervisor access',
-            'Advanced analytics',
-            'Priority support',
-          ];
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Transform.scale(
-          scale: 1.0,
-          child: Container(
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _accent, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: _accent.withOpacity(0.18),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: _billingToggle()),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      priceMain,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        priceStrike,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: _strike,
-                          decoration: TextDecoration.lineThrough,
-                          decorationColor: _strike,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        priceUnit,
-                        style: const TextStyle(fontSize: 14, color: _muted),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _accent.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    tagText,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: _accent,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _includedList(features),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton(
-                    onPressed: sub.isLoading
-                        ? null
-                        : () => ref
-                            .read(subscriptionProvider.notifier)
-                            .upgradeToPro(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: sub.isLoading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.black),
-                          )
-                        : Text(
-                            isPerCrop ? 'Unlock PRO' : 'Unlock BUSINESS',
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                  ),
-                ),
-              ],
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF16A34A), width: 2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 20,
+            offset: Offset(0, 6),
           ),
-        ),
-        Positioned(
-          top: -10,
-          right: 16,
-          child: Container(
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _accent,
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFDCFCE7),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
-              'MOST POPULAR',
+              '🔥 Most Popular',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: 0.4,
+                fontSize: 12,
+                color: Color(0xFF15803D),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          const Text(
+            'PRO',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF111111)),
+          ),
+          const SizedBox(height: 12),
+          _billingToggle(),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                priceMain,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111111),
+                ),
+              ),
+              if (priceStrike.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    priceStrike,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF888888),
+                      decoration: TextDecoration.lineThrough,
+                      decorationColor: Color(0xFF888888),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          Text(
+            priceUnit,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              'Save ₹5,000–₹20,000 per crop',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF065F46),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _includedList(const [
+            'Smart feed engine (tray + growth + FCR)',
+            'Feed savings with ₹ impact',
+            'FCR improvement',
+            'Growth intelligence',
+            'Multi-pond comparison',
+            'Full crop report (PDF)',
+          ]),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: sub.isLoading
+                  ? null
+                  : () =>
+                      ref.read(subscriptionProvider.notifier).upgradeToPro(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: sub.isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text(
+                      'Start Saving Feed Now',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -403,20 +307,21 @@ class _State extends ConsumerState<UpgradeToProScreen> {
       children: items
           .map(
             (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Padding(
                     padding: EdgeInsets.only(top: 2),
-                    child: Icon(Icons.check_rounded, size: 16, color: _accent),
+                    child: Icon(Icons.check_rounded,
+                        size: 16, color: Color(0xFF16A34A)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       f,
                       style: const TextStyle(
-                          fontSize: 13.5, color: _listInk, height: 1.4),
+                          fontSize: 14, color: Color(0xFF111111)),
                     ),
                   ),
                 ],
@@ -426,5 +331,4 @@ class _State extends ConsumerState<UpgradeToProScreen> {
           .toList(),
     );
   }
-
 }

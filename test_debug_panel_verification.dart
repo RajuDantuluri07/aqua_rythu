@@ -1,7 +1,8 @@
 /// Debug Panel Verification Test
 /// Tests that debug panel shows REAL data from correct sources
-/// 
+///
 /// Usage: flutter test test_debug_panel_verification.dart
+library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,28 +31,32 @@ void main() {
     test('Feed Entered comes from user input', () {
       // Verify feed_entered field uses actualQty parameter
       // Source: markFeedDone() method parameter
-      expect(true, isTrue, reason: 'Feed Entered sourced from user input parameter');
+      expect(true, isTrue,
+          reason: 'Feed Entered sourced from user input parameter');
     });
 
     test('Feed Saved comes from DB transaction result', () {
       // Verify feed_saved field uses qty from successful DB transaction
       // Source: After DB transaction completes successfully
-      expect(true, isTrue, reason: 'Feed Saved sourced from DB transaction result');
+      expect(true, isTrue,
+          reason: 'Feed Saved sourced from DB transaction result');
     });
 
     test('Calculated Feed comes from engine output', () {
       // Verify calculated_feed field uses planned amount from state
       // Source: state.roundFeedAmounts[round]
-      expect(true, isTrue, reason: 'Calculated Feed sourced from engine planned amount');
+      expect(true, isTrue,
+          reason: 'Calculated Feed sourced from engine planned amount');
     });
 
     test('Difference calculation shows percentage variance', () {
       // Test the newly implemented difference calculation
-      final plannedQty = 5.0;
-      final actualQty = 4.5;
-      final expectedDifference = ((plannedQty - actualQty) / plannedQty * 100);
-      
-      expect(expectedDifference, equals(10.0), reason: 'Should show 10% difference');
+      const plannedQty = 5.0;
+      const actualQty = 4.5;
+      const expectedDifference = ((plannedQty - actualQty) / plannedQty * 100);
+
+      expect(expectedDifference, equals(10.0),
+          reason: 'Should show 10% difference');
     });
 
     test('Real-time update after feed log', () {

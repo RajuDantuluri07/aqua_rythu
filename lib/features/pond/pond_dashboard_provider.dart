@@ -4,6 +4,7 @@ import '../../core/utils/feed_debug_logger.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/tray_service.dart';
 import '../../features/tray/enums/tray_status.dart';
+import '../../features/tray/tray_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
@@ -671,24 +672,28 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // Simple tray status aggregation (replaces FeedStateEngine)
       TrayStatus finalStatus;
       if (trayStatuses.isEmpty) {
-        finalStatus = TrayStatus.partial;
+        finalStatus = TrayStatus.light;
       } else {
         int totalScore = 0;
         for (final status in trayStatuses) {
-          if (status == TrayStatus.full) {
+          if (status == TrayStatus.heavy) {
             totalScore += 3;
-          } else if (status == TrayStatus.partial) {
+          } else if (status == TrayStatus.medium) {
             totalScore += 2;
+          } else if (status == TrayStatus.light) {
+            totalScore += 1;
           }
           // Empty contributes 0
         }
         final double avg = totalScore / trayStatuses.length;
         if (avg >= 2.5) {
-          finalStatus = TrayStatus.full;
+          finalStatus = TrayStatus.heavy;
         } else if (avg >= 1.5) {
-          finalStatus = TrayStatus.partial;
+          finalStatus = TrayStatus.medium;
+        } else if (avg >= 0.5) {
+          finalStatus = TrayStatus.light;
         } else {
-          finalStatus = TrayStatus.completed;
+          finalStatus = TrayStatus.empty;
         }
       }
 
@@ -718,18 +723,16 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       final pondId = state.selectedPond;
       final doc = state.doc;
       try {
-        await TrayService().saveTrayLog(
+        final trayLog = TrayLog(
           pondId: pondId,
-          date: latest.time,
+          time: latest.time,
           doc: doc,
-          roundNumber: round,
-          trayStatuses: trayStatuses.map((s) => s.name).toList(),
-          observations: latest.observations?.map(
-                (k, v) => MapEntry(k.toString(), v),
-              ) ??
-              {},
-          aggregatedStatus: finalStatus,
+          round: round,
+          trays: trayStatuses,
+          observations: latest.observations,
+          isSkipped: latest.isSkipped,
         );
+        await TrayService().saveTrayLog(trayLog);
 
         // 🔄 CACHE INVALIDATION: Tray update affects smart feed calculations
         // This ensures the controller fetches fresh tray data next load

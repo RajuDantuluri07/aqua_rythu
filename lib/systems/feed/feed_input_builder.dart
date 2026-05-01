@@ -192,7 +192,7 @@ class FeedInputBuilder {
         try {
           return TrayStatus.values.byName(status);
         } catch (_) {
-          return TrayStatus.partial;
+          return TrayStatus.light;
         }
       }).toList();
     } catch (e, stackTrace) {

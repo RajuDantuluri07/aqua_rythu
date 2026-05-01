@@ -374,7 +374,21 @@ class MasterFeedEngine {
         _latestKnownLeftover(input.recentTrayLeftoverPct);
     final leftoverPercent = currentTrayLeftover ?? historicalLeftover ?? -1.0;
 
-    double trayFactor = _trayFactorService.getTrayFactor(leftoverPercent);
+    double trayFactor = 1.0;
+    if (leftoverPercent >= 0) {
+      // Convert percentage to TrayStatus for compatibility
+      TrayStatus status;
+      if (leftoverPercent < 20) {
+        status = TrayStatus.empty;
+      } else if (leftoverPercent < 40) {
+        status = TrayStatus.light;
+      } else if (leftoverPercent < 60) {
+        status = TrayStatus.medium;
+      } else {
+        status = TrayStatus.heavy;
+      }
+      trayFactor = 1.0 + _trayFactorService.getFactor(status);
+    }
     if (useBlindFeeding) {
       trayFactor = 1.0;
     }
@@ -614,13 +628,16 @@ class MasterFeedEngine {
 
     for (final status in trays) {
       switch (status) {
-        case TrayStatus.full:
+        case TrayStatus.heavy:
           full++;
           break;
-        case TrayStatus.completed:
+        case TrayStatus.empty:
           empty++;
           break;
-        case TrayStatus.partial:
+        case TrayStatus.light:
+          // Neutral — don't count
+          break;
+        case TrayStatus.medium:
           // Neutral — don't count
           break;
       }
@@ -670,7 +687,18 @@ class MasterFeedEngine {
     final reasons = <String>[];
 
     if (trayFactor < 1.0) {
-      final trayReason = _trayFactorService.getTrayReason(leftoverPercent);
+      // Convert percentage to TrayStatus for compatibility
+      TrayStatus status;
+      if (leftoverPercent < 20) {
+        status = TrayStatus.empty;
+      } else if (leftoverPercent < 40) {
+        status = TrayStatus.light;
+      } else if (leftoverPercent < 60) {
+        status = TrayStatus.medium;
+      } else {
+        status = TrayStatus.heavy;
+      }
+      final trayReason = _trayFactorService.getTrayReason(status);
       if (trayReason != null) reasons.add(trayReason);
     }
 
