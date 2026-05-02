@@ -10,6 +10,7 @@ import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
 import 'package:aqua_rythu/core/services/feed_savings_service_fixed.dart';
 import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
 import 'package:aqua_rythu/features/upgrade/upgrade_to_pro_screen.dart';
+import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -84,10 +85,12 @@ class DashboardScreen extends ConsumerWidget {
     }
 
     final today = DateTime.now();
+    final historyMap = ref.watch(feedHistoryProvider);
 
     // ── Load feed data from controller for each pond ────────────────────────
     Future<List<_PondRow>> buildPondRows() async {
       final rows = <_PondRow>[];
+      final yesterday = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 1));
 
       for (final pond in ponds) {
         try {
@@ -117,6 +120,15 @@ class DashboardScreen extends ConsumerWidget {
             status = 'Warning';
           }
 
+          // Get yesterday's feed from history
+          final pondHistory = historyMap[pond.id] ?? [];
+          final yesterdayLog = pondHistory.where((log) =>
+            log.date.year == yesterday.year &&
+            log.date.month == yesterday.month &&
+            log.date.day == yesterday.day
+          ).firstOrNull;
+          final double yesterdayFeed = yesterdayLog?.total ?? 0.0;
+
           rows.add(_PondRow(
             id: pond.id,
             name: pond.name,
@@ -125,10 +137,10 @@ class DashboardScreen extends ConsumerWidget {
             fcr: fcr,
             biomass: biomass,
             todayFeed: todayFeed,
-            yesterdayFeed: 0.0, // TODO: Get from feed history if needed
+            yesterdayFeed: yesterdayFeed,
             status: status,
             fcrTrendUp: false, // Simplified for now
-            feedTrendUp: false, // Simplified for now
+            feedTrendUp: todayFeed > yesterdayFeed,
             hasAbwData: hasAbwData,
             area: pond.area,
             seedCount: pond.seedCount,
@@ -136,6 +148,14 @@ class DashboardScreen extends ConsumerWidget {
           ));
         } catch (e) {
           // Fallback for controller errors
+          final pondHistory = historyMap[pond.id] ?? [];
+          final yesterdayLog = pondHistory.where((log) =>
+            log.date.year == yesterday.year &&
+            log.date.month == yesterday.month &&
+            log.date.day == yesterday.day
+          ).firstOrNull;
+          final double yesterdayFeed = yesterdayLog?.total ?? 0.0;
+
           rows.add(_PondRow(
             id: pond.id,
             name: pond.name,
@@ -144,7 +164,7 @@ class DashboardScreen extends ConsumerWidget {
             fcr: 0.0,
             biomass: 0.0,
             todayFeed: 0.0,
-            yesterdayFeed: 0.0,
+            yesterdayFeed: yesterdayFeed,
             status: 'Error',
             fcrTrendUp: false,
             feedTrendUp: false,
