@@ -64,9 +64,13 @@ class FeedSavingsService {
         );
       }
 
-      // Get tray logs count and sampling availability
-      final trayLogsCount = await _getTrayLogsCount(pondId);
-      final samplingAvailable = await _hasSamplingData(pondId);
+      // Get tray logs count and sampling availability in parallel
+      final results = await Future.wait([
+        _getTrayLogsCount(pondId),
+        _hasSamplingData(pondId),
+      ]);
+      final trayLogsCount = results[0] as int;
+      final samplingAvailable = results[1] as bool;
 
       // Confidence gate
       final hasEnoughData =
@@ -141,16 +145,13 @@ class FeedSavingsService {
     }
 
     try {
-      // Aggregate tray logs across all ponds
-      int totalTrayLogs = 0;
-      bool anySamplingAvailable = false;
-
-      for (final pondId in pondIds) {
-        totalTrayLogs += await _getTrayLogsCount(pondId);
-        if (await _hasSamplingData(pondId)) {
-          anySamplingAvailable = true;
-        }
-      }
+      // Aggregate tray logs and sampling availability across all ponds in parallel
+      final results = await Future.wait([
+        _getTotalTrayLogsCountForPonds(pondIds),
+        _hasAnySamplingDataForPonds(pondIds),
+      ]);
+      final totalTrayLogs = results[0] as int;
+      final anySamplingAvailable = results[1] as bool;
 
       // Confidence gate
       final hasEnoughData =
@@ -276,6 +277,38 @@ class FeedSavingsService {
       return response.isNotEmpty;
     } catch (e) {
       AppLogger.error('Failed to check sampling data for pond=$pondId', e);
+      return false;
+    }
+  }
+
+  /// Get total tray logs count for multiple ponds
+  Future<int> _getTotalTrayLogsCountForPonds(List<String> pondIds) async {
+    try {
+      final response = await _supabase
+          .from('tray_logs')
+          .select('id')
+          .in_('pond_id', pondIds)
+          .neq('tray_statuses', '["skipped"]'); // Exclude skipped trays
+
+      return response.length;
+    } catch (e) {
+      AppLogger.error('Failed to get aggregate tray logs count', e);
+      return 0;
+    }
+  }
+
+  /// Check if any of the ponds have sampling data
+  Future<bool> _hasAnySamplingDataForPonds(List<String> pondIds) async {
+    try {
+      final response = await _supabase
+          .from('samplings')
+          .select('id')
+          .in_('pond_id', pondIds)
+          .limit(1);
+
+      return response.isNotEmpty;
+    } catch (e) {
+      AppLogger.error('Failed to check aggregate sampling data', e);
       return false;
     }
   }
