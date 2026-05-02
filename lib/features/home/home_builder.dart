@@ -219,7 +219,7 @@ class HomeBuilder {
     double sum = 0; int cnt = 0;
     for (final log in usable) {
       for (final t in log.trays) {
-        sum += t == TrayStatus.completed ? 0 : t == TrayStatus.partial ? 30 : 70;
+        sum += t == TrayStatus.empty ? 0 : t == TrayStatus.light ? 30 : 70;
         cnt++;
       }
     }
@@ -332,8 +332,8 @@ class HomeBuilder {
 
   static String _trayMajority(TrayLog log) {
     if (log.trays.isEmpty) return 'Logged';
-    final full  = log.trays.where((t) => t == TrayStatus.full).length;
-    final empty = log.trays.where((t) => t == TrayStatus.completed).length;
+    final full  = log.trays.where((t) => t == TrayStatus.heavy).length;
+    final empty = log.trays.where((t) => t == TrayStatus.empty).length;
     if (full  > log.trays.length / 2) return 'Full (leftover)';
     if (empty > log.trays.length / 2) return 'Empty (hungry)';
     return 'Partial';
@@ -341,8 +341,8 @@ class HomeBuilder {
 
   static String? _trayTag(TrayLog log) {
     if (log.trays.isEmpty) return null;
-    final full  = log.trays.where((t) => t == TrayStatus.full).length;
-    final empty = log.trays.where((t) => t == TrayStatus.completed).length;
+    final full  = log.trays.where((t) => t == TrayStatus.heavy).length;
+    final empty = log.trays.where((t) => t == TrayStatus.empty).length;
     if (full  > log.trays.length / 2) return '⚠️ leftover high';
     if (empty > log.trays.length / 2) return '🔺 shrimp hungry';
     return null;

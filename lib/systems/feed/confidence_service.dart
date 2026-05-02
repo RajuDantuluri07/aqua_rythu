@@ -104,13 +104,14 @@ class ConfidenceService {
 
     for (final status in trayStatuses) {
       switch (status) {
-        case TrayStatus.full:
+        case TrayStatus.heavy:
           full++;
           break;
-        case TrayStatus.completed:
+        case TrayStatus.empty:
           empty++;
           break;
-        case TrayStatus.partial:
+        case TrayStatus.light:
+        case TrayStatus.medium:
           partial++;
           break;
       }

@@ -31,13 +31,14 @@ double calculateTrayFactor(List<TrayStatus> trayStatuses) {
   int full = 0, empty = 0, partial = 0;
   for (final status in processedStatuses) {
     switch (status) {
-      case TrayStatus.full:
+      case TrayStatus.heavy:
         full++;
         break;
-      case TrayStatus.completed:
+      case TrayStatus.empty:
         empty++;
         break;
-      case TrayStatus.partial:
+      case TrayStatus.light:
+      case TrayStatus.medium:
         partial++;
         break;
     }
@@ -90,13 +91,14 @@ List<TrayStatus> _processTrayReliability(List<TrayStatus> trayStatuses) {
   int full = 0, empty = 0, partial = 0;
   for (final status in trayStatuses) {
     switch (status) {
-      case TrayStatus.full:
+      case TrayStatus.heavy:
         full++;
         break;
-      case TrayStatus.completed:
+      case TrayStatus.empty:
         empty++;
         break;
-      case TrayStatus.partial:
+      case TrayStatus.light:
+      case TrayStatus.medium:
         partial++;
         break;
     }
@@ -129,21 +131,21 @@ List<TrayStatus> _processTrayReliability(List<TrayStatus> trayStatuses) {
       AppLogger.info(
           'Filtering FULL trays as outliers (${(fullRatio * 100).toStringAsFixed(1)}%)');
     } else {
-      reliableStatuses.addAll(List.filled(full, TrayStatus.full));
+      reliableStatuses.addAll(List.filled(full, TrayStatus.heavy));
     }
 
     if (emptyRatio < outlierThreshold) {
       AppLogger.info(
           'Filtering EMPTY trays as outliers (${(emptyRatio * 100).toStringAsFixed(1)}%)');
     } else {
-      reliableStatuses.addAll(List.filled(empty, TrayStatus.completed));
+      reliableStatuses.addAll(List.filled(empty, TrayStatus.empty));
     }
 
     if (partialRatio < outlierThreshold) {
       AppLogger.info(
           'Filtering PARTIAL trays as outliers (${(partialRatio * 100).toStringAsFixed(1)}%)');
     } else {
-      reliableStatuses.addAll(List.filled(partial, TrayStatus.partial));
+      reliableStatuses.addAll(List.filled(partial, TrayStatus.light));
     }
 
     if (reliableStatuses.isEmpty) {

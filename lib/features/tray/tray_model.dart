@@ -62,7 +62,7 @@ class TrayLog {
         try {
           return TrayStatus.values.byName(e);
         } catch (_) {
-          return TrayStatus.partial;
+          return TrayStatus.light;
         }
       }).toList(),
       observations: (json['observations'] as Map<String, dynamic>?)?.map(

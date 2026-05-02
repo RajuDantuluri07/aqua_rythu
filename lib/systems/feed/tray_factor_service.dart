@@ -1,5 +1,5 @@
 import '../../../features/tray/enums/tray_status.dart';
-import '../config/tray_factor_config.dart';
+import 'config/tray_factor_config.dart';
 
 /// Central service for tray-based feed adjustment factors.
 ///

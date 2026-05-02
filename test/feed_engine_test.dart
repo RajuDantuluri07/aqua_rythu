@@ -132,10 +132,10 @@ void main() {
     test('Tray factor calculation', () {
       // Mostly full trays
       final fullFactor = SmartFeedService.calculateTrayFactor([
-        TrayStatus.full,
-        TrayStatus.full,
-        TrayStatus.full,
-        TrayStatus.partial,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
+        TrayStatus.light,
       ]);
       expect(fullFactor, equals(0.85));
 
@@ -144,7 +144,7 @@ void main() {
         TrayStatus.empty,
         TrayStatus.empty,
         TrayStatus.empty,
-        TrayStatus.partial,
+        TrayStatus.light,
       ]);
       expect(emptyFactor, equals(1.08));
 
@@ -282,19 +282,19 @@ void main() {
     test('Tray consistency calculation', () {
       // Highly consistent
       final highConsistency = ConfidenceService.calculateTrayConsistency([
-        TrayStatus.full,
-        TrayStatus.full,
-        TrayStatus.full,
-        TrayStatus.full,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
       ]);
       expect(highConsistency, equals(1.0));
 
       // Mixed consistency
       final mediumConsistency = ConfidenceService.calculateTrayConsistency([
-        TrayStatus.full,
+        TrayStatus.heavy,
         TrayStatus.empty,
-        TrayStatus.partial,
-        TrayStatus.full,
+        TrayStatus.light,
+        TrayStatus.heavy,
       ]);
       expect(mediumConsistency, equals(0.5));
     });
@@ -355,7 +355,7 @@ void main() {
 
     test('Detailed reason with multiple factors', () {
       final result = ReasonBuilder.buildDetailedReason(
-        trayStatuses: [TrayStatus.full, TrayStatus.full, TrayStatus.empty],
+        trayStatuses: [TrayStatus.heavy, TrayStatus.heavy, TrayStatus.empty],
         currentAbw: 8.0,
         expectedAbw: 10.0,
         currentFcr: 1.6,
@@ -371,10 +371,10 @@ void main() {
     test('Tray pattern analysis', () {
       // Mostly full
       final fullPattern = ReasonBuilder.analyzeTrayPattern([
-        TrayStatus.full,
-        TrayStatus.full,
-        TrayStatus.full,
-        TrayStatus.partial,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
+        TrayStatus.heavy,
+        TrayStatus.light,
       ]);
       expect(fullPattern, contains('poor appetite'));
       expect(fullPattern, contains('reduced feeding'));
@@ -384,7 +384,7 @@ void main() {
         TrayStatus.empty,
         TrayStatus.empty,
         TrayStatus.empty,
-        TrayStatus.partial,
+        TrayStatus.light,
       ]);
       expect(emptyPattern, contains('good appetite'));
       expect(emptyPattern, contains('increased feeding'));

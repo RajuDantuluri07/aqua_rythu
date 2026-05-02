@@ -48,7 +48,7 @@ void main() {
 
       test('Tray factor never below 0.8', () {
         // Test extreme case: all full trays (should try to decrease below 0.8)
-        final allFullTrays = List.filled(10, TrayStatus.full);
+        final allFullTrays = List.filled(10, TrayStatus.heavy);
         final trayFactor = calculateTrayFactor(allFullTrays);
         
         expect(
@@ -61,10 +61,10 @@ void main() {
       test('Mixed trays stay within limits', () {
         final mixedTrays = [
           TrayStatus.empty,
-          TrayStatus.full,
-          TrayStatus.partial,
+          TrayStatus.heavy,
+          TrayStatus.light,
           TrayStatus.empty,
-          TrayStatus.full,
+          TrayStatus.heavy,
         ];
         final trayFactor = calculateTrayFactor(mixedTrays);
         
@@ -154,7 +154,7 @@ void main() {
       });
 
       test('Two tray data points accepted', () {
-        final twoTrays = [TrayStatus.empty, TrayStatus.full];
+        final twoTrays = [TrayStatus.empty, TrayStatus.heavy];
         final trayFactor = calculateTrayFactor(twoTrays);
         
         expect(
@@ -171,9 +171,9 @@ void main() {
           TrayStatus.empty, TrayStatus.empty, TrayStatus.empty, TrayStatus.empty,
           TrayStatus.empty, TrayStatus.empty, TrayStatus.empty,
           // Outliers: full trays (20%)
-          TrayStatus.full, TrayStatus.full,
+          TrayStatus.heavy, TrayStatus.heavy,
           // Minority: partial trays (10%)
-          TrayStatus.partial,
+          TrayStatus.light,
         ];
         
         final trayFactor = calculateTrayFactor(mixedWithOutliers);
@@ -197,8 +197,8 @@ void main() {
         // This is hard to test without specific outlier thresholds
         // But we can test that the function doesn't crash
         final edgeCase = [
-          TrayStatus.empty, TrayStatus.full, TrayStatus.partial,
-          TrayStatus.empty, TrayStatus.full, TrayStatus.partial,
+          TrayStatus.empty, TrayStatus.heavy, TrayStatus.light,
+          TrayStatus.empty, TrayStatus.heavy, TrayStatus.light,
         ];
         
         final trayFactor = calculateTrayFactor(edgeCase);
@@ -240,7 +240,7 @@ void main() {
       });
 
       test('Edge Case 3: All trays full → decrease (within limit)', () {
-        final allFull = List.filled(5, TrayStatus.full);
+        final allFull = List.filled(5, TrayStatus.heavy);
         final trayFactor = calculateTrayFactor(allFull);
         
         expect(
@@ -259,9 +259,9 @@ void main() {
       test('Edge Case 4: Random tray input → stable output', () {
         // Test with random but consistent input
         final randomTrays = [
-          TrayStatus.partial, TrayStatus.empty, TrayStatus.full,
-          TrayStatus.partial, TrayStatus.empty, TrayStatus.full,
-          TrayStatus.partial, TrayStatus.empty, TrayStatus.full,
+          TrayStatus.light, TrayStatus.empty, TrayStatus.heavy,
+          TrayStatus.light, TrayStatus.empty, TrayStatus.heavy,
+          TrayStatus.light, TrayStatus.empty, TrayStatus.heavy,
         ];
         
         final trayFactor1 = calculateTrayFactor(randomTrays);
@@ -283,9 +283,9 @@ void main() {
       test('Edge Case 5: Large number of trays handled correctly', () {
         final manyTrays = List.filled(50, TrayStatus.empty);
         // Add some variety
-        manyTrays[10] = TrayStatus.full;
-        manyTrays[20] = TrayStatus.full;
-        manyTrays[30] = TrayStatus.partial;
+        manyTrays[10] = TrayStatus.heavy;
+        manyTrays[20] = TrayStatus.heavy;
+        manyTrays[30] = TrayStatus.light;
         
         final trayFactor = calculateTrayFactor(manyTrays);
         
@@ -298,8 +298,8 @@ void main() {
 
       test('Edge Case 6: Balanced trays → neutral factor', () {
         final balancedTrays = [
-          TrayStatus.empty, TrayStatus.full, TrayStatus.partial,
-          TrayStatus.empty, TrayStatus.full, TrayStatus.partial,
+          TrayStatus.empty, TrayStatus.heavy, TrayStatus.light,
+          TrayStatus.empty, TrayStatus.heavy, TrayStatus.light,
         ];
         
         final trayFactor = calculateTrayFactor(balancedTrays);
@@ -326,7 +326,7 @@ void main() {
         
         // 3. Add mixed data
         factor = calculateTrayFactor([
-          TrayStatus.empty, TrayStatus.full, TrayStatus.partial
+          TrayStatus.empty, TrayStatus.heavy, TrayStatus.light
         ]);
         expect(factor, inInclusiveRange(0.8, 1.2));
         
@@ -335,7 +335,7 @@ void main() {
         expect(factor, inInclusiveRange(0.8, 1.2));
         expect(factor, greaterThan(1.0));
         
-        factor = calculateTrayFactor(List.filled(10, TrayStatus.full));
+        factor = calculateTrayFactor(List.filled(10, TrayStatus.heavy));
         expect(factor, inInclusiveRange(0.8, 1.2));
         expect(factor, lessThan(1.0));
       });
