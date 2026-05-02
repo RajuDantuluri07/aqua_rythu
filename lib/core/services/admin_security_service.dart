@@ -21,10 +21,6 @@ class AdminSecurityService {
     const adminEmail = "naveendantuluri1@gmail.com";
     final isAdminUser = user.email == adminEmail;
 
-    // Debug logging for verification
-    print("ADMIN CHECK: ${user.email} -> $isAdminUser");
-    AppLogger.debug("ADMIN CHECK: ${user.email} -> $isAdminUser");
-
     return isAdminUser;
   }
 
@@ -34,7 +30,7 @@ class AdminSecurityService {
 
       // Debug log for auth state
       AppLogger.debug(
-          'Auth state check - User: ${user?.id ?? "null"}, Email: ${user?.email ?? "null"}');
+          'Auth state check - User: ${user?.id ?? "null"}');
 
       if (user == null) {
         AppLogger.warn('Admin access denied: No authenticated user');
@@ -77,7 +73,7 @@ class AdminSecurityService {
       // Grant access to admin users
       _isAdminAuthorized = true;
       _adminLoginTime = DateTime.now();
-      AppLogger.info('Admin access granted for user: ${user.email}');
+      AppLogger.info('Admin access granted for user: ${user.id}');
       return true;
     } catch (e) {
       // Log error but don't expose details
