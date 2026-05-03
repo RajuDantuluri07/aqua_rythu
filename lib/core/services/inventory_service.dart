@@ -2,11 +2,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
 
 class InventoryService {
-  final supabase = Supabase.instance.client;
+  final SupabaseClient supabase;
 
-  // Create inventory items
+  InventoryService({SupabaseClient? client}) : supabase = client ?? Supabase.instance.client;
+
+  // Add initial stock for multiple items (e.g. from app setup)
   Future<void> createInventoryItems(List<Map<String, dynamic>> items) async {
     try {
+      if (items.isEmpty) {
+        return;
+      }
+      for (final item in items) {
+        if (!item.containsKey('name') || !item.containsKey('category')) {
+          throw ArgumentError('Malformed inventory item: missing required fields');
+        }
+      }
       await supabase.from('inventory_items').insert(items);
       AppLogger.info('Created ${items.length} inventory items');
     } catch (e) {
@@ -23,7 +33,8 @@ class InventoryService {
           .select('*')
           .eq('farm_id', farmId)
           .isFilter('crop_id', null)
-          .order('category');
+          .order('category')
+          .order('name');
       return List<Map<String, dynamic>>.from(result);
     } catch (e) {
       AppLogger.error('Failed to get inventory stock: $e');
@@ -276,14 +287,7 @@ class InventoryService {
 
       // Get latest purchase price
       final lastPurchase = await getLastPurchase(itemId);
-      double pricePerUnit = lastPurchase?['price_per_unit'] as double? ?? 0.0;
-
-      // Warn and use fallback if no purchase history exists
-      if (pricePerUnit == 0.0) {
-        AppLogger.warn(
-            'No purchase history found for item $itemId, using default price of ₹50/kg');
-        pricePerUnit = 50.0; // Fallback to default market price
-      }
+      final pricePerUnit = lastPurchase?['price_per_unit'] as double? ?? 0.0;
 
       return todayUsage * pricePerUnit;
     } catch (e) {

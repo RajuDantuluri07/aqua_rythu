@@ -73,10 +73,12 @@ String _friendlyAuthError(Object e, {_AuthFlow flow = _AuthFlow.email}) {
 }
 
 class AuthNotifier extends StateNotifier<AppAuthState> {
-  final _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
   final Ref ref;
-  
-  AuthNotifier(this.ref) : super(const AppAuthState()) {
+
+  AuthNotifier(this.ref, {SupabaseClient? supabaseClient})
+      : _supabase = supabaseClient ?? Supabase.instance.client,
+        super(const AppAuthState()) {
     checkSession();
   }
 
