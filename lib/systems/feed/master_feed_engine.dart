@@ -30,8 +30,8 @@ import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/validators/feed_input_validator.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
-import 'package:aqua_rythu/core/services/feed_safety_service.dart';
-import 'package:aqua_rythu/core/services/subscription_gate.dart';
+import 'package:aqua_rythu/core/services/feed/feed_safety_service.dart';
+import 'package:aqua_rythu/core/services/subscription/subscription_gate.dart';
 import '../../../core/services/app_config_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // import '../growth/fcr_engine.dart'; // DISABLED FOR V1
@@ -333,41 +333,38 @@ class MasterFeedEngine {
     final bool forceBlindFeeding =
         !feedEngineConfig.smartFeedEnabled || !SubscriptionGate.isPro;
 
-    // ── STEP 1: Base Feed (using new BaseFeedResolver) ───────────────────
+    // ── STEP 1: Base Feed — single source of truth for all calculations ──
+    final baseFeedKg = _feedBaseService.getBaseFeedKg(
+      input.doc,
+      input.seedCount,
+      previousDayFeedKg: input.actualFeedYesterday,
+    );
+
+    // Anchor guard: validate baseFeedKg against yesterday's actual and anchor feed
+    final baseFeedResult = FeedBaseResolver.resolveBaseFeed(
+      doc: input.doc,
+      anchorFeed: input.anchorFeed,
+      actualFeedYesterday: input.actualFeedYesterday,
+      plannedFeed: baseFeedKg,
+      pondId: input.pondId,
+    );
+    FeedBaseResolver.validateSmartFeedBase(input.doc, baseFeedResult.feedAmount, input.pondId);
+
+    // Debug data (for debug panel only — not used in calculations)
     final stage1Debug = computeWithDebug(
       doc: input.doc,
       stockingType: input.stockingType,
       density: input.seedCount,
     );
 
-    // 🔥 CRITICAL FIX: Use BaseFeedResolver to prevent anchor feed bug
-    final baseFeedResult = FeedBaseResolver.resolveBaseFeed(
-      doc: input.doc,
-      anchorFeed: input.anchorFeed,
-      actualFeedYesterday: input.actualFeedYesterday,
-      plannedFeed: stage1Debug.finalFeed,
-      pondId: input.pondId,
-    );
-    final baseFeed = baseFeedResult.feedAmount;
-
-    // 🔥 CRITICAL FIX: Validate base feed for smart feeding safety
-    FeedBaseResolver.validateSmartFeedBase(input.doc, baseFeed, input.pondId);
-
     // ── STEP 2: DOC Rule Enforcement ───────────────────────────────────────
-    final bool isBlindPhase = input.doc <= 30;
-
-    // Smart feeding activates when: DOC > 30 (sampling removed)
-    final bool shouldUseSmartFeeding = !isBlindPhase && input.doc > 30;
+    // Smart feeding activates when: DOC > 30 OR sampling data available (ABW)
+    final bool shouldUseSmartFeeding = input.doc > 30 || input.abw != null;
 
     // Force blind feeding if admin disabled smart feed
     final bool useBlindFeeding = forceBlindFeeding || !shouldUseSmartFeeding;
 
-    // ── STEP 3: Factor Pipeline (Base + Tray + Environment) ────────────────
-    final baseFeedKg = _feedBaseService.getBaseFeedKg(
-      input.doc,
-      input.seedCount,
-      previousDayFeedKg: input.actualFeedYesterday,
-    );
+    // ── STEP 3: Factor Pipeline (Tray + Environment) ─────────────────────
     final currentTrayLeftover =
         _trayFactorService.getLeftoverPercentFromStatuses(input.trayStatuses);
     final historicalLeftover =
@@ -699,7 +696,7 @@ class MasterFeedEngine {
         status = TrayStatus.heavy;
       }
       final trayReason = _trayFactorService.getTrayReason(status);
-      if (trayReason != null) reasons.add(trayReason);
+      reasons.add(trayReason);
     }
 
     if (envFactor < 1.0) {

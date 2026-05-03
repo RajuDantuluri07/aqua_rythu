@@ -2,9 +2,9 @@
 /// Ensures only the most critical and safe decisions are presented to farmers
 library;
 
-import '../models/safe_decision_engine.dart';
-import '../models/real_world_anchors.dart';
-import '../utils/logger.dart';
+import '../../../systems/decision/safe_decision_engine.dart';
+import '../../models/real_world_anchors.dart';
+import '../../utils/logger.dart';
 
 /// Minimum confidence required for moderate actions
 const double MIN_CONFIDENCE_FOR_MODERATE_ACTION = 0.6;

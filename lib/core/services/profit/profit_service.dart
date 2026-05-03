@@ -1,9 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/logger.dart';
-import 'expense_service.dart';
-import 'inventory_service.dart';
-import 'harvest_service.dart';
-import '../models/harvest_model.dart';
+import '../../utils/logger.dart';
+import '../expense_service.dart';
+import '../inventory_service.dart';
+import '../harvest_service.dart';
+import '../../models/harvest_model.dart';
 
 class ProfitService {
   final supabase = Supabase.instance.client;

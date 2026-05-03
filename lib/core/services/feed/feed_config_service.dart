@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/logger.dart';
+import '../../utils/logger.dart';
 
 /// Service to manage configurable feed-related constants
 /// Previously hardcoded values in engine_constants.dart are now configurable
@@ -85,7 +85,7 @@ class FeedConfigService {
         final farmConfig = await _getFarmConfig(farmId);
         final firstFactor = farmConfig['first_meal_factor'];
         final lastFactor = farmConfig['last_meal_factor'];
-        
+
         if (firstFactor != null && firstFactor is num) {
           factors['first'] = firstFactor.toDouble();
         }
@@ -116,7 +116,7 @@ class FeedConfigService {
         final farmConfig = await _getFarmConfig(farmId);
         final minFactor = farmConfig['min_feed_factor'];
         final maxFactor = farmConfig['max_feed_factor'];
-        
+
         if (minFactor != null && minFactor is num) {
           bounds['min'] = minFactor.toDouble();
         }
@@ -147,7 +147,7 @@ class FeedConfigService {
         final farmConfig = await _getFarmConfig(farmId);
         final highThreshold = farmConfig['intelligence_high_threshold'];
         final lowThreshold = farmConfig['intelligence_low_threshold'];
-        
+
         if (highThreshold != null && highThreshold is num) {
           thresholds['high'] = highThreshold.toDouble();
         }
@@ -178,12 +178,12 @@ class FeedConfigService {
 
       if (farmId != null) {
         final farmConfig = await _getFarmConfig(farmId);
-        
+
         final highFactor = farmConfig['intelligence_high_factor'];
         final mediumFactor = farmConfig['intelligence_medium_factor'];
         final lowFactor = farmConfig['intelligence_low_factor'];
         final veryLowFactor = farmConfig['intelligence_very_low_factor'];
-        
+
         if (highFactor != null && highFactor is num) {
           factors['high'] = highFactor.toDouble();
         }
@@ -245,7 +245,7 @@ class FeedConfigService {
             'config': config,
             'updated_at': DateTime.now().toIso8601String(),
           }, onConflict: 'farm_id');
-      
+
       AppLogger.info('Updated farm config for farm: $farmId');
     } catch (e) {
       AppLogger.error('Failed to update farm config for farm: $farmId', e);
@@ -263,7 +263,7 @@ class FeedConfigService {
             'config': config,
             'updated_at': DateTime.now().toIso8601String(),
           }, onConflict: 'id');
-      
+
       AppLogger.info('Updated global feed config');
     } catch (e) {
       AppLogger.error('Failed to update global feed config', e);
@@ -279,7 +279,7 @@ class FeedConfigService {
         .select('config')
         .eq('farm_id', farmId)
         .maybeSingle();
-    
+
     return result?['config'] as Map<String, dynamic>? ?? {};
   }
 
@@ -289,7 +289,7 @@ class FeedConfigService {
         .select('config')
         .eq('id', 'feed_config')
         .maybeSingle();
-    
+
     return result?['config'] as Map<String, dynamic>? ?? {};
   }
 }

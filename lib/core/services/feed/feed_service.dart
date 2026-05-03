@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../systems/planning/feed_plan_constants.dart';
-import '../../features/tray/enums/tray_status.dart';
-import '../utils/logger.dart';
-import 'inventory_service.dart';
+import '../../../systems/planning/feed_plan_constants.dart';
+import '../../../features/tray/enums/tray_status.dart';
+import '../../utils/logger.dart';
+import '../inventory_service.dart';
 
 class FeedService {
   final supabase = Supabase.instance.client;

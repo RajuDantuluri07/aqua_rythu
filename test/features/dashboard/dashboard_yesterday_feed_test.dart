@@ -7,7 +7,7 @@ void main() {
       final today = DateTime.now();
       final yesterday = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 1));
 
-      final pondId = 'pond-1';
+      const pondId = 'pond-1';
       final historyMap = {
         pondId: [
           FeedHistoryLog(
@@ -45,7 +45,7 @@ void main() {
       final today = DateTime.now();
       final yesterday = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 1));
 
-      final pondId = 'pond-1';
+      const pondId = 'pond-1';
       final historyMap = {
         pondId: [
           FeedHistoryLog(

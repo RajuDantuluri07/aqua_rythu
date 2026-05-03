@@ -5,7 +5,7 @@ import '../features/profile/profile_screen.dart';
 import '../features/farm/add_farm_screen.dart';
 import '../features/pond/add_pond_screen.dart';
 import '../features/pond/edit_pond_screen.dart';
-import '../features/dashboard/dashboard_screen_fixed.dart';
+import '../features/dashboard/dashboard_screen.dart';
 import '../features/pond/pond_dashboard_screen.dart';
 import '../features/feed/feed_schedule_screen.dart';
 import '../features/home/home_screen.dart';

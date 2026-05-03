@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../repositories/pond_repository.dart';
-import '../repositories/feed_repository.dart';
-import '../repositories/tray_repository.dart';
-import '../../features/pond/controllers/pond_dashboard_controller.dart';
+import '../../repositories/pond_repository.dart';
+import '../../repositories/feed_repository.dart';
+import '../../repositories/tray_repository.dart';
+import '../../../features/pond/controllers/pond_dashboard_controller.dart';
 
 class FarmService {
   final pondRepo = PondRepository();

@@ -1,6 +1,6 @@
 import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/tray/tray_model.dart';
-import '../../core/services/subscription_gate.dart';
+import '../../core/services/subscription/subscription_gate.dart';
 
 /// Result returned by [TrayDecisionEngine.evaluate].
 class TrayDecisionResult {

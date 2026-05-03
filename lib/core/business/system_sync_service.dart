@@ -1,5 +1,5 @@
 import '../services/expense_service.dart';
-import '../services/feed_service.dart';
+import '../services/feed/feed_service.dart';
 import '../services/inventory_service.dart';
 import '../utils/logger.dart';
 

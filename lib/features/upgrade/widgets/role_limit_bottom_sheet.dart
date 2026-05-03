@@ -88,16 +88,16 @@ class RoleLimitBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.green[200]!),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 _BenefitItem(
                     icon: Icons.group_add, text: 'Add workers & supervisors'),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 _BenefitItem(
                     icon: Icons.track_changes, text: 'Track who feeds what'),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 _BenefitItem(
                     icon: Icons.settings, text: 'Manage operations easily'),
               ],

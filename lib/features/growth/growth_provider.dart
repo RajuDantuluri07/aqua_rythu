@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'sampling_log.dart';
-import '../../core/services/subscription_gate.dart';
+import '../../core/services/subscription/subscription_gate.dart';
 import '../../core/utils/logger.dart';
 
 class GrowthNotifier extends StateNotifier<List<SamplingLog>> {

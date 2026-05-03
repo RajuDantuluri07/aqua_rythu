@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/tray/enums/tray_status.dart';
-import 'package:aqua_rythu/core/services/feed_service.dart';
+import 'package:aqua_rythu/core/services/feed/feed_service.dart';
 import '../../core/utils/logger.dart';
 
 class FeedHistoryLog {

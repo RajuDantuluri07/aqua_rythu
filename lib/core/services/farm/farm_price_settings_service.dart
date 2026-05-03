@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/farm_price_settings.dart';
+import '../../models/farm_price_settings.dart';
 
 class FarmPriceSettingsService {
   static const _feedKey = 'farm_feed_price_';

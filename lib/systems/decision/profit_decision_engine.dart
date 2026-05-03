@@ -3,8 +3,8 @@
 library;
 
 import 'dart:math';
-import 'growth_curve.dart';
-import 'farm_profile.dart';
+import '../../core/models/growth_curve.dart';
+import '../../core/models/farm_profile.dart';
 
 class ProfitDecisionEngine {
   static const double FEED_COST_PER_KG = 35.0; // ₹35 per kg

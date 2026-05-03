@@ -6,8 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:aqua_rythu/core/models/subscription_model.dart';
 import 'package:aqua_rythu/core/services/payment_service.dart';
-import 'package:aqua_rythu/core/services/subscription_gate.dart';
-import 'package:aqua_rythu/core/services/subscription_service.dart';
+import 'package:aqua_rythu/core/services/subscription/subscription_gate.dart';
+import 'package:aqua_rythu/core/services/subscription/subscription_service.dart';
 
 // ── Payment phase (T22) ──────────────────────────────────────────────────────
 

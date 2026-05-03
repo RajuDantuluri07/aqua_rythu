@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aqua_rythu/core/services/feed_service.dart';
+import 'package:aqua_rythu/core/services/feed/feed_service.dart';
 import '../../core/utils/logger.dart';
 import '../../systems/planning/feed_plan_constants.dart';
 import 'feed_history_provider.dart';

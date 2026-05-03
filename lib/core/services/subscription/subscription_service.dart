@@ -163,8 +163,8 @@ class SubscriptionService {
         'total_subscriptions': subscriptions.length,
         'active_subscriptions': activeSubscriptions.length,
         'total_spent': totalSpent,
-        'current_plan': activeSubscriptions.isNotEmpty 
-            ? activeSubscriptions.first.planType.name 
+        'current_plan': activeSubscriptions.isNotEmpty
+            ? activeSubscriptions.first.planType.name
             : 'FREE',
         'has_pro': activeSubscriptions.any((s) => s.isPro),
       };

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
-import 'package:aqua_rythu/core/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/farm/farm_service.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 // import 'package:aqua_rythu/core/services/feed_service.dart'; // Removed - recalculation now handled by controller
 import 'package:supabase_flutter/supabase_flutter.dart';

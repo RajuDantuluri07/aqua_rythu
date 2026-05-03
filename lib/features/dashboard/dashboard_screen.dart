@@ -7,7 +7,7 @@ import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
 import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
-import 'package:aqua_rythu/core/services/feed_savings_service_fixed.dart';
+import 'package:aqua_rythu/core/services/feed/feed_savings_service.dart';
 import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
 import 'package:aqua_rythu/features/upgrade/upgrade_to_pro_screen.dart';
 import 'package:aqua_rythu/features/feed/feed_history_provider.dart';

@@ -12,7 +12,7 @@ import '../upgrade/access_control_hooks.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../core/language/app_localizations.dart';
 import '../../core/services/admin_security_service.dart';
-import '../../core/services/farm_price_settings_service.dart';
+import '../../core/services/farm/farm_price_settings_service.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/models/inventory_item.dart';
 import '../../routes/app_routes.dart';

@@ -1,4 +1,4 @@
-import '../../core/services/feed_config_service.dart';
+import '../../core/services/feed/feed_config_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FeedEngineConstants {

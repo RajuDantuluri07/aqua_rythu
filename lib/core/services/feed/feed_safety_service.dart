@@ -1,4 +1,4 @@
-import '../utils/logger.dart';
+import '../../utils/logger.dart';
 
 class FeedSafetyService {
   static final FeedSafetyService _instance = FeedSafetyService._internal();
@@ -16,39 +16,39 @@ class FeedSafetyService {
   /// Clamp feed amount to safe range
   double clampFeedAmount(double feedAmount, String pondId) {
     final clamped = feedAmount.clamp(_minFeedPerPond, _maxFeedPerPond);
-    
+
     if (clamped != feedAmount) {
       AppLogger.warn(
         'Feed amount clamped for pond $pondId: ${feedAmount.toStringAsFixed(2)}kg -> ${clamped.toStringAsFixed(2)}kg'
       );
     }
-    
+
     return clamped;
   }
 
   /// Clamp feed multiplier to safe range
   double clampFeedMultiplier(double multiplier) {
     final clamped = multiplier.clamp(_minFeedMultiplier, _maxFeedMultiplier);
-    
+
     if (clamped != multiplier) {
       AppLogger.warn(
         'Feed multiplier clamped: ${multiplier.toStringAsFixed(2)} -> ${clamped.toStringAsFixed(2)}'
       );
     }
-    
+
     return clamped;
   }
 
   /// Clamp feed price to safe range
   double clampFeedPrice(double price) {
     final clamped = price.clamp(_minFeedPrice, _maxFeedPrice);
-    
+
     if (clamped != price) {
       AppLogger.warn(
         'Feed price clamped: ${price.toStringAsFixed(2)} -> ${clamped.toStringAsFixed(2)}'
       );
     }
-    
+
     return clamped;
   }
 
@@ -72,7 +72,7 @@ class FeedSafetyService {
           'calculation_type': calculationType,
         }
       );
-      
+
       return FeedSafetyResult(
         originalAmount: calculatedFeed,
         safeAmount: 0.0,
@@ -94,7 +94,7 @@ class FeedSafetyService {
           'calculation_type': calculationType,
         }
       );
-      
+
       return FeedSafetyResult(
         originalAmount: calculatedFeed,
         safeAmount: _maxFeedPerPond,
@@ -115,7 +115,7 @@ class FeedSafetyService {
           'calculation_type': calculationType,
         }
       );
-      
+
       return FeedSafetyResult(
         originalAmount: calculatedFeed,
         safeAmount: 0.0,
@@ -125,7 +125,7 @@ class FeedSafetyService {
     }
 
     final safeAmount = clampFeedAmount(calculatedFeed, pondId);
-    
+
     return FeedSafetyResult(
       originalAmount: calculatedFeed,
       safeAmount: safeAmount,
@@ -141,11 +141,11 @@ class FeedSafetyService {
     Map<String, double>? baseFeeds,
   }) {
     final results = <String, FeedSafetyResult>{};
-    
+
     for (final entry in feedPlan.entries) {
       final pondId = entry.key;
       final calculatedFeed = entry.value;
-      
+
       results[pondId] = validateFeedCalculation(
         calculatedFeed: calculatedFeed,
         pondId: pondId,
@@ -154,7 +154,7 @@ class FeedSafetyService {
         calculationType: 'feed_plan',
       );
     }
-    
+
     // Log summary of clamping
     final clampedCount = results.values.where((r) => r.wasClamped).length;
     if (clampedCount > 0) {
@@ -162,7 +162,7 @@ class FeedSafetyService {
         'Feed safety clamped $clampedCount out of ${feedPlan.length} pond feed calculations'
       );
     }
-    
+
     return results;
   }
 
@@ -175,9 +175,9 @@ class FeedSafetyService {
 
   /// Check if feed amount is within safe range
   bool isFeedSafe(double feedAmount) {
-    return feedAmount >= _minFeedPerPond && 
-           feedAmount <= _maxFeedPerPond && 
-           !feedAmount.isNaN && 
+    return feedAmount >= _minFeedPerPond &&
+           feedAmount <= _maxFeedPerPond &&
+           !feedAmount.isNaN &&
            !feedAmount.isInfinite;
   }
 }

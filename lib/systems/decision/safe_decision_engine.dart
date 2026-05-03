@@ -4,8 +4,8 @@ library;
 
 import 'dart:math';
 import 'profit_decision_engine.dart';
-import 'real_world_anchors.dart';
-import 'growth_curve.dart';
+import '../../core/models/real_world_anchors.dart';
+import '../../core/models/growth_curve.dart';
 
 class SafeDecisionEngine {
   static const double maxFeedChangePerDay = 0.10; // 10% max change per day

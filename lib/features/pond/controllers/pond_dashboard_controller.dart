@@ -1,7 +1,7 @@
 import 'dart:async';
 import '../../../core/utils/logger.dart';
 import '../../../core/services/pond_service.dart';
-import '../../../core/services/feed_service.dart';
+import '../../../core/services/feed/feed_service.dart';
 import '../../../systems/planning/feed_plan_generator.dart';
 import '../../../systems/planning/feed_plan_constants.dart';
 import '../../../systems/feed/feed_models.dart';

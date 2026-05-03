@@ -1,4 +1,4 @@
-import 'package:aqua_rythu/core/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/farm/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/services/feed_savings_service.dart';
+import '../../../core/services/feed/feed_savings_service.dart';
 import '../../../features/upgrade/subscription_provider.dart';
 
 /// Feed Savings Card for Dashboard

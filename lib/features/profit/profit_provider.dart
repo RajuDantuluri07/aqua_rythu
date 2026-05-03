@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/services/profit_service.dart';
+import '../../core/services/profit/profit_service.dart';
 
 class ProfitNotifier extends StateNotifier<AsyncValue<Map<String, dynamic>>> {
   final ProfitService _profitService;

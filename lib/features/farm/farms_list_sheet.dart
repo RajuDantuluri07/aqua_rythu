@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aqua_rythu/core/services/farm_member_service.dart';
+import 'package:aqua_rythu/core/services/farm/farm_member_service.dart';
 import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'farm_provider.dart';

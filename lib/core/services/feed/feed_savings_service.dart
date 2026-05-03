@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/logger.dart';
+import '../../utils/logger.dart';
 
 /// Feed savings result for a pond
 class FeedSavingsResult {

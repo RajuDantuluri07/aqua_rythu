@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:aqua_rythu/core/services/farm_member_service.dart';
+import 'package:aqua_rythu/core/services/farm/farm_member_service.dart';
 import 'package:aqua_rythu/features/farm/farm_provider.dart';
 import 'add_member_sheet.dart';
 

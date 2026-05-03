@@ -4,11 +4,11 @@ library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../models/farm_profile.dart';
-import '../models/profit_decision_engine.dart';
-import '../models/adaptive_insights.dart';
-import '../services/farmer_feedback_service.dart';
-import '../utils/logger.dart';
+import '../../models/farm_profile.dart';
+import '../../../systems/decision/profit_decision_engine.dart';
+import '../../models/adaptive_insights.dart';
+import '../farmer_feedback_service.dart';
+import '../../utils/logger.dart';
 
 class DecisionIntegrationService {
   static DecisionIntegrationService? _instance;

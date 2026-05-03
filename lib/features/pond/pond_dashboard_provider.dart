@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../tray/tray_provider.dart';
-import 'package:aqua_rythu/core/services/feed_service.dart';
+import 'package:aqua_rythu/core/services/feed/feed_service.dart';
 import '../../systems/planning/feed_plan_generator.dart';
 import '../../systems/feed/feed_models.dart';
 import '../feed/models/feed_debug_info.dart';
