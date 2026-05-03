@@ -38,6 +38,8 @@ double calculateTrayFactor(List<TrayStatus> trayStatuses) {
         empty++;
         break;
       case TrayStatus.light:
+        partial++;
+        break;
       case TrayStatus.medium:
         partial++;
         break;
@@ -98,6 +100,8 @@ List<TrayStatus> _processTrayReliability(List<TrayStatus> trayStatuses) {
         empty++;
         break;
       case TrayStatus.light:
+        partial++;
+        break;
       case TrayStatus.medium:
         partial++;
         break;

@@ -276,9 +276,11 @@ class Supplement {
       name: json['name'],
       startDoc: json['startDoc'] ?? 1,
       endDoc: json['endDoc'] ?? 999,
-      startDate:
-          json['startDate'] != null ? DateTime.tryParse(json['startDate']) : null,
-      endDate: json['endDate'] != null ? DateTime.tryParse(json['endDate']) : null,
+      startDate: json['startDate'] != null
+          ? DateTime.tryParse(json['startDate'])
+          : null,
+      endDate:
+          json['endDate'] != null ? DateTime.tryParse(json['endDate']) : null,
       type: () {
         try {
           return json['type'] != null
@@ -385,7 +387,8 @@ class SupplementLog {
           ? DateTime.tryParse(json['timestamp']) ?? DateTime.now()
           : DateTime.now(),
       appliedItems: (json['appliedItems'] as List? ?? const [])
-          .map((item) => CalculatedItem.fromJson(Map<String, dynamic>.from(item)))
+          .map((item) =>
+              CalculatedItem.fromJson(Map<String, dynamic>.from(item)))
           .toList(),
       supplementName: json['supplementName'],
       scheduledTime: json['scheduledTime'],
@@ -422,8 +425,8 @@ class SupplementLogNotifier extends StateNotifier<List<SupplementLog>> {
   void hydrateFromJson(List<dynamic> records) {
     replaceAll(
       records
-          .map((record) => SupplementLog.fromJson(
-              Map<String, dynamic>.from(record as Map)))
+          .map((record) =>
+              SupplementLog.fromJson(Map<String, dynamic>.from(record as Map)))
           .toList(),
     );
   }
@@ -563,41 +566,60 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
   }
 
   // 🔹 CREATE
-  void addSupplement(Supplement supplement) {
+  void addSupplement(Supplement supplement) async {
+    final prevState = state;
     state = _sorted([...state, supplement]);
-    _service.upsertSupplement(supplement.toJson()).catchError((e) {
+    try {
+      await _service.upsertSupplement(supplement.toJson());
+    } catch (e) {
       AppLogger.error('Failed to persist new supplement ${supplement.id}', e);
-    });
+      state = prevState;
+    }
   }
 
   // 🔹 UPDATE
-  void editSupplement(Supplement updated) {
+  void editSupplement(Supplement updated) async {
+    final prevState = state;
     state = _sorted([
       for (final s in state)
         if (s.id == updated.id) updated else s
     ]);
-    _service.upsertSupplement(updated.toJson()).catchError((e) {
+    try {
+      await _service.upsertSupplement(updated.toJson());
+    } catch (e) {
       AppLogger.error('Failed to persist edited supplement ${updated.id}', e);
-    });
+      state = prevState;
+    }
   }
 
-  void togglePause(String id) {
+  void togglePause(String id) async {
+    final prevState = state;
     state = [
       for (final s in state)
         if (s.id == id) s.copyWith(isPaused: !s.isPaused) else s
     ];
-    final updated = state.firstWhere((s) => s.id == id);
-    _service.upsertSupplement(updated.toJson()).catchError((e) {
+    final updated = state.firstWhere(
+      (s) => s.id == id,
+      orElse: () => prevState.firstWhere((s) => s.id == id),
+    );
+    try {
+      await _service.upsertSupplement(updated.toJson());
+    } catch (e) {
       AppLogger.error('Failed to persist togglePause for supplement $id', e);
-    });
+      state = prevState;
+    }
   }
 
   // 🔹 DELETE
-  void deleteSupplement(String id) {
+  void deleteSupplement(String id) async {
+    final prevState = state;
     state = state.where((s) => s.id != id).toList();
-    _service.deleteSupplement(id).catchError((e) {
+    try {
+      await _service.deleteSupplement(id);
+    } catch (e) {
       AppLogger.error('Failed to delete supplement $id from DB', e);
-    });
+      state = prevState;
+    }
   }
 
   void removeSupplement(String id) {

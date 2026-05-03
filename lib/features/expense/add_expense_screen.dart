@@ -75,7 +75,19 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     });
 
     try {
-      final amount = double.parse(_amountController.text);
+      final amount = double.tryParse(_amountController.text.trim());
+
+      if (amount == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid amount. Please enter a valid number.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
       await ref.read(expensesProvider(widget.cropId).notifier).addExpense(
             farmId: widget.farmId,

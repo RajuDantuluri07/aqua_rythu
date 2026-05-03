@@ -145,14 +145,28 @@ class _EditPondScreenState extends ConsumerState<EditPondScreen> {
   void _save(String pondId) {
     if (_formKey.currentState!.validate()) {
       try {
-        final seedCount = int.parse(_seedCountController.text);
-        final plSize = int.parse(_plSizeController.text);
-        final numTrays = int.parse(_traysController.text);
+        final seedCount = int.tryParse(_seedCountController.text.trim());
+        final plSize = int.tryParse(_plSizeController.text.trim());
+        final numTrays = int.tryParse(_traysController.text.trim());
+        final area = double.tryParse(_areaController.text.trim());
+
+        if (seedCount == null ||
+            plSize == null ||
+            numTrays == null ||
+            area == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Invalid input. Please check your values."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
 
         ref.read(farmProvider.notifier).updatePond(
               pondId: pondId,
               name: _nameController.text,
-              area: double.parse(_areaController.text),
+              area: area,
               seedCount: seedCount,
               plSize: plSize,
               stockingDate: _stockingDate ?? DateTime.now(),

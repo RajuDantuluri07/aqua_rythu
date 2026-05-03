@@ -129,7 +129,7 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
       for (final item in existingData) {
         final doc = item['doc'] as int;
         final round = item['round'] as int;
-        final feedAmount = (item['planned_amount'] as num).toDouble();
+        final feedAmount = (item['planned_amount'] as num?)?.toDouble() ?? 0.0;
         final baseFeed = (item['base_feed'] as num?)?.toDouble() ?? feedAmount;
 
         groupedData.putIfAbsent(doc, () => [0.0, 0.0, 0.0, 0.0]);

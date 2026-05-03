@@ -374,7 +374,21 @@ class MasterFeedEngine {
         _latestKnownLeftover(input.recentTrayLeftoverPct);
     final leftoverPercent = currentTrayLeftover ?? historicalLeftover ?? -1.0;
 
-    double trayFactor = calculateTrayFactor(input.trayStatuses);
+    double trayFactor = 1.0;
+    if (leftoverPercent >= 0) {
+      // Convert percentage to TrayStatus for compatibility
+      TrayStatus status;
+      if (leftoverPercent < 20) {
+        status = TrayStatus.empty;
+      } else if (leftoverPercent < 40) {
+        status = TrayStatus.light;
+      } else if (leftoverPercent < 60) {
+        status = TrayStatus.medium;
+      } else {
+        status = TrayStatus.heavy;
+      }
+      trayFactor = 1.0 + _trayFactorService.getFactor(status);
+    }
     if (useBlindFeeding) {
       trayFactor = 1.0;
     }
@@ -621,6 +635,8 @@ class MasterFeedEngine {
           empty++;
           break;
         case TrayStatus.light:
+          // Neutral — don't count
+          break;
         case TrayStatus.medium:
           // Neutral — don't count
           break;
@@ -671,7 +687,19 @@ class MasterFeedEngine {
     final reasons = <String>[];
 
     if (trayFactor < 1.0) {
-      reasons.add('Feed reduced due to tray observations');
+      // Convert percentage to TrayStatus for compatibility
+      TrayStatus status;
+      if (leftoverPercent < 20) {
+        status = TrayStatus.empty;
+      } else if (leftoverPercent < 40) {
+        status = TrayStatus.light;
+      } else if (leftoverPercent < 60) {
+        status = TrayStatus.medium;
+      } else {
+        status = TrayStatus.heavy;
+      }
+      final trayReason = _trayFactorService.getTrayReason(status);
+      if (trayReason != null) reasons.add(trayReason);
     }
 
     if (envFactor < 1.0) {

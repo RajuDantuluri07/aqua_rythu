@@ -308,7 +308,7 @@ class FeedHistoryNotifier
               (entry.value['base_feed'] as num?)?.toDouble() ?? 0.0;
 
           logs.add(FeedHistoryLog(
-            date: DateTime.parse(entry.key),
+            date: DateTime.tryParse(entry.key) ?? DateTime.now(),
             doc: doc,
             rounds: [feedGiven], // single value representing day total
             trayStatuses: [],

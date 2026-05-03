@@ -56,17 +56,17 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
   Duration _timeRemaining = Duration.zero;
 
   // ── Colours ────────────────────────────────────────────────────────────────
-  static const _green       = Color(0xFF16A34A);
-  static const _greenLight  = Color(0xFF22C55E);
-  static const _amber       = Color(0xFFD97706);
+  static const _green = Color(0xFF16A34A);
+  static const _greenLight = Color(0xFF22C55E);
+  static const _amber = Color(0xFFD97706);
   static const _amberBorder = Color(0xFFFDE68A);
-  static const _blue        = Color(0xFF2563EB);
-  static const _purple      = Color(0xFF7C3AED);
-  static const _slate200    = Color(0xFFE2E8F0);
-  static const _slate300    = Color(0xFFCBD5E1);
-  static const _slate400    = Color(0xFF94A3B8);
-  static const _slate500    = Color(0xFF64748B);
-  static const _ink         = Color(0xFF0F172A);
+  static const _blue = Color(0xFF2563EB);
+  static const _purple = Color(0xFF7C3AED);
+  static const _slate200 = Color(0xFFE2E8F0);
+  static const _slate300 = Color(0xFFCBD5E1);
+  static const _slate400 = Color(0xFF94A3B8);
+  static const _slate500 = Color(0xFF64748B);
+  static const _ink = Color(0xFF0F172A);
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   @override
@@ -107,8 +107,10 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
     });
   }
 
-  bool get _isEarly   => widget.nextFeedAt != null && _timeRemaining.inSeconds > 0;
-  bool get _isOverdue => widget.nextFeedAt != null && _timeRemaining.inMinutes < -30;
+  bool get _isEarly =>
+      widget.nextFeedAt != null && _timeRemaining.inSeconds > 0;
+  bool get _isOverdue =>
+      widget.nextFeedAt != null && _timeRemaining.inMinutes < -30;
 
   String _fmt(Duration d) {
     final pos = d.isNegative ? d.abs() : d;
@@ -123,7 +125,7 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    if (_isEarly)   return _earlyState();
+    if (_isEarly) return _earlyState();
     if (_isOverdue) return _overdueState();
     return _dueState();
   }
@@ -186,7 +188,8 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
               ],
             ),
           ),
-          if (widget.trayAction != 'MAINTAIN' || widget.trayReason.isNotEmpty) ...[
+          if (widget.trayAction != 'MAINTAIN' ||
+              widget.trayReason.isNotEmpty) ...[
             const SizedBox(height: 10),
             _traySignal(),
           ],
@@ -444,7 +447,7 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
       children: widget.supplements.map((s) {
         final i = s.lastIndexOf(' ');
         final name = i == -1 ? s : s.substring(0, i);
-        final qty  = i == -1 ? '' : s.substring(i + 1);
+        final qty = i == -1 ? '' : s.substring(i + 1);
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
@@ -467,7 +470,8 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
 
   Widget _savedRow() {
     final s = widget.savedToday!;
-    final label = s >= 1000 ? '₹${(s / 1000).toStringAsFixed(1)}K' : '₹${s.toInt()}';
+    final label =
+        s >= 1000 ? '₹${(s / 1000).toStringAsFixed(1)}K' : '₹${s.toInt()}';
     return Center(
       child: Text(
         'Saved $label today',
@@ -489,25 +493,31 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
             ? null
             : () async {
                 setState(() => _isSubmitting = true);
-                widget.onMarkDone?.call();
-                if (mounted) setState(() => _isSubmitting = false);
+                try {
+                  await Future.sync(() => widget.onMarkDone?.call());
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
               },
         style: ElevatedButton.styleFrom(
           backgroundColor: _green,
           disabledBackgroundColor: _green.withOpacity(0.5),
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
         child: _isSubmitting
             ? const SizedBox(
                 height: 22,
                 width: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.5, color: Colors.white),
               )
             : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle_rounded, size: 20, color: Colors.white),
+                  Icon(Icons.check_circle_rounded,
+                      size: 20, color: Colors.white),
                   SizedBox(width: 10),
                   Text(
                     'MARK AS FED',
@@ -533,13 +543,17 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
             ? null
             : () async {
                 setState(() => _isSubmitting = true);
-                widget.onMarkDone?.call();
-                if (mounted) setState(() => _isSubmitting = false);
+                try {
+                  await Future.sync(() => widget.onMarkDone?.call());
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
               },
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: _slate300, width: 1.5),
           foregroundColor: _slate500,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: _isSubmitting
             ? const SizedBox(

@@ -723,14 +723,16 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       final pondId = state.selectedPond;
       final doc = state.doc;
       try {
-        await TrayService().saveTrayLog(TrayLog(
+        final trayLog = TrayLog(
           pondId: pondId,
           time: latest.time,
           doc: doc,
           round: round,
           trays: trayStatuses,
           observations: latest.observations,
-        ));
+          isSkipped: latest.isSkipped,
+        );
+        await TrayService().saveTrayLog(trayLog);
 
         // 🔄 CACHE INVALIDATION: Tray update affects smart feed calculations
         // This ensures the controller fetches fresh tray data next load

@@ -695,7 +695,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                         HapticFeedback.mediumImpact(); // Tactile feedback
                         setState(() => _isSubmitting = true);
                         try {
-                          widget.onMarkDone!();
+                          await Future.sync(() => widget.onMarkDone!());
                         } finally {
                           if (mounted) setState(() => _isSubmitting = false);
                         }
@@ -944,11 +944,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
     return [
       Text(
-        "• ${counts[TrayStatus.heavy] ?? 0} Full",
+        "• ${counts[TrayStatus.heavy] ?? 0} Heavy",
         style: const TextStyle(fontSize: 14, color: _slate500),
       ),
       Text(
-        "• ${counts[TrayStatus.light] ?? 0} Partial",
+        "• ${counts[TrayStatus.light] ?? 0} Light",
         style: const TextStyle(fontSize: 14, color: _slate500),
       ),
       Text(
@@ -1362,8 +1362,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ? null
             : () async {
                 setState(() => _isSubmitting = true);
-                widget.onMarkDone?.call();
-                if (mounted) setState(() => _isSubmitting = false);
+                try {
+                  await Future.sync(() => widget.onMarkDone?.call());
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
               },
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: _slate300, width: 1.5),
@@ -1572,11 +1575,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       case TrayStatus.empty:
         return 'EMPTY';
       case TrayStatus.light:
-        return 'HALF';
+        return 'LIGHT';
       case TrayStatus.medium:
-        return 'MORE';
+        return 'MEDIUM';
       case TrayStatus.heavy:
-        return 'FULL';
+        return 'HEAVY';
     }
   }
 
@@ -1585,9 +1588,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       case TrayStatus.empty:
         return _green;
       case TrayStatus.light:
-        return _amber;
+        return _blue;
       case TrayStatus.medium:
-        return Colors.orange;
+        return _amber;
       case TrayStatus.heavy:
         return _red;
     }
@@ -1603,8 +1606,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ? null
             : () async {
                 setState(() => _isSubmitting = true);
-                widget.onMarkDone?.call();
-                if (mounted) setState(() => _isSubmitting = false);
+                try {
+                  await Future.sync(() => widget.onMarkDone?.call());
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
               },
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF16A34A),

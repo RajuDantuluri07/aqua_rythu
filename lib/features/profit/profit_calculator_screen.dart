@@ -48,8 +48,21 @@ class _ProfitCalculatorScreenState
     });
 
     try {
-      final harvestWeight = double.parse(_harvestWeightController.text);
-      final sellingPrice = double.parse(_sellingPriceController.text);
+      final harvestWeight =
+          double.tryParse(_harvestWeightController.text.trim());
+      final sellingPrice = double.tryParse(_sellingPriceController.text.trim());
+
+      if (harvestWeight == null || sellingPrice == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid input. Please enter valid numbers.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
       final result = await ref
           .read(profitProvider(widget.cropId).notifier)
@@ -116,8 +129,8 @@ class _ProfitCalculatorScreenState
                       // Harvest Weight Field
                       TextFormField(
                         controller: _harvestWeightController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Harvest Weight (kg)',
                           border: OutlineInputBorder(),
@@ -140,8 +153,8 @@ class _ProfitCalculatorScreenState
                       // Selling Price Field
                       TextFormField(
                         controller: _sellingPriceController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Selling Price (₹ per kg)',
                           border: OutlineInputBorder(),
