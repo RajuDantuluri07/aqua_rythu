@@ -214,7 +214,7 @@ Future<void> testSequentialFeedCalculations(
 
   // Calculate cumulative total
   final actualCumulative = allFeedLogs.fold<double>(
-      0.0, (sum, log) => sum + (log['feed_given'] as num?)?.toDouble() ?? 0.0);
+      0.0, (sum, log) => sum + ((log['feed_given'] as num?)?.toDouble() ?? 0.0));
 
   final expectedCumulative = amounts.reduce((a, b) => a + b);
 
