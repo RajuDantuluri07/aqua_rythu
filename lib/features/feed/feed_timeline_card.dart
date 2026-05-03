@@ -202,9 +202,6 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   }
 
   // ── Feed-state helpers ────────────────────────────────────────────────────
-  bool get _isTooEarly =>
-      widget.nextFeedAt != null && _timeRemaining.inSeconds > 0;
-
   bool get _isOverdue =>
       widget.nextFeedAt != null && _timeRemaining.inMinutes < -30;
 
