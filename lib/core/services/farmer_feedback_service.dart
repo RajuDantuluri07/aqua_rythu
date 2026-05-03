@@ -90,10 +90,7 @@ class FarmerFeedbackService {
       final feedback = await getFeedbackHistory(insightId);
       
       if (feedback.isEmpty) return 0.5; // Neutral score for no feedback
-      
-      final usefulCount = feedback.where((f) => f.isUseful).length;
-      final totalCount = feedback.length;
-      
+
       // Apply time decay - recent feedback weighs more
       double weightedScore = 0;
       double totalWeight = 0;

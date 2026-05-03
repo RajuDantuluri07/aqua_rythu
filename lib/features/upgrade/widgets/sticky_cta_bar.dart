@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../subscription_provider.dart';
 import '../upgrade_insight_provider.dart';
+import '../upgrade_to_pro_screen.dart';
 
 class StickyCTABar extends ConsumerStatefulWidget {
   const StickyCTABar({super.key});
@@ -100,23 +101,19 @@ class _StickyCTABarState extends ConsumerState<StickyCTABar>
             ),
             const SizedBox(width: 10),
             ElevatedButton.icon(
-              onPressed: subscriptionState.isLoading
-                  ? null
-                  : () async {
-                      UpgradeMetrics.trackCtaClick(
-                        source: 'sticky_bar',
-                        plan: '499_crop',
-                        insight: insight,
-                      );
-                      await ref
-                          .read(subscriptionProvider.notifier)
-                          .upgradeToPro();
-                      UpgradeMetrics.track('purchase_complete', {
-                        'source': 'sticky_bar',
-                        'plan': '499_crop',
-                        'loss_today': insight.roundedLoss,
-                      });
-                    },
+              onPressed: () {
+                UpgradeMetrics.trackCtaClick(
+                  source: 'sticky_bar',
+                  plan: '999_crop',
+                  insight: insight,
+                );
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UpgradeToProScreen(),
+                  ),
+                );
+              },
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
               label: const Text('Save Feed'),
               style: ElevatedButton.styleFrom(

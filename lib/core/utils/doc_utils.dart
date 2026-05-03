@@ -8,7 +8,7 @@ import '../providers/server_time_provider.dart';
 int? calculateDocFromStockingDate(
   DateTime stockingDate, {
   DateTime? now,
-  WidgetRef? ref,
+  Ref? ref,
 }) {
   // Priority: explicit now parameter > server time from provider > device time fallback
   DateTime? currentTime;

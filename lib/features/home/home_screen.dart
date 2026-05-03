@@ -6,13 +6,15 @@ import '../farm/farm_provider.dart';
 import '../farm/farm_switcher_sheet.dart';
 import '../feed/feed_history_provider.dart';
 import '../growth/growth_provider.dart';
-import '../pond/enums/seed_type.dart';
-import '../tray/tray_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
+import '../upgrade/feature_gate.dart';
+import '../upgrade/access_control_hooks.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../core/language/app_localizations.dart';
 import '../../core/services/admin_security_service.dart';
-import '../../core/utils/logger.dart';
+import '../../core/services/farm_price_settings_service.dart';
+import '../../core/services/inventory_service.dart';
+import '../../core/models/inventory_item.dart';
 import '../../routes/app_routes.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -45,17 +47,13 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-// Feed savings: baseline FCR for "expected feed" benchmark, and ₹/kg for cost.
-const double _baselineFcr = 1.6;
-const double _feedPricePerKg = 80;
+// Feed savings: baseline FCR for "expected feed" benchmark.
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _tapCount = 0;
   DateTime? _lastTapTime;
   static const Duration _tapResetTime = Duration(seconds: 3);
   static const int _requiredTaps = 5;
-
-  String? _lastTrackedSavingsRange;
 
   void _handleFarmNameTap() {
     final adminService = AdminSecurityService();
@@ -200,7 +198,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  ({double biomass, double profit}) _farmBiomassProfit(List<Pond> ponds) {
+  ({double biomass, double? profit}) _farmBiomassProfit(
+      List<Pond> ponds, {double? feedPrice, double? sellPrice}) {
     double biomass = 0, feed = 0;
     for (final p in ponds) {
       final logs = ref.watch(growthProvider(p.id));
@@ -213,7 +212,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         feed += (e.total as num?)?.toDouble() ?? 0;
       }
     }
-    final profit = biomass * 300 - feed * 80;
+    if (feedPrice == null || sellPrice == null) {
+      return (biomass: biomass, profit: null);
+    }
+    final profit = biomass * sellPrice - feed * feedPrice;
     return (biomass: biomass, profit: profit);
   }
 
@@ -225,68 +227,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 0.75;
   }
 
-  // ─── Feed Savings ──────────────────────────────────────────────────────────
-
-  ({double moneySaved, bool hasFullData, bool hasPartialData}) _farmSavings(
-      List<Pond> ponds) {
-    double feedSavedKg = 0;
-    bool hasFullData = false;
-    bool hasPartialData = false;
-
-    for (final p in ponds) {
-      // Nursery seed reaches feeding maturity faster than hatchery seed.
-      final fullThreshold = p.seedType == SeedType.nurseryBig ? 7 : 20;
-      final partialThreshold = p.seedType == SeedType.nurseryBig ? 7 : 15;
-
-      final history = ref.watch(feedHistoryProvider)[p.id] ?? [];
-      double feedGiven = 0;
-      for (final e in history) {
-        feedGiven += (e.total as num?)?.toDouble() ?? 0;
-      }
-      if (feedGiven == 0) continue;
-
-      final growthLogs = ref.watch(growthProvider(p.id));
-      final samplingAvailable = p.hasSampling || growthLogs.isNotEmpty;
-      final trayLogs = ref.watch(trayProvider(p.id));
-      final trayCount = trayLogs.where((l) => !l.isSkipped).length;
-
-      final eligible = p.doc >= fullThreshold &&
-          (trayCount >= 3 || samplingAvailable);
-
-      if (eligible && growthLogs.isNotEmpty) {
-        final survival = _survivalRate(p.doc);
-        final biomass = (p.seedCount * survival * growthLogs.first.abw) / 1000;
-        if (biomass > 0) {
-          final expected = biomass * _baselineFcr;
-          final saved = expected - feedGiven;
-          if (saved > 0) feedSavedKg += saved;
-          hasFullData = true;
-        }
-      } else if (p.doc >= partialThreshold) {
-        hasPartialData = true;
-      }
-    }
-
-    return (
-      moneySaved: feedSavedKg * _feedPricePerKg,
-      hasFullData: hasFullData,
-      hasPartialData: hasPartialData && !hasFullData,
-    );
-  }
-
-  void _maybeTrackSavingsView(double moneySaved, bool isPro) {
-    final range = moneySaved < 500
-        ? '<500'
-        : moneySaved < 2000
-            ? '500-2k'
-            : '2k+';
-    if (_lastTrackedSavingsRange == range) return;
-    _lastTrackedSavingsRange = range;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppLogger.debug(
-          'analytics: savings_visible plan=${isPro ? 'PRO' : 'FREE'} range=$range value=${moneySaved.toStringAsFixed(0)}');
-    });
-  }
 
   ({int score, String label}) _healthScore(List<Pond> ponds) {
     if (ponds.isEmpty) return (score: 100, label: 'Excellent');
@@ -346,11 +286,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
+    final priceSettings = ref
+        .watch(farmPriceSettingsProvider(farm.id))
+        .valueOrNull;
+    final feedPrice = priceSettings?.feedPricePerKg;
+    final sellPrice = priceSettings?.sellPricePerKg;
+
     final totalFeed = _totalFeed(ponds);
     final todayFeed = _todayFeed(ponds);
-    final cost = totalFeed * 80;
-    final bp = _farmBiomassProfit(ponds);
+    final cost = feedPrice != null ? totalFeed * feedPrice : null;
+    final bp = _farmBiomassProfit(ponds, feedPrice: feedPrice, sellPrice: sellPrice);
     final health = _healthScore(ponds);
+    final gate = ref.watch(featureGateProvider);
     final minDoc = ponds.isNotEmpty
         ? ponds.map((p) => p.doc).reduce(math.min)
         : 0;
@@ -387,6 +334,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     profit: bp.profit,
                     healthScore: health.score,
                     healthLabel: health.label,
+                    isPro: gate.canViewProfit,
                   ),
                   _SectionHeader(
                     title: 'Inventory & Expense',
@@ -395,6 +343,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         context, AppRoutes.inventoryDashboard),
                   ),
                   _QuickRow(
+                    farmId: farm.id,
                     onInventory: () => Navigator.pushNamed(
                         context, AppRoutes.inventoryDashboard),
                     onExpense: () {
@@ -413,6 +362,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ponds: ponds,
                     pondFeedToday: _pondFeedToday,
                     pondFcr: _pondFcr,
+                    canViewFcr: gate.canViewFcr,
                     onViewAll: () =>
                         Navigator.pushNamed(context, AppRoutes.pondDashboard),
                     onPondTap: (p) => Navigator.pushNamed(
@@ -597,7 +547,7 @@ class _BellButton extends StatelessWidget {
 class _HeroStrip extends StatelessWidget {
   final double totalFeed;
   final double todayFeed;
-  final double cost;
+  final double? cost;
 
   const _HeroStrip({
     required this.totalFeed,
@@ -607,7 +557,7 @@ class _HeroStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final costL = cost / 100000;
+    final costL = cost != null ? cost! / 100000 : null;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -656,8 +606,8 @@ class _HeroStrip extends StatelessWidget {
               _heroDivider(),
               _HeroStat(
                 label: 'Cost',
-                value: '₹${costL.toStringAsFixed(1)}',
-                unit: 'L',
+                value: costL != null ? '₹${costL.toStringAsFixed(1)}' : '—',
+                unit: costL != null ? 'L' : '',
                 prefix: true,
               ),
             ],
@@ -740,20 +690,22 @@ class _HeroStat extends StatelessWidget {
 
 class _StatsGrid extends StatelessWidget {
   final double biomass;
-  final double profit;
+  final double? profit;
   final int healthScore;
   final String healthLabel;
+  final bool isPro;
 
   const _StatsGrid({
     required this.biomass,
     required this.profit,
     required this.healthScore,
     required this.healthLabel,
+    required this.isPro,
   });
 
   @override
   Widget build(BuildContext context) {
-    final profitL = profit / 100000;
+    final profitL = profit != null ? profit! / 100000 : null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Column(
@@ -799,52 +751,118 @@ class _StatsGrid extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
+              // Profit card — locked for FREE users; hidden until prices set
               Expanded(
-                child: _StatCard(
-                  label: 'Estimated Profit',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            '₹${profitL.toStringAsFixed(1)}',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: _ink,
-                              letterSpacing: -0.02 * 22,
-                              height: 1,
-                            ),
+                child: GestureDetector(
+                  onTap: isPro
+                      ? null
+                      : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const UpgradeToProScreen()),
                           ),
-                          const Text(
-                            'L',
-                            style: TextStyle(fontSize: 14, color: _ink3),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Row(
-                        children: [
-                          Icon(Icons.arrow_upward_rounded,
-                              size: 10, color: _greenHi),
-                          SizedBox(width: 4),
-                          Text(
-                            'On track for ₹2.4L',
-                            style: TextStyle(fontSize: 11, color: _greenHi),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: _StatCard(
+                    label: 'Estimated Profit',
+                    child: !isPro
+                        ? const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.lock_outline_rounded,
+                                      size: 15, color: _ink3),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    '₹—',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: _ink3,
+                                      letterSpacing: -0.02 * 22,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 6),
+                              Text(
+                                'Unlock profit insights',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: _amber,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          )
+                        : profitL == null
+                            ? const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '₹—',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: _ink3,
+                                      letterSpacing: -0.02 * 22,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  SizedBox(height: 6),
+                                  Text(
+                                    'Set prices in Settings',
+                                    style: TextStyle(
+                                        fontSize: 11, color: _amber),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.baseline,
+                                    textBaseline: TextBaseline.alphabetic,
+                                    children: [
+                                      Text(
+                                        '₹${profitL.toStringAsFixed(1)}',
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w700,
+                                          color: _ink,
+                                          letterSpacing: -0.02 * 22,
+                                          height: 1,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'L',
+                                        style: TextStyle(
+                                            fontSize: 14, color: _ink3),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    profitL >= 0
+                                        ? 'Based on your prices'
+                                        : 'Loss — review costs',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: profitL >= 0
+                                          ? _greenHi
+                                          : Colors.red,
+                                    ),
+                                  ),
+                                ],
+                              ),
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          _FarmHealthCard(score: healthScore, label: healthLabel),
+          _FarmHealthCard(score: healthScore, label: healthLabel, isPro: isPro),
         ],
       ),
     );
@@ -889,11 +907,85 @@ class _StatCard extends StatelessWidget {
 class _FarmHealthCard extends StatelessWidget {
   final int score;
   final String label;
+  final bool isPro;
 
-  const _FarmHealthCard({required this.score, required this.label});
+  const _FarmHealthCard({required this.score, required this.label, required this.isPro});
 
   @override
   Widget build(BuildContext context) {
+    if (!isPro) {
+      return GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const UpgradeToProScreen()),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _line),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _line),
+                ),
+                child: const Center(
+                  child: Icon(Icons.lock_outline_rounded, size: 16, color: _ink3),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'FARM HEALTH STATUS',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _ink3,
+                        letterSpacing: 0.8,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'FCR-based score — PRO feature',
+                      style: TextStyle(fontSize: 12, color: _ink3),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _amberSoft,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'UNLOCK',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: _amberDeep,
+                    letterSpacing: 0.6,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final pct = score / 100;
     const circumference = 2 * math.pi * 16;
     final offset = circumference * (1 - pct);
@@ -965,9 +1057,13 @@ class _FarmHealthCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Water · Feeding · Growth all green',
-                      style: TextStyle(fontSize: 11.5, color: _ink2),
+                    Text(
+                      score >= 90
+                          ? 'FCR is excellent across ponds'
+                          : score >= 70
+                              ? 'FCR is good, monitor feed closely'
+                              : 'FCR needs attention — review feeding',
+                      style: const TextStyle(fontSize: 11.5, color: _ink2),
                     ),
                   ],
                 ),
@@ -976,15 +1072,23 @@ class _FarmHealthCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _greenSoft,
+                  color: score >= 90
+                      ? _greenSoft
+                      : score >= 70
+                          ? _amberSoft
+                          : const Color(0xFFFFECEC),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  'HEALTHY',
+                  label.toUpperCase(),
                   style: _mono.copyWith(
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
-                    color: _greenDeep,
+                    color: score >= 90
+                        ? _greenDeep
+                        : score >= 70
+                            ? _amberDeep
+                            : const Color(0xFF8B1A1A),
                     letterSpacing: 0.06 * 9,
                   ),
                 ),
@@ -1097,14 +1201,41 @@ class _SectionHeader extends StatelessWidget {
 
 // ─── Quick row: Inventory + Expense ──────────────────────────────────────────
 
-class _QuickRow extends StatelessWidget {
+final _inventorySummaryProvider =
+    FutureProvider.family<({int total, int low}), String>((ref, farmId) async {
+  final rows = await InventoryService().getInventoryStock(farmId);
+  final items = rows.map(InventoryItem.fromView).toList();
+  final low = items
+      .where((i) =>
+          i.status == PackStatus.low || i.status == PackStatus.critical)
+      .length;
+  return (total: items.length, low: low);
+});
+
+class _QuickRow extends ConsumerWidget {
   final VoidCallback onInventory;
   final VoidCallback onExpense;
+  final String farmId;
 
-  const _QuickRow({required this.onInventory, required this.onExpense});
+  const _QuickRow({
+    required this.onInventory,
+    required this.onExpense,
+    required this.farmId,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final invAsync = ref.watch(_inventorySummaryProvider(farmId));
+    final invMeta = invAsync.when(
+      data: (s) => s.total == 0
+          ? 'No inventory data yet'
+          : s.low > 0
+              ? '${s.low} item${s.low > 1 ? 's' : ''} low · ${s.total} stocked'
+              : '${s.total} items stocked',
+      loading: () => 'Loading...',
+      error: (_, __) => 'Tap to view',
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -1112,7 +1243,7 @@ class _QuickRow extends StatelessWidget {
           Expanded(
             child: _QuickCard(
               label: 'Inventory',
-              meta: '3 items low · 12 stocked',
+              meta: invMeta,
               bg: _blueSoft,
               iconBg: _blue,
               textColor: const Color(0xFF1A4585),
@@ -1124,7 +1255,7 @@ class _QuickRow extends StatelessWidget {
           Expanded(
             child: _QuickCard(
               label: 'Expense',
-              meta: 'This month · ₹0.0L',
+              meta: 'Tap to view expenses',
               bg: _orangeSoft,
               iconBg: _orange,
               textColor: const Color(0xFF6B2F0E),
@@ -1484,6 +1615,7 @@ class _PondsSection extends StatelessWidget {
   final List<Pond> ponds;
   final double Function(Pond) pondFeedToday;
   final double Function(Pond) pondFcr;
+  final bool canViewFcr;
   final VoidCallback onViewAll;
   final void Function(Pond) onPondTap;
 
@@ -1491,6 +1623,7 @@ class _PondsSection extends StatelessWidget {
     required this.ponds,
     required this.pondFeedToday,
     required this.pondFcr,
+    required this.canViewFcr,
     required this.onViewAll,
     required this.onPondTap,
   });
@@ -1514,6 +1647,7 @@ class _PondsSection extends StatelessWidget {
                         pond: p,
                         feedToday: pondFeedToday(p),
                         fcr: pondFcr(p),
+                        canViewFcr: canViewFcr,
                         onTap: () => onPondTap(p),
                       ),
                     ))
@@ -1529,12 +1663,14 @@ class _PondCard extends StatelessWidget {
   final Pond pond;
   final double feedToday;
   final double fcr;
+  final bool canViewFcr;
   final VoidCallback onTap;
 
   const _PondCard({
     required this.pond,
     required this.feedToday,
     required this.fcr,
+    required this.canViewFcr,
     required this.onTap,
   });
 
@@ -1643,10 +1779,17 @@ class _PondCard extends StatelessWidget {
                       label: 'Feed (D)',
                       value: feedToday.toStringAsFixed(0),
                       unit: 'kg'),
-                  _PondStat(
+                  if (canViewFcr)
+                    _PondStat(
+                        label: 'FCR',
+                        value: fcrText,
+                        dimmed: fcr == 0)
+                  else
+                    _LockedPondStat(
                       label: 'FCR',
-                      value: fcrText,
-                      dimmed: fcr == 0),
+                      onTap: () => AccessControlHooks.showUpgradeDialog(
+                          context, FeatureIds.profitTracking),
+                    ),
                   const _PondStat(label: 'DO', value: '—', dimmed: true),
                 ],
               ),
@@ -1679,6 +1822,39 @@ class _PondCard extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Shown in place of FCR for FREE users — lock icon, tap to upgrade.
+class _LockedPondStat extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _LockedPondStat({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: _mono.copyWith(
+                fontSize: 9.5,
+                color: _ink3,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.06 * 9.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Icon(Icons.lock_outline_rounded, size: 13, color: _amber),
           ],
         ),
       ),
@@ -1803,7 +1979,7 @@ class _UpgradeNudge extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Unlock disease early-warning',
+                        'Unlock advanced farm insights',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -1813,7 +1989,7 @@ class _UpgradeNudge extends StatelessWidget {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'Upgrade to PRO · catch WSSV / EHP 7 days earlier',
+                        'Profit tracking, FCR analysis & smarter feed recommendations',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: Colors.white70,

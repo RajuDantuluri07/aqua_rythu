@@ -281,14 +281,14 @@ class FeedSavingsService {
     }
   }
 
-  /// Get total tray logs count for multiple ponds
+  /// Get total tray logs count for multiple ponds in one query
   Future<int> _getTotalTrayLogsCountForPonds(List<String> pondIds) async {
     try {
       final response = await _supabase
           .from('tray_logs')
           .select('id')
-          .in_('pond_id', pondIds)
-          .neq('tray_statuses', '["skipped"]'); // Exclude skipped trays
+          .inFilter('pond_id', pondIds)
+          .neq('tray_statuses', '["skipped"]');
 
       return response.length;
     } catch (e) {
@@ -297,13 +297,13 @@ class FeedSavingsService {
     }
   }
 
-  /// Check if any of the ponds have sampling data
+  /// Check if any of the ponds have sampling data in one query
   Future<bool> _hasAnySamplingDataForPonds(List<String> pondIds) async {
     try {
       final response = await _supabase
           .from('samplings')
           .select('id')
-          .in_('pond_id', pondIds)
+          .inFilter('pond_id', pondIds)
           .limit(1);
 
       return response.isNotEmpty;

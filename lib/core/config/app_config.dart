@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const razorpayKeyId = String.fromEnvironment('RAZORPAY_KEY_ID');
   static const bool isDebugMode = kDebugMode;
 
   /// Fails fast at startup if keys are missing — better than a silent

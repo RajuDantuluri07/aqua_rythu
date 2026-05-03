@@ -9,7 +9,6 @@ class NetworkService {
   // Default timeout durations
   static const Duration _defaultTimeout = Duration(seconds: 30);
   static const Duration _longTimeout = Duration(seconds: 60);
-  static const Duration _shortTimeout = Duration(seconds: 10);
 
   // Retry configuration
   static const int _maxRetries = 3;

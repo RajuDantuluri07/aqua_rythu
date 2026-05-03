@@ -1,104 +1,79 @@
 import 'package:flutter/foundation.dart';
 
-/// Feature flags for launch mode gating.
+/// Controls which screens are LAUNCHED (visible to users at all).
 ///
-/// Set to false to hide secondary features for a simplified launch experience.
-/// Set enableAllFeaturesForDev to true in debug mode to test all features.
+/// These are LAUNCH flags — they answer "is this screen ready to ship?"
+/// They are NOT subscription gates. A screen can be launched (flag = true)
+/// and still require PRO via [FeatureGate] / [isProProvider].
+///
+/// PRO enforcement lives in:
+///   - lib/features/upgrade/feature_gate.dart  (UI checks)
+///   - lib/core/services/subscription_gate.dart (engine checks)
+///
+/// Turning [enableAllFeaturesForDev] on in debug lets engineers test
+/// screens that haven't shipped yet — subscription gating still applies.
 class FeatureFlags {
-  // ─── SECONDARY FEATURES (GATED FOR LAUNCH) ────────────────────────────────
-  
-  /// Inventory management (stock tracking, purchase history)
-  static const bool inventoryEnabled = false;
-  
-  /// Expense tracking (daily expenses, summaries)
-  static const bool expenseEnabled = false;
-  
-  /// Profit calculation and analytics
-  static const bool profitEnabled = false;
-  
-  /// Water quality testing
-  static const bool waterEnabled = false;
-  
-  /// Supplement mixing and management
+  // ─── NOT YET LAUNCHED ────────────────────────────────────────────────────
+  // Flip to true when the screen is production-ready and QA-signed-off.
+  // Subscription gating on these screens is enforced independently.
+
+  static const bool inventoryEnabled   = false;
+  static const bool expenseEnabled     = false;
+  static const bool profitEnabled      = false;
+  static const bool waterEnabled       = false;
   static const bool supplementsEnabled = false;
-  
-  /// Harvest management (logging, records, summaries)
-  static const bool harvestEnabled = false;
-  
-  /// Upgrade/Subscription screen (keep visible for monetization)
-  static const bool upgradeEnabled = true;
+  static const bool harvestEnabled     = false;
 
-  // ─── CORE FEATURES (ALWAYS ENABLED) ────────────────────────────────────────
-  
-  /// Pond dashboard (main daily operations hub)
+  // ─── ALWAYS LAUNCHED ─────────────────────────────────────────────────────
+
+  static const bool upgradeEnabled       = true;
   static const bool pondDashboardEnabled = true;
-  
-  /// Feed schedule and feed done functionality
-  static const bool feedScheduleEnabled = true;
-  
-  /// Feed history tracking
-  static const bool feedHistoryEnabled = true;
-  
-  /// Tray logging (critical for feed adjustments)
-  static const bool trayLogEnabled = true;
-  
-  /// Sampling/growth tracking
-  static const bool samplingEnabled = true;
-  
-  /// Farm and pond setup
-  static const bool farmSetupEnabled = true;
-  
-  /// Home dashboard
+  static const bool feedScheduleEnabled  = true;
+  static const bool feedHistoryEnabled   = true;
+  static const bool trayLogEnabled       = true;
+  static const bool samplingEnabled      = true;
+  static const bool farmSetupEnabled     = true;
   static const bool homeDashboardEnabled = true;
-  
-  /// Profile and settings
-  static const bool profileEnabled = true;
+  static const bool profileEnabled       = true;
 
-  // ─── DEVELOPMENT OVERRIDES ─────────────────────────────────────────────────
-  
-  /// Set to true to enable all features in debug mode for testing.
-  /// In production, this should always be false.
+  // ─── DEV OVERRIDE ────────────────────────────────────────────────────────
+  // Lets engineers reach unlaunched screens in debug builds.
+  // Subscription gating (FeatureGate / SubscriptionGate) is NOT bypassed.
+
   static const bool enableAllFeaturesForDev = true;
 
-  // ─── HELPER METHODS ───────────────────────────────────────────────────────
-  
-  /// Returns true if inventory feature should be visible.
+  // ─── ACCESSORS ───────────────────────────────────────────────────────────
+
   static bool get isInventoryVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return inventoryEnabled;
   }
-  
-  /// Returns true if expense feature should be visible.
+
   static bool get isExpenseVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return expenseEnabled;
   }
-  
-  /// Returns true if profit feature should be visible.
+
   static bool get isProfitVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return profitEnabled;
   }
-  
-  /// Returns true if water testing feature should be visible.
+
   static bool get isWaterVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return waterEnabled;
   }
-  
-  /// Returns true if supplements feature should be visible.
+
   static bool get isSupplementsVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return supplementsEnabled;
   }
-  
-  /// Returns true if harvest feature should be visible.
+
   static bool get isHarvestVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return harvestEnabled;
   }
-  
-  /// Returns true if upgrade screen should be visible.
+
   static bool get isUpgradeVisible {
     if (kDebugMode && enableAllFeaturesForDev) return true;
     return upgradeEnabled;

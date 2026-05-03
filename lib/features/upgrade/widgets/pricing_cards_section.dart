@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../subscription_provider.dart';
+import '../../../core/models/subscription_model.dart';
 import '../upgrade_insight_provider.dart';
 
 class PricingCardsSection extends ConsumerStatefulWidget {
@@ -126,7 +127,7 @@ class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
     required String plan,
   }) async {
     UpgradeMetrics.trackCtaClick(source: source, plan: plan, insight: insight);
-    await ref.read(subscriptionProvider.notifier).upgradeToPro();
+    await ref.read(subscriptionProvider.notifier).initiatePayment(PlanType.PRO);
     UpgradeMetrics.track('purchase_complete', {
       'source': source,
       'plan': plan,
@@ -134,7 +135,7 @@ class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
     });
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PRO access unlocked for this demo')),
+      const SnackBar(content: Text('PRO access unlocked')),
     );
   }
 }

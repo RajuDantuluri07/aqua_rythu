@@ -374,7 +374,6 @@ class MasterFeedEngine {
         _latestKnownLeftover(input.recentTrayLeftoverPct);
     final leftoverPercent = currentTrayLeftover ?? historicalLeftover ?? -1.0;
 
-    // Use pure function from feed_calculations instead of missing service method
     double trayFactor = calculateTrayFactor(input.trayStatuses);
     if (useBlindFeeding) {
       trayFactor = 1.0;
@@ -672,9 +671,7 @@ class MasterFeedEngine {
     final reasons = <String>[];
 
     if (trayFactor < 1.0) {
-      // For now just add a generic reason until getTrayReason signature is fixed
-      final trayReason = 'Feed reduced due to tray observations';
-      if (trayReason != null) reasons.add(trayReason);
+      reasons.add('Feed reduced due to tray observations');
     }
 
     if (envFactor < 1.0) {

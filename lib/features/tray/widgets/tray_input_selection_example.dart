@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../enums/tray_status.dart';
-import '../../systems/feed/tray_factor_service.dart';
+import '../../../systems/feed/tray_factor_service.dart';
 import 'tray_input_selection.dart';
 
 /// Example usage of the TrayInputSelection component
@@ -100,16 +100,14 @@ class _TrayInputSelectionExampleState extends State<TrayInputSelectionExample> {
                         _selectedState?.color ?? Colors.grey.shade300,
                     foregroundColor: Colors.white,
                     elevation: _selectedState != null ? 4 : 0,
-                    shadowColor: _selectedState != null
-                        ? _selectedState!.color.withOpacity(0.4)
-                        : null,
+                    shadowColor: _selectedState?.color.withOpacity(0.4),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: Text(
+                  child: const Text(
                     'Continue',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/expense_model.dart';
+import '../../core/services/pond_service.dart';
 import 'expense_provider.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
@@ -22,18 +23,39 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
+  final _pondService = PondService();
 
   ExpenseCategory _selectedCategory = ExpenseCategory.labour;
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
+  List<Map<String, dynamic>> _ponds = [];
+  String? _selectedPondId;
+  bool _isLoadingPonds = true;
 
   @override
   void initState() {
     super.initState();
+    _loadPonds();
     // Auto-focus amount field as per UX requirements
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(FocusNode());
     });
+  }
+
+  Future<void> _loadPonds() async {
+    try {
+      final ponds = await _pondService.getPonds(widget.farmId);
+      if (mounted) {
+        setState(() {
+          _ponds = ponds;
+          _isLoadingPonds = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingPonds = false);
+      }
+    }
   }
 
   @override
@@ -57,7 +79,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
       await ref.read(expensesProvider(widget.cropId).notifier).addExpense(
             farmId: widget.farmId,
-            pondId: null, // TODO: Add pond selection if needed
+            pondId: _selectedPondId,
             category: _selectedCategory,
             amount: amount,
             notes: _notesController.text.trim().isEmpty
@@ -136,10 +158,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Pond Selection Dropdown (Optional)
+              _buildPondDropdown(),
+              const SizedBox(height: 16),
+
               // Amount Field
               TextFormField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'Amount (₹)',
                   border: OutlineInputBorder(),
@@ -231,6 +258,58 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPondDropdown() {
+    if (_isLoadingPonds) {
+      return const InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Pond (Optional)',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.water),
+        ),
+        child: SizedBox(height: 20, child: LinearProgressIndicator()),
+      );
+    }
+
+    if (_ponds.isEmpty) {
+      return const InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Pond (Optional)',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.water),
+          helperText: 'No ponds available',
+        ),
+        child: Text('—'),
+      );
+    }
+
+    return DropdownButtonFormField<String?>(
+      value: _selectedPondId,
+      decoration: const InputDecoration(
+        labelText: 'Pond (Optional)',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.water),
+        helperText: 'Select a pond or leave empty for farm-wide expense',
+      ),
+      items: [
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('All Ponds (Farm-wide)'),
+        ),
+        ..._ponds.map((pond) {
+          final pondId = pond['id'] as String;
+          final pondName = pond['name'] as String? ?? 'Unnamed Pond';
+          return DropdownMenuItem<String?>(
+            value: pondId,
+            child: Text(pondName),
+          );
+        }),
+      ],
+      onChanged: (value) {
+        setState(() => _selectedPondId = value);
+      },
     );
   }
 }

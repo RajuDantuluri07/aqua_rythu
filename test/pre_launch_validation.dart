@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../lib/core/utils/feed_debug_logger.dart';
-import '../lib/core/utils/logger.dart';
+import 'package:aqua_rythu/core/utils/feed_debug_logger.dart';
+import 'package:aqua_rythu/core/utils/logger.dart';
 
 /// 🚨 PRE-LAUNCH VALIDATION TEST SUITE
 ///
@@ -215,7 +215,7 @@ void main() {
 
         // Calculate cumulative total
         final actualCumulative = allFeedLogs.fold<double>(0.0,
-            (sum, log) => sum + (log['feed_given'] as num?)?.toDouble() ?? 0.0);
+            (sum, log) => sum + ((log['feed_given'] as num?)?.toDouble() ?? 0.0));
 
         final expectedCumulative = amounts.reduce((a, b) => a + b);
 

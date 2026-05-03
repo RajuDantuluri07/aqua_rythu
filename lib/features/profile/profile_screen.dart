@@ -13,6 +13,9 @@ import '../upgrade/subscription_provider.dart';
 import '../dashboard/farm_dashboard_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../../core/services/subscription_gate.dart';
+import '../../core/services/farm_price_settings_service.dart';
+import '../../core/models/farm_price_settings.dart';
+import '../admin/payment_debug_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -255,6 +258,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
 
             const SizedBox(height: 20),
+
+            // ── FARM PRICING ─────────────────────────────────────────────
+            _sectionLabel('FARM PRICING'),
+            _FarmPricingCard(farmId: farmState.currentFarm?.id ?? ''),
+
+            const SizedBox(height: 16),
 
             // ── SECURITY ─────────────────────────────────────────────────
             _sectionLabel('SECURITY'),
@@ -596,6 +605,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _showDebugSnackBar('DEBUG: Reset to real subscription');
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.receipt_long_rounded,
+                  color: Colors.indigo),
+              title: const Text('Payment Logs'),
+              subtitle: const Text('Inspect payment events & errors'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PaymentDebugScreen(),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -616,6 +640,161 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         content: Text(message),
         backgroundColor: const Color(0xFF1B8A4C),
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+}
+
+class _FarmPricingCard extends ConsumerStatefulWidget {
+  final String farmId;
+  const _FarmPricingCard({required this.farmId});
+
+  @override
+  ConsumerState<_FarmPricingCard> createState() => _FarmPricingCardState();
+}
+
+class _FarmPricingCardState extends ConsumerState<_FarmPricingCard> {
+  static const _cardBorder = Color(0xFFE8ECF0);
+
+  final _feedCtrl = TextEditingController();
+  final _sellCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrent();
+  }
+
+  Future<void> _loadCurrent() async {
+    final settings =
+        await FarmPriceSettingsService().load(widget.farmId);
+    if (!mounted) return;
+    _feedCtrl.text =
+        settings.feedPricePerKg?.toStringAsFixed(0) ?? '';
+    _sellCtrl.text =
+        settings.sellPricePerKg?.toStringAsFixed(0) ?? '';
+  }
+
+  Future<void> _save() async {
+    final feed = double.tryParse(_feedCtrl.text.trim());
+    final sell = double.tryParse(_sellCtrl.text.trim());
+    if (feed == null || sell == null || feed <= 0 || sell <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter valid prices greater than 0')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    await ref
+        .read(farmPriceSettingsProvider(widget.farmId).notifier)
+        .update(FarmPriceSettings(feedPricePerKg: feed, sellPricePerKg: sell));
+    setState(() => _saving = false);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Prices saved')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _feedCtrl.dispose();
+    _sellCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.farmId.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: Text('No farm selected',
+            style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 13)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _cardBorder),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set your prices to see real profit calculations',
+              style: TextStyle(fontSize: 13, color: Color(0xFF444444)),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _PriceField(
+                    controller: _feedCtrl,
+                    label: 'Feed cost (₹/kg)',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _PriceField(
+                    controller: _sellCtrl,
+                    label: 'Sell price (₹/kg)',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1B8A4C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Save Prices',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PriceField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+
+  const _PriceField({required this.controller, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle:
+            const TextStyle(fontSize: 12, color: Color(0xFF9E9E9E)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        isDense: true,
       ),
     );
   }

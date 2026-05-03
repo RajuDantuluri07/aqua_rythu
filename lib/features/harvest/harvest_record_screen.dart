@@ -48,8 +48,23 @@ class _HarvestRecordScreenState extends ConsumerState<HarvestRecordScreen> {
     });
 
     try {
-      final totalWeight = double.parse(_totalWeightController.text);
-      final pricePerKg = double.parse(_pricePerKgController.text);
+      final totalWeight = double.tryParse(_totalWeightController.text);
+      final pricePerKg = double.tryParse(_pricePerKgController.text);
+
+      if (totalWeight == null || pricePerKg == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter valid numeric values for weight and price.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
 
       final harvestService = HarvestService();
       await harvestService.createHarvest(

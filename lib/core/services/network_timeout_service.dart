@@ -5,8 +5,6 @@ import '../utils/logger.dart';
 /// Simple timeout wrapper for network operations
 class NetworkTimeoutService {
   static const Duration _defaultTimeout = Duration(seconds: 30);
-  static const Duration _longTimeout = Duration(seconds: 60);
-  static const Duration _shortTimeout = Duration(seconds: 10);
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 1);
 

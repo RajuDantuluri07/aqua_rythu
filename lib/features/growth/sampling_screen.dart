@@ -5,6 +5,8 @@ import 'growth_provider.dart';
 import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
 import '../upgrade/access_control_hooks.dart';
+import '../upgrade/subscription_provider.dart';
+import '../upgrade/upgrade_to_pro_screen.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:aqua_rythu/core/services/sampling_service.dart';
 import '../../core/utils/logger.dart';
@@ -109,7 +111,6 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
       final abw = _avgWeight;
       final pondId = widget.pondId;
 
-      // Update in-memory growth log immediately
       ref.read(growthProvider(pondId).notifier).addLog(
             SamplingLog(
               doc: doc,
@@ -118,7 +119,6 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
             ),
           );
 
-      // Persist sampling + update pond ABW (fire-and-forget)
       SamplingService().addSampling(
         pondId: pondId,
         date: DateTime.now(),
@@ -130,15 +130,103 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
         AppLogger.error('Sampling save failed for pond $pondId', e);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Sample saved — will gently adjust feed accuracy"),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      Navigator.pop(context);
+      final isPro = ref.read(isProProvider);
+      if (isPro) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Sample saved — will gently adjust feed accuracy"),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        _showGrowthInsightNudge(abw, doc);
+      }
     }
+  }
+
+  void _showGrowthInsightNudge(double abw, int doc) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: Color(0xFF2BA864), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Sample saved — ${abw.toStringAsFixed(1)}g ABW at DOC $doc',
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0E1A1F)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'See how your growth compares to the ideal curve',
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0E1A1F)),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Is your ABW ahead or behind schedule? Get recommendations when growth slows — before it costs you.',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF4A5560),
+                  height: 1.45),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(sheetCtx).pop();
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('Maybe Later'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.workspace_premium_rounded, size: 16),
+                    label: const Text('See Growth Insights'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE8A33D),
+                      foregroundColor: Colors.black,
+                      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: () {
+                      final nav = Navigator.of(context);
+                      Navigator.of(sheetCtx).pop();
+                      nav.pop();
+                      nav.push(MaterialPageRoute(
+                          builder: (_) => const UpgradeToProScreen()));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _getGrowthInsight(

@@ -25,7 +25,7 @@ void main() async {
   
   final supabase = Supabase.instance.client;
   final testPondId = 'validation_test_${DateTime.now().millisecondsSinceEpoch}';
-  final testDoc = 25;
+  const testDoc = 25;
   
   try {
     // Test A: Double Tap Prevention
@@ -134,7 +134,7 @@ Future<void> testAtomicSaveBehavior(SupabaseClient supabase, String pondId, int 
   print('Feed Rounds Count: ${feedRounds.length}');
   
   // Should be either 0 (failed) or 1 (succeeded), never partial
-  if ((feedLogs.length == 0 && feedRounds.length == 0) || 
+  if ((feedLogs.isEmpty && feedRounds.isEmpty) || 
       (feedLogs.length == 1 && feedRounds.length == 1)) {
     print('✅ Atomic save behavior working correctly');
   } else {
@@ -187,7 +187,7 @@ Future<void> testSequentialFeedCalculations(SupabaseClient supabase, String pond
   // Calculate cumulative total
   final actualCumulative = allFeedLogs.fold<double>(
     0.0, 
-    (sum, log) => sum + (log['feed_given'] as num?)?.toDouble() ?? 0.0
+    (sum, log) => sum + ((log['feed_given'] as num?)?.toDouble() ?? 0.0)
   );
   
   final expectedCumulative = amounts.reduce((a, b) => a + b);

@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../core/models/expense_model.dart';
 import 'expense_provider.dart';
 import 'add_expense_screen.dart';
+import '../upgrade/subscription_provider.dart';
+import '../upgrade/upgrade_to_pro_screen.dart';
 
 class ExpenseSummaryScreen extends ConsumerStatefulWidget {
   final String cropId;
@@ -268,6 +270,15 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (!ref.watch(isProProvider)) {
+      return _ProRequired(
+        onUpgrade: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const UpgradeToProScreen()),
+        ),
+      );
+    }
+
     final summaryAsync = ref.watch(expenseSummaryProvider(widget.cropId));
 
     return Scaffold(
@@ -411,6 +422,85 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ProRequired extends StatelessWidget {
+  final VoidCallback onUpgrade;
+
+  const _ProRequired({required this.onUpgrade});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Expense Summary'),
+        backgroundColor: Colors.blue[600],
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF4E0),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFE8A33D), width: 2),
+                ),
+                child: const Center(
+                  child: Icon(Icons.workspace_premium_rounded,
+                      size: 36, color: Color(0xFFE8A33D)),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'PRO Feature',
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0E1A1F)),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Log daily expenses and see where your money goes — feed, labour, diesel, and more.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF4A5560),
+                    height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onUpgrade,
+                  icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+                  label: const Text('Upgrade to PRO — ₹999/crop'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE8A33D),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Maybe Later',
+                    style: TextStyle(color: Color(0xFF4A5560))),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

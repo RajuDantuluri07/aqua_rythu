@@ -24,7 +24,11 @@ class SubscriptionService {
 
       if (response == null) return null;
 
-      return Subscription.fromJson(response);
+      final sub = Subscription.fromJson(response);
+      // T23: Client-side expiry guard — treats end_date < now as expired
+      // even if the DB row hasn't been swept yet by expire_subscriptions().
+      if (!sub.isActive) return null;
+      return sub;
     } catch (e) {
       throw Exception('Failed to get subscription: $e');
     }
@@ -69,7 +73,7 @@ class SubscriptionService {
       final response = await _client
           .from(_table)
           .update({
-            'status': newStatus.name,
+            'status': newStatus.name.toLowerCase(),
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', subscriptionId)
@@ -131,7 +135,7 @@ class SubscriptionService {
       if (!feature.isProFeature) return true; // Free features always allowed
 
       // PRO features require active PRO subscription
-      return subscription.isPro && (farmId == null || subscription?.farmId == farmId);
+      return subscription.isPro && (farmId == null || subscription.farmId == farmId);
     } catch (e) {
       return false;
     }

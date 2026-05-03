@@ -155,7 +155,7 @@ class Pond {
 
   /// Calculates DOC using server time for tamper-proof calculation
   /// Returns null if server time is not yet available (loading state)
-  int? calculateDocWithRef(WidgetRef ref) {
+  int? calculateDocWithRef(Ref ref) {
     return calculateDocFromStockingDate(stockingDate, ref: ref);
   }
 

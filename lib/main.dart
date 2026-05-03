@@ -11,6 +11,7 @@ import 'features/auth/login_screen.dart';
 import 'features/auth/splash_screen.dart';
 import '../features/home/home_screen.dart';
 import 'features/auth/auth_provider.dart';
+import 'features/upgrade/subscription_provider.dart';
 import 'core/config/app_config.dart';
 import 'core/language/language_provider.dart';
 import 'core/language/app_localizations.dart';
@@ -83,10 +84,45 @@ class AuthGate extends ConsumerStatefulWidget {
   ConsumerState<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends ConsumerState<AuthGate> {
+class _AuthGateState extends ConsumerState<AuthGate>
+    with WidgetsBindingObserver {
+  DateTime? _lastHydration;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // T21: Re-sync subscription state on every app resume (60 s debounce).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    if (lifecycle != AppLifecycleState.resumed) return;
+    if (!ref.read(authProvider).isAuthenticated) return;
+    final now = DateTime.now();
+    if (_lastHydration == null ||
+        now.difference(_lastHydration!).inSeconds > 60) {
+      _lastHydration = now;
+      ref.read(subscriptionProvider.notifier).hydrateFromBackend();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+
+    // Hydrate subscription once when the user becomes authenticated.
+    ref.listen<AppAuthState>(authProvider, (prev, next) {
+      if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
+        ref.read(subscriptionProvider.notifier).hydrateFromBackend();
+      }
+    });
 
     // Show splash until the initial session check completes.
     // This prevents the login screen from flickering on cold start

@@ -188,11 +188,11 @@ class FeedInputBuilder {
         return const [];
       }
 
-      return rawStatuses.map((status) {
+      return rawStatuses.map<TrayStatus>((status) {
         try {
           return TrayStatus.values.byName(status);
         } catch (_) {
-          return TrayStatus.light;
+          return trayStatusFromName(status.toString());
         }
       }).toList();
     } catch (e, stackTrace) {

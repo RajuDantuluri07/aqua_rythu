@@ -32,7 +32,8 @@ class InventoryService {
   }
 
   // Get per-pond feed usage breakdown for a feed item
-  Future<List<Map<String, dynamic>>> getPondUsageBreakdown(String itemId) async {
+  Future<List<Map<String, dynamic>>> getPondUsageBreakdown(
+      String itemId) async {
     try {
       final result = await supabase
           .from('inventory_pond_usage_view')
@@ -135,8 +136,7 @@ class InventoryService {
         'p_packs': packs,
         'p_cost_per_pack': costPerPack,
       });
-      AppLogger.info(
-          'Added stock to $itemId (packs=$packs, qty=$quantity)');
+      AppLogger.info('Added stock to $itemId (packs=$packs, qty=$quantity)');
     } catch (e) {
       AppLogger.error('Failed to add stock: $e');
       rethrow;
@@ -276,7 +276,14 @@ class InventoryService {
 
       // Get latest purchase price
       final lastPurchase = await getLastPurchase(itemId);
-      final pricePerUnit = lastPurchase?['price_per_unit'] as double? ?? 0.0;
+      double pricePerUnit = lastPurchase?['price_per_unit'] as double? ?? 0.0;
+
+      // Warn and use fallback if no purchase history exists
+      if (pricePerUnit == 0.0) {
+        AppLogger.warn(
+            'No purchase history found for item $itemId, using default price of ₹50/kg');
+        pricePerUnit = 50.0; // Fallback to default market price
+      }
 
       return todayUsage * pricePerUnit;
     } catch (e) {
@@ -353,7 +360,7 @@ class InventoryService {
       return false;
     } catch (e) {
       AppLogger.error('Failed to validate unit consistency: $e');
-      return true; // Fail open to not block operations
+      return false; // Fail closed - block operations on validation errors
     }
   }
 }

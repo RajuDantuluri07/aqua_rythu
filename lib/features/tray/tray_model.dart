@@ -58,11 +58,11 @@ class TrayLog {
       time: DateTime.parse(json['time']),
       doc: json['doc'] ?? 0,
       round: json['round'] ?? 1,
-      trays: (json['trays'] as List).map((e) {
+      trays: (json['trays'] as List).map<TrayStatus>((e) {
         try {
-          return TrayStatus.values.byName(e);
+          return TrayStatus.values.byName(e as String);
         } catch (_) {
-          return TrayStatus.light;
+          return trayStatusFromName(e?.toString() ?? '');
         }
       }).toList(),
       observations: (json['observations'] as Map<String, dynamic>?)?.map(
@@ -82,11 +82,10 @@ class TrayLog {
       isSkipped: skipped,
       trays: skipped
           ? [] // skipped logs carry no tray data
-          : rawStatuses.map((e) {
+          : rawStatuses.map<TrayStatus>((e) {
               try {
                 return TrayStatus.values.byName(e);
               } catch (_) {
-                // Try migration for old enum values
                 return migrateOldTrayStatus(e);
               }
             }).toList(),

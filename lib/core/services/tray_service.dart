@@ -2,7 +2,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../../features/tray/tray_model.dart';
 import '../utils/logger.dart';
-import 'feed_service.dart';
 
 class TrayService {
   final _supabase = Supabase.instance.client;

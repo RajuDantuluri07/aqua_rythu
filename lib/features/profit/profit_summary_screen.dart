@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'profit_provider.dart';
 import 'profit_calculator_screen.dart';
 import '../harvest/harvest_record_screen.dart';
+import '../upgrade/subscription_provider.dart';
+import '../upgrade/upgrade_to_pro_screen.dart';
 
 class ProfitSummaryScreen extends ConsumerWidget {
   final String cropId;
@@ -20,6 +22,16 @@ class ProfitSummaryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(isProProvider)) {
+      return _ProRequired(
+        title: 'Profit & Cost Summary',
+        onUpgrade: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const UpgradeToProScreen()),
+        ),
+      );
+    }
+
     final profitAsync = ref.watch(profitProvider(cropId));
 
     return Scaffold(
@@ -529,6 +541,86 @@ class ProfitSummaryScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProRequired extends StatelessWidget {
+  final String title;
+  final VoidCallback onUpgrade;
+
+  const _ProRequired({required this.title, required this.onUpgrade});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: Colors.green[600],
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF4E0),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFE8A33D), width: 2),
+                ),
+                child: const Center(
+                  child: Icon(Icons.workspace_premium_rounded,
+                      size: 36, color: Color(0xFFE8A33D)),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'PRO Feature',
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0E1A1F)),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Track exact costs, FCR, and profit per crop cycle.\nKnow what you made before the next season starts.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF4A5560),
+                    height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onUpgrade,
+                  icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+                  label: const Text('Upgrade to PRO — ₹999/crop'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE8A33D),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Maybe Later',
+                    style: TextStyle(color: Color(0xFF4A5560))),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

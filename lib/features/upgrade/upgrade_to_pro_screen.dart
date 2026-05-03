@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:aqua_rythu/core/models/subscription_model.dart';
 import 'subscription_provider.dart';
 import 'upgrade_insight_provider.dart';
 
@@ -33,6 +34,22 @@ class _State extends ConsumerState<UpgradeToProScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // T22 – React to phase changes: auto-pop on success, show error on failure
+    ref.listen<SubscriptionState>(subscriptionProvider, (prev, next) {
+      if (!mounted) return;
+      if (next.paymentPhase == PaymentPhase.success &&
+          prev?.paymentPhase != PaymentPhase.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PRO activated! Welcome to full power.'),
+            backgroundColor: _accent,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    });
+
+    final sub = ref.watch(subscriptionProvider);
     final isWide = MediaQuery.of(context).size.width >= 600;
 
     return Scaffold(
@@ -43,8 +60,14 @@ class _State extends ConsumerState<UpgradeToProScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _topBar(),
+              _topBar(sub),
               const SizedBox(height: 8),
+
+              // T20 – Sticky retry banner when verification failed but payment captured
+              if (sub.hasPendingVerification &&
+                  sub.paymentPhase != PaymentPhase.verifying)
+                _retryBanner(sub),
+
               const Text(
                 'Upgrade to PRO',
                 style: TextStyle(
@@ -66,14 +89,14 @@ class _State extends ConsumerState<UpgradeToProScreen> {
                       children: [
                         Expanded(child: _basicCard()),
                         const SizedBox(width: 20),
-                        Expanded(child: _proCard()),
+                        Expanded(child: _proCard(sub)),
                       ],
                     )
                   : Column(
                       children: [
                         _basicCard(),
                         const SizedBox(height: 24),
-                        _proCard(),
+                        _proCard(sub),
                       ],
                     ),
               const SizedBox(height: 26),
@@ -91,7 +114,51 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     );
   }
 
-  Widget _topBar() {
+  // T20 – Banner shown when payment captured but DB write failed
+  Widget _retryBanner(SubscriptionState sub) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        border: Border.all(color: Colors.amber.shade400),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded,
+              color: Colors.amber.shade700, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Payment captured. Tap Retry to activate PRO.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.amber.shade900,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: sub.isLoading
+                ? null
+                : () => ref
+                    .read(subscriptionProvider.notifier)
+                    .retryVerification(),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.amber.shade800,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            child: const Text('RETRY',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _topBar(SubscriptionState sub) {
     return Row(
       children: [
         GestureDetector(
@@ -108,20 +175,39 @@ class _State extends ConsumerState<UpgradeToProScreen> {
           ),
         ),
         const Spacer(),
-        GestureDetector(
-          onTap: () {},
-          child: const Text(
-            'RESTORE',
-            style: TextStyle(
-              fontSize: 11,
-              color: _muted,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w600,
+        if (!sub.isPro)
+          GestureDetector(
+            onTap: sub.isLoading ? null : _handleRestore,
+            child: Text(
+              'RESTORE',
+              style: TextStyle(
+                fontSize: 11,
+                color: sub.isLoading ? _muted.withOpacity(0.4) : _muted,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ),
       ],
     );
+  }
+
+  Future<void> _handleRestore() async {
+    final found = await ref
+        .read(subscriptionProvider.notifier)
+        .restorePurchase();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          found
+              ? 'PRO access restored successfully!'
+              : 'No active subscription found for this account.',
+        ),
+        backgroundColor: found ? _accent : Colors.red.shade700,
+      ),
+    );
+    if (found) Navigator.of(context).pop();
   }
 
   Widget _billingToggle() {
@@ -222,10 +308,8 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     );
   }
 
-  Widget _proCard() {
-    final sub = ref.watch(subscriptionProvider);
+  Widget _proCard(SubscriptionState sub) {
     final isPerCrop = _cycle == _BillingCycle.perCrop;
-
     final title = isPerCrop ? 'PRO' : 'BUSINESS';
     final priceMain = isPerCrop ? '₹999' : '₹2999';
     final priceStrike = isPerCrop ? '₹2000' : '₹5999';
@@ -233,7 +317,6 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     final tagText = isPerCrop
         ? 'Launch Price • Increasing soon'
         : 'Best for multi-farm users';
-
     final features = isPerCrop
         ? const [
             'Smart feed engine (tray + growth + FCR)',
@@ -255,122 +338,79 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Transform.scale(
-          scale: 1.0,
-          child: Container(
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _accent, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: _accent.withOpacity(0.18),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: _billingToggle()),
-                const SizedBox(height: 14),
-                Text(
-                  title,
+        Container(
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _accent, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: _accent.withOpacity(0.18),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: _billingToggle()),
+              const SizedBox(height: 14),
+              Text(title,
                   style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      priceMain,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B))),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(priceMain,
                       style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        priceStrike,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B))),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(priceStrike,
                         style: const TextStyle(
-                          fontSize: 14,
-                          color: _strike,
-                          decoration: TextDecoration.lineThrough,
-                          decorationColor: _strike,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        priceUnit,
-                        style: const TextStyle(fontSize: 14, color: _muted),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _accent.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
+                            fontSize: 14,
+                            color: _strike,
+                            decoration: TextDecoration.lineThrough,
+                            decorationColor: _strike)),
                   ),
-                  child: Text(
-                    tagText,
+                  const SizedBox(width: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(priceUnit,
+                        style: const TextStyle(fontSize: 14, color: _muted)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(tagText,
                     style: const TextStyle(
-                      fontSize: 13,
-                      color: _accent,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _includedList(features),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton(
-                    onPressed: sub.isLoading
-                        ? null
-                        : () => ref
-                            .read(subscriptionProvider.notifier)
-                            .upgradeToPro(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: sub.isLoading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.black),
-                          )
-                        : Text(
-                            isPerCrop ? 'Unlock PRO' : 'Unlock BUSINESS',
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                  ),
-                ),
-              ],
-            ),
+                        fontSize: 13,
+                        color: _accent,
+                        fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 16),
+              _includedList(features),
+              const SizedBox(height: 18),
+              if (sub.isPro)
+                _proActiveButton()
+              else
+                _payButton(sub, isPerCrop),
+            ],
           ),
         ),
         Positioned(
@@ -385,11 +425,10 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             child: const Text(
               'MOST POPULAR',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: 0.4,
-              ),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: 0.4),
             ),
           ),
         ),
@@ -397,34 +436,110 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     );
   }
 
+  Widget _proActiveButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: ElevatedButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+        label: const Text("You're on PRO",
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _accent.withOpacity(0.15),
+          foregroundColor: _accent,
+          disabledBackgroundColor: _accent.withOpacity(0.15),
+          disabledForegroundColor: _accent,
+          elevation: 0,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  // T22 – Phase-aware button label + disable duplicate taps
+  Widget _payButton(SubscriptionState sub, bool isPerCrop) {
+    const plan = PlanType.PRO;
+    final busy = sub.isLoading;
+
+    final label = switch (sub.paymentPhase) {
+      PaymentPhase.creatingOrder => 'Preparing order…',
+      PaymentPhase.awaitingPayment => 'Waiting for payment…',
+      PaymentPhase.verifying => 'Verifying payment…',
+      _ => isPerCrop ? 'Unlock PRO – ₹999' : 'Unlock BUSINESS – ₹2999',
+    };
+
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: ElevatedButton(
+        onPressed: busy
+            ? null
+            : () {
+                UpgradeMetrics.trackCtaClick(
+                  source: 'upgrade_screen',
+                  plan: isPerCrop ? '999_crop' : '2999_year',
+                  insight: UpgradeLossInsight.simulated(),
+                );
+                ref
+                    .read(subscriptionProvider.notifier)
+                    .initiatePayment(plan);
+              },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _accent,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: busy
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(label,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700)),
+                ],
+              )
+            : Text(label,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
   Widget _includedList(List<String> items) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: items
-          .map(
-            (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Icon(Icons.check_rounded, size: 16, color: _accent),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      f,
-                      style: const TextStyle(
-                          fontSize: 13.5, color: _listInk, height: 1.4),
+          .map((f) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child:
+                          Icon(Icons.check_rounded, size: 16, color: _accent),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          )
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(f,
+                          style: const TextStyle(
+                              fontSize: 13.5, color: _listInk, height: 1.4)),
+                    ),
+                  ],
+                ),
+              ))
           .toList(),
     );
   }
-
 }
