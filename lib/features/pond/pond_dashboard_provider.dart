@@ -671,24 +671,28 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // Simple tray status aggregation (replaces FeedStateEngine)
       TrayStatus finalStatus;
       if (trayStatuses.isEmpty) {
-        finalStatus = TrayStatus.partial;
+        finalStatus = TrayStatus.light;
       } else {
         int totalScore = 0;
         for (final status in trayStatuses) {
-          if (status == TrayStatus.full) {
+          if (status == TrayStatus.heavy) {
             totalScore += 3;
-          } else if (status == TrayStatus.partial) {
+          } else if (status == TrayStatus.medium) {
             totalScore += 2;
+          } else if (status == TrayStatus.light) {
+            totalScore += 1;
           }
           // Empty contributes 0
         }
         final double avg = totalScore / trayStatuses.length;
         if (avg >= 2.5) {
-          finalStatus = TrayStatus.full;
+          finalStatus = TrayStatus.heavy;
         } else if (avg >= 1.5) {
-          finalStatus = TrayStatus.partial;
+          finalStatus = TrayStatus.medium;
+        } else if (avg >= 0.5) {
+          finalStatus = TrayStatus.light;
         } else {
-          finalStatus = TrayStatus.completed;
+          finalStatus = TrayStatus.empty;
         }
       }
 

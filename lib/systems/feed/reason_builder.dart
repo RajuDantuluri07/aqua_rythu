@@ -126,8 +126,8 @@ class ReasonBuilder {
       return '';
     }
 
-    final fullCount = trayStatuses.where((s) => s == TrayStatus.full).length;
-    final emptyCount = trayStatuses.where((s) => s == TrayStatus.completed).length;
+    final fullCount = trayStatuses.where((s) => s == TrayStatus.heavy).length;
+    final emptyCount = trayStatuses.where((s) => s == TrayStatus.empty).length;
     final totalCount = trayStatuses.length;
 
     if (fullCount > totalCount * 0.6) {

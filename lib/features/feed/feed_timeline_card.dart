@@ -947,11 +947,11 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
     return [
       Text(
-        "• ${counts[TrayStatus.full] ?? 0} Full",
+        "• ${counts[TrayStatus.heavy] ?? 0} Full",
         style: const TextStyle(fontSize: 14, color: _slate500),
       ),
       Text(
-        "• ${counts[TrayStatus.partial] ?? 0} Partial",
+        "• ${counts[TrayStatus.light] ?? 0} Partial",
         style: const TextStyle(fontSize: 14, color: _slate500),
       ),
       Text(
@@ -1572,22 +1572,26 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   String _trayLabel(TrayStatus s) {
     switch (s) {
-      case TrayStatus.completed:
+      case TrayStatus.empty:
         return 'EMPTY';
-      case TrayStatus.partial:
+      case TrayStatus.light:
         return 'HALF';
-      case TrayStatus.full:
+      case TrayStatus.medium:
+        return 'MORE';
+      case TrayStatus.heavy:
         return 'FULL';
     }
   }
 
   Color _trayColor(TrayStatus s) {
     switch (s) {
-      case TrayStatus.completed:
+      case TrayStatus.empty:
         return _green;
-      case TrayStatus.partial:
+      case TrayStatus.light:
         return _amber;
-      case TrayStatus.full:
+      case TrayStatus.medium:
+        return Colors.orange;
+      case TrayStatus.heavy:
         return _red;
     }
   }
