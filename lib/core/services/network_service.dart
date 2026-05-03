@@ -9,7 +9,6 @@ class NetworkService {
   // Default timeout durations
   static const Duration _defaultTimeout = Duration(seconds: 30);
   static const Duration _longTimeout = Duration(seconds: 60);
-  static const Duration _shortTimeout = Duration(seconds: 10);
 
   // Retry configuration
   static const int _maxRetries = 3;
@@ -31,7 +30,8 @@ class NetworkService {
     for (int attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
         AppLogger.debug(
-            'Executing $opName (attempt ${attempt + 1}/${effectiveMaxRetries + 1})');
+          'Executing $opName (attempt ${attempt + 1}/${effectiveMaxRetries + 1})',
+        );
 
         final result = await operation().timeout(
           effectiveTimeout,
@@ -51,21 +51,25 @@ class NetworkService {
       } catch (e) {
         if (attempt == effectiveMaxRetries) {
           AppLogger.error(
-              '$opName failed after ${effectiveMaxRetries + 1} attempts: $e');
+            '$opName failed after ${effectiveMaxRetries + 1} attempts: $e',
+          );
           rethrow;
         }
 
         if (e is TimeoutException) {
           AppLogger.warn(
-              '$opName timed out, retrying in ${_retryDelay.inSeconds}s...');
+            '$opName timed out, retrying in ${_retryDelay.inSeconds}s...',
+          );
         } else {
           AppLogger.warn(
-              '$opName failed, retrying in ${_retryDelay.inSeconds}s: $e');
+            '$opName failed, retrying in ${_retryDelay.inSeconds}s: $e',
+          );
         }
 
         // Wait before retry
         await Future.delayed(
-            _retryDelay * (attempt + 1)); // Exponential backoff
+          _retryDelay * (attempt + 1),
+        ); // Exponential backoff
       }
     }
 
@@ -98,10 +102,13 @@ class NetworkService {
     Duration? timeout,
   }) async {
     return executeWithTimeout(
-      () => _supabase.storage.from('uploads').uploadBinary(path, file,
-          fileOptions: FileOptions(
-            metadata: metadata,
-          )),
+      () => _supabase.storage
+          .from('uploads')
+          .uploadBinary(
+            path,
+            file,
+            fileOptions: FileOptions(metadata: metadata),
+          ),
       timeout: timeout ?? _longTimeout,
       operationName: 'Storage upload: $path',
     );
