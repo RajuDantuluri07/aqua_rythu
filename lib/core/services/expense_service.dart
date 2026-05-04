@@ -76,26 +76,31 @@ class ExpenseService {
         throw Exception('User not logged in');
       }
 
+      final expenseData = {
+        'user_id': user.id,
+        'farm_id': farmId,
+        'crop_id': cropId,
+        'pond_id': pondId,
+        'category': category.value,
+        'amount': amount,
+        'notes': notes,
+        'date': date?.toIso8601String().split('T')[0] ??
+            DateTime.now().toIso8601String().split('T')[0],
+      };
+
+      AppLogger.info('Expense payload: $expenseData');
+
       final response = await supabase
           .from('expenses')
-          .insert({
-            'user_id': user.id,
-            'farm_id': farmId,
-            'crop_id': cropId,
-            'pond_id': pondId,
-            'category': category.value,
-            'amount': amount,
-            'notes': notes,
-            'date': date?.toIso8601String().split('T')[0] ??
-                DateTime.now().toIso8601String().split('T')[0],
-          })
+          .insert(expenseData)
           .select()
           .single();
 
+      AppLogger.info('Insert result: $response');
       AppLogger.info('Created expense: ${response['id']}');
       return response['id'].toString();
-    } catch (e) {
-      AppLogger.error('Failed to create expense: $e');
+    } catch (e, stackTrace) {
+      AppLogger.error('Failed to create expense: $e\nStackTrace: $stackTrace');
       rethrow;
     }
   }

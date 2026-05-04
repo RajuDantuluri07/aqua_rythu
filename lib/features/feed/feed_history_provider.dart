@@ -159,7 +159,7 @@ class FeedHistoryNotifier
     // ✅ Update local state AFTER DB write succeeds
     state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
 
-    // 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation via cache invalidation
+    // 🔄 State update triggers automatic refresh of dependent providers
   }
 
   /// 🔒 FIX #5: Get cumulative feed from database (replaces index-based calculation)
@@ -187,23 +187,29 @@ class FeedHistoryNotifier
     }
   }
 
-  /// ✅ Persist feed log to database
+  /// ✅ Persist feed log to database — saves individual rounds, not daily totals
   Future<void> _persistFeedLog({
     required String pondId,
     required FeedHistoryLog log,
   }) async {
     try {
-      await _feedService.saveFeed(
-        pondId: pondId,
-        date: log.date,
-        doc: log.doc,
-        rounds: log.rounds,
-        expectedFeed: log.expected,
-        cumulativeFeed: log.cumulative,
-        baseFeed: log.expected, // Use expected feed as base feed reference
-        engineVersion: 'v1-controller', // New controller-based architecture
-      );
-      AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc}');
+      // Save each round individually (not as a daily total)
+      for (int i = 0; i < log.rounds.length; i++) {
+        final round = i + 1;
+        final amount = log.rounds[i];
+
+        // Skip zero/empty rounds
+        if (amount <= 0) continue;
+
+        await _feedService.saveFeedRound(
+          pondId: pondId,
+          doc: log.doc,
+          round: round,
+          amount: amount,
+          isManual: false,
+        );
+      }
+      AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc} (${log.rounds.length} rounds)');
     } catch (e) {
       AppLogger.error('Failed to save feed log to DB', e);
       // Data is still in local state, can retry later

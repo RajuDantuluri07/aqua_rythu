@@ -19,8 +19,8 @@ class SmartProofCard extends ConsumerWidget {
       final firstPond = currentFarm.ponds.first;
       doc = firstPond.doc;
 
-      // For demonstration, create mock smart value data when DOC >= 30
-      if (doc >= 30) {
+      // For demonstration, create mock smart value data when DOC > 30 (when smart feed activates)
+      if (doc > 30) {
         smartValueData = SmartValueData(
           savingsAmount: 120 + (doc % 50),
           reductionPercent: 5 + (doc % 10),
@@ -30,8 +30,8 @@ class SmartProofCard extends ConsumerWidget {
       }
     }
 
-    // Hide card for DOC < 30 or no smart data
-    if (doc < 30 || smartValueData == null) {
+    // Hide card for DOC <= 30 or no smart data
+    if (doc <= 30 || smartValueData == null) {
       return const SizedBox.shrink();
     }
 

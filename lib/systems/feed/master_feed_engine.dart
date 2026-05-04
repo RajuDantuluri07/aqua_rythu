@@ -395,18 +395,24 @@ class MasterFeedEngine {
 
     const isRaining = false;
     final phFluctuation = input.phChange.abs() >= 0.5;
-    final envFactor = _envFactorService.getEnvFactor(
-      isRaining: isRaining,
-      temperature: input.temperature,
-      dissolvedOxygen: input.dissolvedOxygen,
-      phFluctuation: phFluctuation,
-    );
-    final envReasons = _envFactorService.getEnvReasons(
-      isRaining: isRaining,
-      temperature: input.temperature,
-      dissolvedOxygen: input.dissolvedOxygen,
-      phFluctuation: phFluctuation,
-    );
+    double envFactor = 1.0; // Default: no environment adjustment (blind feed)
+    List<String> envReasons = []; // Default: empty reasons
+
+    // Only apply environment corrections in smart feed mode (PRO users after DOC 30)
+    if (!useBlindFeeding) {
+      envFactor = _envFactorService.getEnvFactor(
+        isRaining: isRaining,
+        temperature: input.temperature,
+        dissolvedOxygen: input.dissolvedOxygen,
+        phFluctuation: phFluctuation,
+      );
+      envReasons = _envFactorService.getEnvReasons(
+        isRaining: isRaining,
+        temperature: input.temperature,
+        dissolvedOxygen: input.dissolvedOxygen,
+        phFluctuation: phFluctuation,
+      );
+    }
 
     // ── STEP 4: Final feed integration ───────────────────────────────────────
     final rawIntegratedFeed = baseFeedKg * trayFactor * envFactor;

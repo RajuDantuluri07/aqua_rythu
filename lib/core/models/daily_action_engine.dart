@@ -13,6 +13,8 @@ enum DailyActionType {
 }
 
 extension DailyActionTypeX on DailyActionType {
+  int get priority => index + 1;
+
   String get label {
     switch (this) {
       case DailyActionType.partialHarvest: return 'Partial Harvest';
@@ -58,6 +60,8 @@ class DailyAction {
     required this.title,
     required this.message,
   });
+
+  int get priority => type.priority;
 }
 
 class SamplingSuggestion {
@@ -199,9 +203,9 @@ class DailyActionEngine {
 
   static String _smartFeedMessage(String? trayScore) {
     switch (trayScore) {
-      case 'good': return 'Increase feed by 5%';
-      case 'poor': return 'Reduce feed by 8%';
-      default:     return 'Feed plan on track — no change today';
+      case 'good': return 'Shrimp growing well → increase feed by 5%';
+      case 'poor': return 'Shrimp not responding → reduce feed by 8%';
+      default:     return 'Feed plan on track — shrimp responding well';
     }
   }
 

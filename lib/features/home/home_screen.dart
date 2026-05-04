@@ -15,6 +15,7 @@ import '../../core/services/admin_security_service.dart';
 import '../../core/services/farm_price_settings_service.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/models/inventory_item.dart';
+import '../../core/models/daily_action_engine.dart';
 import '../../routes/app_routes.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -557,7 +558,10 @@ class _HeroStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final costL = cost != null ? cost! / 100000 : null;
+    final requiredFeed = totalFeed;
+    final completedFeed = todayFeed;
+    final pendingFeed = (totalFeed - todayFeed).clamp(0, double.infinity);
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -590,94 +594,63 @@ class _HeroStrip extends StatelessWidget {
               ),
             ),
           ),
-          Row(
-            children: [
-              _HeroStat(
-                label: 'Total Feed',
-                value: totalFeed.toStringAsFixed(0),
-                unit: 'kg',
-              ),
-              _heroDivider(),
-              _HeroStat(
-                label: "Today's Feed",
-                value: todayFeed.toStringAsFixed(0),
-                unit: 'kg',
-              ),
-              _heroDivider(),
-              _HeroStat(
-                label: 'Cost',
-                value: costL != null ? '₹${costL.toStringAsFixed(1)}' : '—',
-                unit: costL != null ? 'L' : '',
-                prefix: true,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroDivider() => Container(
-        width: 1,
-        height: 32,
-        color: Colors.white.withOpacity(0.18),
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-      );
-}
-
-class _HeroStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final String unit;
-  final bool prefix;
-
-  const _HeroStat({
-    required this.label,
-    required this.value,
-    required this.unit,
-    this.prefix = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: _mono.copyWith(
-              fontSize: 10,
-              color: Colors.white.withOpacity(0.7),
-              letterSpacing: 0.08 * 10,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.01 * 20,
-                  height: 1,
+                "TODAY'S FEEDING STATUS",
+                style: _mono.copyWith(
+                  fontSize: 10,
+                  color: Colors.white.withOpacity(0.7),
+                  letterSpacing: 0.08 * 10,
                 ),
               ),
-              if (!prefix) ...[
-                const SizedBox(width: 4),
-                Text(
-                  unit,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.7),
-                    fontWeight: FontWeight.w400,
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${requiredFeed.toStringAsFixed(1)} kg required',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${completedFeed.toStringAsFixed(1)} kg done • ${pendingFeed.toStringAsFixed(1)} kg pending',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  if (pendingFeed > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${((completedFeed / requiredFeed) * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ],
@@ -715,39 +688,74 @@ class _StatsGrid extends StatelessWidget {
               Expanded(
                 child: _StatCard(
                   label: 'Estimated Biomass',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            biomass.toStringAsFixed(0),
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: _ink,
-                              letterSpacing: -0.02 * 22,
-                              height: 1,
+                  child: biomass == 0
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sampling required to unlock biomass',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: _ink2,
+                                height: 1.4,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'kg',
-                            style: TextStyle(fontSize: 13, color: _ink3),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        biomass == 0
-                            ? 'Updates after first sampling'
-                            : 'From growth samples',
-                        style: const TextStyle(fontSize: 11, color: _ink3),
-                      ),
-                    ],
-                  ),
+                            const SizedBox(height: 10),
+                            ElevatedButton(
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Sampling available in Pond Dashboard'),
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                minimumSize: const Size(0, 32),
+                              ),
+                              child: const Text(
+                                'Start Sampling',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  biomass.toStringAsFixed(0),
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: _ink,
+                                    letterSpacing: -0.02 * 22,
+                                    height: 1,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'kg',
+                                  style: TextStyle(fontSize: 13, color: _ink3),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'From growth samples',
+                              style: TextStyle(fontSize: 11, color: _ink3),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1347,35 +1355,20 @@ class _TodaysActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = <_ActionData>[];
-
-    for (final p in ponds) {
-      final logs = ref.read(growthProvider(p.id));
-      final needsSampling = logs.isEmpty ||
-          DateTime.now().difference(logs.first.date).inDays > 14;
-
-      if (needsSampling) {
-        final isUrgent = actions.isEmpty; // first one is urgent
-        actions.add(_ActionData(
-          pond: p,
-          urgent: isUrgent,
-          title: 'Do sampling today',
-          desc: 'Critical for biomass estimation. Skipping risks under/over-feeding for the next 7 days.',
-          dueTime: isUrgent ? '6:00 PM' : '7:00 PM',
-        ));
-      }
+    // Collect actions from all ponds and find highest-priority type
+    final actions = <DailyAction>[];
+    for (final pond in ponds) {
+      actions.add(DailyActionEngine.getTodaysAction(pond));
     }
 
-    final pendingCount = actions.length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHeader(
-          title: "Today's Actions",
-          right: pendingCount > 0 ? '$pendingCount PENDING' : 'ALL DONE',
-        ),
-        if (actions.isEmpty)
+    if (actions.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            title: "Today's Actions",
+            right: 'ALL DONE',
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
@@ -1400,62 +1393,59 @@ class _TodaysActions extends StatelessWidget {
                 ],
               ),
             ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: actions
-                  .map((a) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _AlertCard(
-                          data: a,
-                          onStart: () => Navigator.pushNamed(
-                            context,
-                            AppRoutes.feedSchedule,
-                            arguments: a.pond.id,
-                          ),
-                        ),
-                      ))
-                  .toList(),
+          ),
+        ],
+      );
+    }
+
+    // Find highest-priority action type
+    final topPriority = actions.map((a) => a.priority).reduce((a, b) => a < b ? a : b);
+    final affectedPonds = actions.where((a) => a.priority == topPriority).toList();
+    final topAction = affectedPonds.first;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          title: "Today's Actions",
+          right: affectedPonds.length > 1
+              ? '${affectedPonds.length} PONDS'
+              : '1 ACTION',
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _ActionCard(
+            action: topAction,
+            affectedPondsCount: affectedPonds.length,
+            onStart: () => Navigator.pushNamed(
+              context,
+              AppRoutes.feedSchedule,
+              arguments: topAction.pond.id,
             ),
           ),
+        ),
       ],
     );
   }
 }
 
-class _ActionData {
-  final Pond pond;
-  final bool urgent;
-  final String title;
-  final String desc;
-  final String dueTime;
-
-  const _ActionData({
-    required this.pond,
-    required this.urgent,
-    required this.title,
-    required this.desc,
-    required this.dueTime,
-  });
-}
-
-class _AlertCard extends StatelessWidget {
-  final _ActionData data;
+class _ActionCard extends StatelessWidget {
+  final DailyAction action;
+  final int affectedPondsCount;
   final VoidCallback onStart;
 
-  const _AlertCard({required this.data, required this.onStart});
+  const _ActionCard({
+    required this.action,
+    required this.onStart,
+    this.affectedPondsCount = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isUrgent = data.urgent;
-    final accentColor = isUrgent ? _amber : _orange;
-    final bgGrad = isUrgent ? _amberSoft : _orangeSoft;
-    final titleColor = isUrgent ? _amberDeep : _orange;
-    final iconBg = isUrgent
-        ? _amber.withOpacity(0.18)
-        : _orange.withOpacity(0.16);
+    final accentColor = action.type.color;
+    final bgGrad = accentColor.withOpacity(0.08);
+    final titleColor = accentColor;
+    final iconBg = accentColor.withOpacity(0.16);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
@@ -1486,80 +1476,75 @@ class _AlertCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
-                          Icons.schedule_rounded,
+                          action.type.icon,
                           color: titleColor,
                           size: 18,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          data.title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: titleColor,
-                            letterSpacing: -0.01 * 14,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    action.title,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: titleColor,
+                                      letterSpacing: -0.01 * 14,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.06),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    affectedPondsCount > 1
+                                        ? '$affectedPondsCount ponds'
+                                        : action.pond.name,
+                                    style: _mono.copyWith(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: _ink2,
+                                      letterSpacing: 0.04 * 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              action.message,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: _ink2,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                _SmallBtn(
+                                  label: 'View',
+                                  solid: true,
+                                  onTap: onStart,
+                                ),
+                                const SizedBox(width: 8),
+                                _SmallBtn(label: 'Snooze', solid: false, onTap: () {}),
+                                const Spacer(),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          data.pond.name,
-                          style: _mono.copyWith(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: _ink2,
-                            letterSpacing: 0.04 * 10,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    data.desc,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: _ink2,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      _SmallBtn(
-                        label: 'Start sampling',
-                        solid: true,
-                        onTap: onStart,
-                      ),
-                      const SizedBox(width: 8),
-                      _SmallBtn(label: 'Snooze', solid: false, onTap: () {}),
-                      const Spacer(),
-                      Text(
-                        'due ${data.dueTime}',
-                        style: _mono.copyWith(
-                          fontSize: 11,
-                          color: _ink3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
                     ],
                   ),
                 ),

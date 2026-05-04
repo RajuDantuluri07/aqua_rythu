@@ -3,21 +3,27 @@ import 'home_view_model.dart';
 
 /// 3 KPI tiles: Fed Today · Avg Weight · FCR.
 /// Shows "Est." suffix when values come from estimation, not real samples.
+/// ABW and FCR are PRO features and hidden for FREE users.
 class KpiRow extends StatelessWidget {
   final KPIData data;
+  final bool isPro;
 
-  const KpiRow({super.key, required this.data});
+  const KpiRow({super.key, required this.data, this.isPro = true});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _Tile(
-          label: 'FED TODAY',
-          value: data.feedToday > 0 ? '${data.feedToday.toStringAsFixed(1)} kg' : '--',
-          sub: data.plannedToday > 0 ? 'of ${data.plannedToday.toStringAsFixed(1)} kg' : 'DOC ${data.doc}',
-          color: data.feedToday > 0 ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
-        )),
+    final List<Widget> children = [
+      Expanded(child: _Tile(
+        label: 'FED TODAY',
+        value: data.feedToday > 0 ? '${data.feedToday.toStringAsFixed(1)} kg' : '--',
+        sub: data.plannedToday > 0 ? 'of ${data.plannedToday.toStringAsFixed(1)} kg' : 'DOC ${data.doc}',
+        color: data.feedToday > 0 ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+      )),
+    ];
+
+    // ABW and FCR are PRO features
+    if (isPro) {
+      children.addAll([
         const SizedBox(width: 8),
         Expanded(child: _Tile(
           label: data.abwIsEstimated ? 'ABW (EST.)' : 'AVG WEIGHT',
@@ -34,8 +40,10 @@ class KpiRow extends StatelessWidget {
           color: _fcrColor(data.fcr),
           dimmed: data.fcrIsEstimated,
         )),
-      ],
-    );
+      ]);
+    }
+
+    return Row(children: children);
   }
 
   String _fcrLabel(double v) {

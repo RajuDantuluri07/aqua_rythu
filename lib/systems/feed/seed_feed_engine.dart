@@ -90,13 +90,14 @@ class SeedFeedEngine {
 
   /// Combines base + tray + smart factors into final feed (kg).
   ///
+  /// Uses multiplicative factors for correct proportional adjustment.
   /// Clamps total factor adjustment to ±20% to prevent extreme jumps.
   static double calculateFinalFeed({
     required double baseFeed,
     required double trayFactor,
     required double smartFactor,
   }) {
-    final rawFactor = 1.0 + trayFactor + smartFactor;
+    final rawFactor = (1.0 + trayFactor) * (1.0 + smartFactor);
     // Clamp: never go below 80% or above 120% of base
     final clampedFactor = rawFactor.clamp(0.80, 1.20);
     return baseFeed * clampedFactor;

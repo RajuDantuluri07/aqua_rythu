@@ -200,7 +200,7 @@ final upgradeLossInsightProvider =
   final smartFactor = actualFeed > 0
       ? (expectedFeed / actualFeed).clamp(0.70, 1.30).toDouble()
       : 1.0;
-  final finalFactor = hasTrayData ? trayFactor : smartFactor;
+  final finalFactor = trayFactor * smartFactor;
 
   return UpgradeLossInsight(
     actualFeed: actualFeed,

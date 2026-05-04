@@ -45,12 +45,12 @@ final pondCardProvider = FutureProvider.autoDispose
   // Tray is considered active if its factor deviated meaningfully from 1.0
   final hasTray = (trayFactor - 1.0).abs() > 0.01;
 
-  final rawFinalFactor =
-      (todayFeed > 0) ? (suggestedFeed / todayFeed) - 1.0 : 0.0;
-  final finalFactor = rawFinalFactor;
+  // Standardized finalFactor from engine: trayFactor * envFactor
+  final finalFactor =
+      feedResult?.debugInfo.combinedFactor ?? 1.0;
 
   // Clamp percent to [-30, +30] per spec
-  final percentChange = (rawFinalFactor * 100).clamp(-30.0, 30.0);
+  final percentChange = ((finalFactor - 1.0) * 100).clamp(-30.0, 30.0);
 
   // ── 6. Money impact ───────────────────────────────────────────────────────
   final rawMoneySaved = (todayFeed - suggestedFeed) * PondCardData.feedPrice;

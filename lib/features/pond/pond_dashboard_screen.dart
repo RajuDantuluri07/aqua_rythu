@@ -65,7 +65,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   late AnimationController _pulseController;
   bool _showFeedScheduleTip = false;
   int _debugTapCount = 0;
-  bool _completedRoundsExpanded = false;
   // T13 — tracks which round just completed to show feedback prompt once
   int _lastFeedbackRound = -1;
   // Flag to prevent repeated anchor feed dialog popup
@@ -632,6 +631,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final selectedPond = dashboardState.selectedPond;
     final today = ref.watch(todayProvider);
     final oneWeekAgo = ref.watch(oneWeekAgoProvider);
+    final isPro = ref.watch(subscriptionProvider).isPro;
 
     // Notify user when feed plan was silently regenerated (auto-recovery)
     ref.listen<PondDashboardState>(pondDashboardProvider, (previous, next) {
@@ -1014,18 +1014,20 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     print(
         "🏡 POND DASHBOARD FEED: Pond=${currentPond.name}, PlannedFeed=${plannedFeed.toStringAsFixed(2)}kg, ConsumedFeed=${consumedFeed.toStringAsFixed(2)}kg, DOC=$currentDoc");
 
-    // Smart Feed auto-enables at DOC ≥ 30 (smart_feeding = doc >= 30).
+    // Smart Feed auto-enables at DOC > 30 (smart_feeding = doc > 30).
     // The DB flag `isSmartFeedEnabled` is the farmer's manual preference; even if
-    // never toggled, Smart Mode activates at DOC 30 because the round lock and
-    // SmartFeedEngine both trigger on doc >= 30.
+    // never toggled, Smart Mode activates at DOC 31 because MasterFeedEngine
+    // only applies smart corrections when doc > 30.
+    // DOC <= 30: blind feed (base curve + density scaling only)
+    // DOC > 30: smart feed (+ tray factor + env factor + FCR)
     final isSmartFeedEnabled =
-        currentPond.isSmartFeedEnabled || (currentDoc >= 30);
+        currentPond.isSmartFeedEnabled || (currentDoc > 30);
 
     // ── DOC-adaptive mode ────────────────────────────────────────────────────
     final String mode;
     if (currentDoc == 1) {
       mode = 'onboarding';
-    } else if (currentDoc < 30) {
+    } else if (currentDoc <= 30) {
       mode = 'growth';
     } else {
       mode = 'smart';
@@ -1286,20 +1288,22 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               AppSpacing.hBase,
 
               /// POND VALUE CARD — replaces Species/DOC/Survival stats strip
+              /// Only shown when DOC > 30 (sufficient data for accurate projections)
               /// 5-tap still opens the Feed Engine Debug Dashboard
-              GestureDetector(
-                onTap: () => _onDebugTap(selectedPond, currentPond.name),
-                child: _buildValueCard(
-                  mode: mode,
-                  pondValue: pondValue,
-                  doc: currentDoc,
-                  streak: streak,
-                  seedCount: currentPond.seedCount,
-                  survivalRate: survivalFraction,
+              if (currentDoc > 30)
+                GestureDetector(
+                  onTap: () => _onDebugTap(selectedPond, currentPond.name),
+                  child: _buildValueCard(
+                    mode: mode,
+                    pondValue: pondValue,
+                    doc: currentDoc,
+                    streak: streak,
+                    seedCount: currentPond.seedCount,
+                    survivalRate: survivalFraction,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 8),
+              if (currentDoc > 30) const SizedBox(height: 8),
 
               // Seed type badge row
               Row(
@@ -1318,11 +1322,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 ],
 
                 // ── KPI ROW — Feed Today · ABW · FCR ──────────────────────────
-                KpiRow(data: vm.kpis),
+                // FCR and ABW are PRO features; FREE users see only "Fed Today"
+                KpiRow(data: vm.kpis, isPro: isPro),
                 const SizedBox(height: 12),
 
                 // ── GAP 3 — Daily Performance Card (end-of-day intelligence) ──
-                if (completedRoundsCount >= (currentDoc <= 7 ? 2 : 4)) ...[
+                // Daily Performance Card shows FCR and growth intelligence (PRO features)
+                if (isPro && completedRoundsCount >= (currentDoc <= 7 ? 2 : 4)) ...[
                   _DailyPerformanceCard(
                     fcr: pondFcr,
                     currentAbw: currentAbw,
@@ -1337,7 +1343,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               const SizedBox(height: 12),
 
               if (isCompleted)
-                _buildCompletedDashboard(context, ref, currentPond)
+                _buildCompletedDashboard(context, ref, currentPond, isPro: isPro)
               else ...[
                 if (currentDoc > 120) ...[
                   Container(
@@ -1442,61 +1448,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       ),
 
                       const SizedBox(height: 12),
-                      GestureDetector(
-                        onTap: () => setState(() => _completedRoundsExpanded =
-                            !_completedRoundsExpanded),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _completedRoundsExpanded
-                                    ? Icons.expand_less_rounded
-                                    : Icons.expand_more_rounded,
-                                size: 18,
-                                color: const Color(0xFF64748B),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _completedRoundsExpanded
-                                    ? 'Hide Completed Rounds'
-                                    : 'Completed Rounds',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF64748B),
-                                ),
-                              ),
-                              const Spacer(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF16A34A),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '${dashboardState.roundFeedStatus.values.where((s) => s == 'completed').length} done',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (_completedRoundsExpanded) ...[
-                        const SizedBox(height: 8),
-                        ..._buildTimeline(
+                      const SizedBox(height: 8),
+                      ..._buildTimeline(
                           today: today,
                           currentDoc: currentDoc,
                           pondName: currentPond.name,
@@ -1513,7 +1466,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                           valueDelta: pondValue.delta,
                           showDoneRoundsOnly: true,
                         ),
-                      ],
                     ],
                   ),
                 const SizedBox(height: 16),
@@ -1867,7 +1819,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       ref.read(pondDashboardProvider.notifier).editRoundAmount(
                             round,
                             newQty,
-                            persistToPlan: currentDoc >= 30,
+                            persistToPlan: currentDoc > 30,
                           );
                     }
                   : null,
@@ -2528,7 +2480,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   }
 
   Widget _buildCompletedDashboard(
-      BuildContext context, WidgetRef ref, Pond pond) {
+      BuildContext context, WidgetRef ref, Pond pond,
+      {required bool isPro}) {
     final currentDoc = ref.watch(docProvider(pond.id));
     final harvests = ref.watch(harvestProvider(pond.id));
     final totalYield = harvests.fold(0.0, (sum, h) => sum + h.quantity);
@@ -2622,16 +2575,46 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         // Secondary Summary Access
         Row(
           children: [
+            // Reports (crop reports PDF) is a PRO feature
             Expanded(
-              child: _actionCard(
-                context,
-                "Reports",
-                Icons.analytics_rounded,
-                Colors.orange,
-                () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => HarvestSummaryScreen(pondId: pond.id))),
+              child: Opacity(
+                opacity: isPro ? 1.0 : 0.5,
+                child: GestureDetector(
+                  onTap: isPro
+                      ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => HarvestSummaryScreen(pondId: pond.id)))
+                      : () => AccessControlHooks.showUpgradeDialog(
+                          context, FeatureIds.cropReport),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: isPro
+                              ? Colors.grey.shade200
+                              : Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.analytics_rounded,
+                            color: Colors.orange, size: 28),
+                        const SizedBox(height: 12),
+                        Text("Reports",
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                        if (!isPro)
+                          Text("PRO",
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 16),

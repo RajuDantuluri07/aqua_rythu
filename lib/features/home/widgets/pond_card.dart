@@ -10,6 +10,11 @@ class PondCard extends StatelessWidget {
     this.onTap,
   });
 
+  String _formatAbw(dynamic abw) {
+    final value = (abw as num?)?.toDouble() ?? 0.0;
+    return value > 0 ? '${value.toStringAsFixed(1)} g' : 'Not available';
+  }
+
   @override
   Widget build(BuildContext context) {
     String status;
@@ -205,7 +210,7 @@ class PondCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'DOC',
+                            'ABW',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -214,7 +219,7 @@ class PondCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${(pond.doc as num?)?.toInt() ?? 0}',
+                            _formatAbw(pond.currentAbw),
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,

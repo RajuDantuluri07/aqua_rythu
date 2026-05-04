@@ -1,20 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/expense_model.dart';
 import '../../core/services/expense_service.dart';
+import '../../core/utils/logger.dart';
 
 class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
-  final ExpenseService _expenseService;
+  final ExpenseService expenseService;
   final String cropId;
+  final Ref ref;
 
-  ExpenseNotifier(this._expenseService, this.cropId)
-      : super(const AsyncValue.loading()) {
+  ExpenseNotifier({
+    required this.ref,
+    required this.expenseService,
+    required this.cropId,
+  }) : super(const AsyncValue.loading()) {
     loadExpenses();
   }
 
   Future<void> loadExpenses() async {
     state = const AsyncValue.loading();
     try {
-      final expenses = await _expenseService.getExpenses(cropId: cropId);
+      final expenses = await expenseService.getExpenses(cropId: cropId);
       state = AsyncValue.data(expenses);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
@@ -30,7 +35,7 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
     DateTime? date,
   }) async {
     try {
-      await _expenseService.createExpense(
+      final expenseId = await expenseService.createExpense(
         farmId: farmId,
         cropId: cropId,
         pondId: pondId,
@@ -39,11 +44,13 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
         notes: notes,
         date: date,
       );
+      AppLogger.info('Expense created successfully with ID: $expenseId');
 
-      // Refresh the expenses list
+      // Refresh the expenses list with explicit wait
       await loadExpenses();
-    } catch (e) {
-      // Let the UI handle the error
+      AppLogger.info('Expenses reloaded after creation');
+    } catch (e, stackTrace) {
+      AppLogger.error('Failed to add expense: $e\nStackTrace: $stackTrace');
       rethrow;
     }
   }
@@ -56,7 +63,7 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
     DateTime? date,
   }) async {
     try {
-      await _expenseService.updateExpense(
+      await expenseService.updateExpense(
         expenseId: expenseId,
         category: category,
         amount: amount,
@@ -66,6 +73,10 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
 
       // Refresh the expenses list
       await loadExpenses();
+
+      // Invalidate dependent providers to ensure UI sync
+      ref.invalidate(expensesProvider(cropId));
+      ref.invalidate(expenseSummaryProvider(cropId));
     } catch (e) {
       // Let the UI handle the error
       rethrow;
@@ -74,10 +85,14 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
 
   Future<void> deleteExpense(String expenseId) async {
     try {
-      await _expenseService.deleteExpense(expenseId);
+      await expenseService.deleteExpense(expenseId);
 
       // Refresh the expenses list
       await loadExpenses();
+
+      // Invalidate dependent providers to ensure UI sync
+      ref.invalidate(expensesProvider(cropId));
+      ref.invalidate(expenseSummaryProvider(cropId));
     } catch (e) {
       // Let the UI handle the error
       rethrow;
@@ -140,7 +155,11 @@ final expensesProvider = StateNotifierProvider.family<ExpenseNotifier,
     AsyncValue<List<Expense>>, String>(
   (ref, cropId) {
     final expenseService = ref.watch(expenseServiceProvider);
-    return ExpenseNotifier(expenseService, cropId);
+    return ExpenseNotifier(
+      ref: ref,
+      expenseService: expenseService,
+      cropId: cropId,
+    );
   },
 );
 

@@ -79,7 +79,7 @@ class HomeBuilder {
     double expectedAbw,
   ) {
     final now = DateTime.now();
-    final int gap = doc >= 30 ? _smartGapMinutes : _blindGapMinutes;
+    final int gap = doc > 30 ? _smartGapMinutes : _blindGapMinutes;
 
     // 1. ALL DONE
     if (feedsDone >= maxFeeds) {
@@ -115,8 +115,8 @@ class HomeBuilder {
       }
     }
 
-    // 4. TRAY PENDING — DOC ≥ 30 and last completed round has no tray
-    final bool hasPendingTray = doc >= 30 &&
+    // 4. TRAY PENDING — DOC > 30 and last completed round has no tray (tray corrections activate after DOC 30)
+    final bool hasPendingTray = doc > 30 &&
         roundFeedStatus.entries.any(
           (e) => e.value == 'completed' && !(trayDone[e.key] ?? false),
         );

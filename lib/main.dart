@@ -15,6 +15,7 @@ import 'features/upgrade/subscription_provider.dart';
 import 'core/config/app_config.dart';
 import 'core/language/language_provider.dart';
 import 'core/language/app_localizations.dart';
+import 'core/services/subscription_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +41,13 @@ void main() async {
     initializeUserProvider(prefs);
   } catch (e) {
     debugPrint('SharedPreferences initialization failed: $e');
+  }
+
+  // Hydrate debug subscription override (for QA testing in debug builds)
+  try {
+    await SubscriptionGate.hydrateDebugOverride();
+  } catch (e) {
+    debugPrint('SubscriptionGate debug override hydration failed: $e');
   }
 
   runApp(
