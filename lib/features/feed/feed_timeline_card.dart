@@ -891,22 +891,21 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       icon = Icons.trending_down_rounded;
     } else if (widget.isPendingTray || smallReduction) {
       message = 'Check tray before next feed';
-      color = _amber;
+      color = AppColors.warning;
       icon = Icons.checklist_rounded;
     } else {
       message = 'Feeding on track';
-      color = _green;
+      color = AppColors.success;
       icon = Icons.check_circle_outline_rounded;
     }
 
     return Row(
       children: [
         Icon(icon, size: 15, color: color),
-        const SizedBox(width: 6),
+        const SizedBox(width: Spacing.sm),
         Text(
           message,
-          style: TextStyle(
-            fontSize: 13,
+          style: AppTextStyles.body.copyWith(
             fontWeight: FontWeight.w600,
             color: color,
           ),
@@ -927,15 +926,15 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     return [
       Text(
         "• ${counts[TrayStatus.heavy] ?? 0} Heavy",
-        style: const TextStyle(fontSize: 14, color: _slate500),
+        style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
       ),
       Text(
         "• ${counts[TrayStatus.light] ?? 0} Light",
-        style: const TextStyle(fontSize: 14, color: _slate500),
+        style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
       ),
       Text(
         "• Avg leftover: ${avgLeftover.toStringAsFixed(0)}%",
-        style: const TextStyle(fontSize: 14, color: _slate500),
+        style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
       ),
     ];
   }
@@ -950,45 +949,42 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         : "You are feeding ${percent.abs()}% below recommended level";
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Spacing.md),
       decoration: BoxDecoration(
-        color: _amberBg,
+        color: AppColors.warning.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _amberBorder),
+        border: Border.all(color: AppColors.warning.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, size: 16, color: _amber),
-              const SizedBox(width: 4),
+              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+              const SizedBox(width: Spacing.xs),
               Text(
                 isOver ? "Overfeeding" : "Underfeeding",
-                style: const TextStyle(
-                  fontSize: 14,
+                style: AppTextStyles.body.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: _amber,
+                  color: AppColors.warning,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: Spacing.xs),
           Text(
             message,
-            style: const TextStyle(
-              fontSize: 13,
-              color: _slate500,
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: Spacing.xs),
           Text(
             isOver
                 ? "This may increase feed waste and FCR"
                 : "Growth may slow down",
-            style: const TextStyle(
-              fontSize: 13,
-              color: _slate500,
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textSecondary,
             ),
           ),
         ],
@@ -1002,20 +998,20 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
     final Color color;
     final String label;
     if (_isOverdue) {
-      color = _red;
+      color = AppColors.danger;
       label = 'Feed Now';
     } else if (mins <= 30) {
-      color = _red;
+      color = AppColors.danger;
       label = 'Due Soon';
     } else if (mins <= 60) {
-      color = _amber;
+      color = AppColors.warning;
       label = 'Upcoming';
     } else {
-      color = _green;
+      color = AppColors.success;
       label = 'Safe';
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(4),
@@ -1029,11 +1025,10 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             height: 6,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: Spacing.xs),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 9,
+            style: AppTextStyles.caption.copyWith(
               fontWeight: FontWeight.w800,
               color: color,
             ),
@@ -1091,13 +1086,15 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   // ── T13 — Feedback row (thumbs up / down) ────────────────────────────────
   Widget _feedbackRow() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.lg, Spacing.md),
       child: Row(
         children: [
-          const Text(
+          Text(
             'Was this recommendation accurate?',
-            style: TextStyle(
-                fontSize: 11, color: _slate500, fontWeight: FontWeight.w600),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const Spacer(),
           GestureDetector(
@@ -1106,31 +1103,31 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
               widget.onFeedback?.call(true);
             },
             child: Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(Spacing.sm),
               decoration: BoxDecoration(
-                color: _green.withOpacity(0.1),
+                color: AppColors.success.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _green.withOpacity(0.3)),
+                border: Border.all(color: AppColors.success.withOpacity(0.3)),
               ),
               child:
-                  const Icon(Icons.thumb_up_rounded, size: 16, color: _green),
+                  Icon(Icons.thumb_up_rounded, size: 16, color: AppColors.success),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: Spacing.sm),
           GestureDetector(
             onTap: () {
               setState(() => _feedbackGiven = true);
               widget.onFeedback?.call(false);
             },
             child: Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(Spacing.sm),
               decoration: BoxDecoration(
-                color: _red.withOpacity(0.1),
+                color: AppColors.danger.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _red.withOpacity(0.3)),
+                border: Border.all(color: AppColors.danger.withOpacity(0.3)),
               ),
               child:
-                  const Icon(Icons.thumb_down_rounded, size: 16, color: _red),
+                  Icon(Icons.thumb_down_rounded, size: 16, color: AppColors.danger),
             ),
           ),
         ],
@@ -1381,14 +1378,14 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   Widget _upcomingCard() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: Spacing.sm),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _slate200, width: 1),
+        border: Border.all(color: AppColors.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
         child: Row(
           children: [
             Expanded(
@@ -1399,41 +1396,37 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                     children: [
                       Text(
                         "ROUND ${widget.round}",
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _slate400,
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textSecondary,
                           letterSpacing: 0.2,
                         ),
                       ),
                       if (widget.isNext) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: Spacing.sm),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: Spacing.sm, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _blue.withOpacity(0.1),
+                            color: AppColors.primary.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
+                          child: Text(
                             "NEXT",
-                            style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: _blue,
-                                letterSpacing: 0.4),
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                            ),
                           ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: Spacing.xs),
                   Text(
                     widget.time,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: _slate400,
+                    style: AppTextStyles.subheading.copyWith(
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -1446,18 +1439,14 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   widget.finalFeedKg <= 0
                       ? "Do not feed"
                       : "${widget.finalFeedKg.toStringAsFixed(1)} kg",
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: _slate500,
+                  style: AppTextStyles.subheading.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
-                const Text(
+                Text(
                   "UPCOMING",
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: _slate300,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.border,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -1475,15 +1464,14 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   Widget _badge(String text, Color textColor, Color bgColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 3),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 9,
+        style: AppTextStyles.caption.copyWith(
           fontWeight: FontWeight.w800,
           color: textColor,
           letterSpacing: 0.4,
@@ -1513,13 +1501,13 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         row.add(Container(
             width: 1,
             height: 40,
-            color: _slate200,
-            margin: const EdgeInsets.symmetric(horizontal: 8)));
+            color: AppColors.border,
+            margin: const EdgeInsets.symmetric(horizontal: Spacing.sm)));
         row.add(Expanded(child: _supplementGridCell(sups[i + 1])));
       }
       rows.add(
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: row));
-      if (i + 2 < sups.length) rows.add(const SizedBox(height: 8));
+      if (i + 2 < sups.length) rows.add(const SizedBox(height: Spacing.sm));
     }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
@@ -1532,20 +1520,19 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       children: [
         Text(
           parts[0],
-          style: const TextStyle(
-            fontSize: 10,
+          style: AppTextStyles.caption.copyWith(
             fontWeight: FontWeight.w700,
-            color: _purple,
+            color: AppColors.textSecondary,
             letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: Spacing.xs),
         Text(
           parts[1],
-          style: const TextStyle(
+          style: AppTextStyles.heading.copyWith(
             fontSize: 18,
             fontWeight: FontWeight.w900,
-            color: _ink,
+            color: AppColors.textPrimary,
           ),
         ),
       ],
@@ -1568,13 +1555,13 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   Color _trayColor(TrayStatus s) {
     switch (s) {
       case TrayStatus.empty:
-        return _green;
+        return AppColors.success;
       case TrayStatus.light:
-        return _blue;
+        return AppColors.primary;
       case TrayStatus.medium:
-        return _amber;
+        return AppColors.warning;
       case TrayStatus.heavy:
-        return _red;
+        return AppColors.danger;
     }
   }
 
@@ -1694,7 +1681,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         widget.trayStatuses != null && widget.trayStatuses!.isNotEmpty;
     return SizedBox(
       width: double.infinity,
-      height: 48, // Larger touch target
+      height: 48,
       child: OutlinedButton.icon(
         onPressed: widget.onLogTray != null
             ? () {
@@ -1708,12 +1695,12 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         ),
         label: Text(
           hasTray ? "Update Tray Check" : "Log Tray Check",
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
         ),
         style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: _amber, width: 1.5),
-          foregroundColor: _amber,
-          padding: const EdgeInsets.symmetric(vertical: 11),
+          side: BorderSide(color: AppColors.warning, width: 1.5),
+          foregroundColor: AppColors.warning,
+          padding: const EdgeInsets.symmetric(vertical: Spacing.md),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
