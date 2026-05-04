@@ -1158,9 +1158,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                         Navigator.pushNamed(context, AppRoutes.addPond),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                          horizontal: AppSpacing.base, vertical: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF16A34A),
+                        color: AppColors.primary,
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: Row(

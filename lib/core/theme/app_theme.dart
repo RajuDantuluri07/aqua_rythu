@@ -1,15 +1,33 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const Color primary = Color(0xFF0EA5E9); // Example blue
-  static const Color cardBg = Colors.white;
-  static const Color textPrimary = Color(0xFF1E293B);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color textTertiary = Color(0xFF94A3B8);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color success = Color(0xFF10B981);
-  static const Color error = Color(0xFFEF4444);
+  // Primary palette (Farm green)
+  static const Color primary = Color(0xFF0B8F5A);
+  static const Color secondary = Color(0xFF1FAF73);
+
+  // Backgrounds
+  static const Color background = Color(0xFFF7F9F8);
+  static const Color card = Color(0xFFFFFFFF);
+
+  // Text
+  static const Color textPrimary = Color(0xFF1A1A1A);
+  static const Color textSecondary = Color(0xFF6B7280);
+
+  // Semantic colors
+  static const Color success = Color(0xFF22C55E);
   static const Color warning = Color(0xFFF59E0B);
+  static const Color danger = Color(0xFFE53935);
+
+  // Structural
+  static const Color border = Color(0xFFE5E7EB);
+
+  // Deprecated (keeping for backwards compatibility during transition)
+  @Deprecated('Use cardBg instead of card')
+  static const Color cardBg = Color(0xFFFFFFFF);
+  @Deprecated('Use danger instead of error')
+  static const Color error = Color(0xFFE53935);
+  @Deprecated('Use textTertiary instead')
+  static const Color textTertiary = Color(0xFF6B7280);
 }
 
 class AppRadius {
@@ -41,6 +59,32 @@ class AppSpacing {
 
   // Raw doubles for custom SizedBox
   static const double hXxl = 48.0;
+}
+
+class AppTextStyles {
+  static const TextStyle heading = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    fontFamily: 'Roboto',
+  );
+
+  static const TextStyle subheading = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+    fontFamily: 'Roboto',
+  );
+
+  static const TextStyle body = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'Roboto',
+  );
+
+  static const TextStyle caption = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w300,
+    fontFamily: 'Roboto',
+  );
 }
 
 class AppTypography {

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/constants/spacing.dart';
 import '../../pond/enums/seed_type.dart';
 import '../models/feed_explanation.dart';
 
@@ -12,23 +14,17 @@ class FeedBreakdownCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: Spacing.sm),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(context),
-          const Divider(height: 1, indent: 16, endIndent: 16),
+          Divider(height: 1, indent: Spacing.lg, endIndent: Spacing.lg, color: AppColors.border),
           _buildBreakdownRows(context),
           _buildFinalRow(context),
           if (explanation.savingsRupees != null &&
@@ -42,21 +38,17 @@ class FeedBreakdownCard extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     final isHatchery = explanation.seedType == SeedType.hatcherySmall;
     final accentColor =
-        isHatchery ? const Color(0xFF2196F3) : const Color(0xFF4CAF50);
+        isHatchery ? AppColors.primary : AppColors.success;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      padding: const EdgeInsets.fromLTRB(Spacing.lg, 14, Spacing.lg, 12),
       child: Row(
         children: [
           Icon(Icons.auto_graph_rounded, color: accentColor, size: 18),
-          const SizedBox(width: 8),
+          const SizedBox(width: Spacing.sm),
           const Text(
             'Feed Breakdown',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Colors.black87,
-            ),
+            style: AppTextStyles.subheading,
           ),
           const Spacer(),
           Container(
@@ -81,7 +73,7 @@ class FeedBreakdownCard extends StatelessWidget {
 
   Widget _buildBreakdownRows(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.sm),
       child: Column(
         children: [
           _breakdownRow(
@@ -91,9 +83,9 @@ class FeedBreakdownCard extends StatelessWidget {
                 ? '${explanation.seedType.displayName} table · DOC ${explanation.doc}'
                 : 'Fallback curve · DOC ${explanation.doc}',
             icon: Icons.set_meal_rounded,
-            iconColor: Colors.blueGrey,
+            iconColor: AppColors.textSecondary,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: Spacing.md),
           _breakdownRow(
             label: 'Tray Adjustment',
             value: _signedPercent(explanation.trayImpact),
@@ -118,35 +110,31 @@ class FeedBreakdownCard extends StatelessWidget {
 
   Widget _buildFinalRow(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(Spacing.md, 0, Spacing.md, Spacing.lg),
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF1565C0).withOpacity(0.06),
+        color: AppColors.primary.withOpacity(0.06),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF1565C0).withOpacity(0.2),
+          color: AppColors.primary.withOpacity(0.2),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded,
-              color: Color(0xFF1565C0), size: 20),
-          const SizedBox(width: 10),
-          const Text(
+          Icon(Icons.check_circle_rounded,
+              color: AppColors.primary, size: 20),
+          const SizedBox(width: Spacing.sm),
+          Text(
             'Final Feed Today',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1565C0),
+            style: AppTextStyles.subheading.copyWith(
+              color: AppColors.primary,
             ),
           ),
           const Spacer(),
           Text(
             '${explanation.finalFeed.toStringAsFixed(2)} kg',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1565C0),
+            style: AppTextStyles.heading.copyWith(
+              color: AppColors.primary,
             ),
           ),
         ],
