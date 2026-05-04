@@ -19,6 +19,7 @@ import '../../core/services/inventory_service.dart';
 import '../../core/models/inventory_item.dart';
 import '../../core/models/daily_action_engine.dart';
 import '../../routes/app_routes.dart';
+import '../expense/add_expense_screen.dart';
 
 // ─── Design tokens (remaining custom colors not in design system) ───────────
 const _teal = Color(0xFF0B4A5C);
@@ -332,27 +333,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     healthLabel: health.label,
                     isPro: gate.canViewProfit,
                   ),
-                  _SectionHeader(
-                    title: 'Inventory & Expense',
-                    right: 'MANAGE',
-                    onRight: () => Navigator.pushNamed(
-                        context, AppRoutes.inventoryDashboard),
-                  ),
-                  _QuickRow(
-                    farmId: farm.id,
-                    onInventory: () => Navigator.pushNamed(
-                        context, AppRoutes.inventoryDashboard),
-                    onExpense: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.addExpense,
-                        arguments: {
-                          'cropId': farm.id,
-                          'farmId': farm.id,
-                        },
-                      );
-                    },
-                  ),
                   _TodaysActions(ponds: ponds, ref: ref),
                   _PondsSection(
                     ponds: ponds,
@@ -371,6 +351,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       MaterialPageRoute(
                           builder: (_) => const UpgradeToProScreen()),
                     ),
+                  ),
+                  _SectionHeader(
+                    title: 'Inventory & Expense',
+                    right: 'MANAGE',
+                    onRight: () => Navigator.pushNamed(
+                        context, AppRoutes.inventoryDashboard),
+                  ),
+                  _QuickRow(
+                    farmId: farm.id,
+                    onInventory: () => Navigator.pushNamed(
+                        context, AppRoutes.inventoryDashboard),
+                    onExpense: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AddExpenseScreen(
+                            cropId: farm.id,
+                            farmId: farm.id,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -1549,7 +1551,15 @@ class _ActionCard extends StatelessWidget {
                                   onTap: onStart,
                                 ),
                                 const SizedBox(width: Spacing.xs),
-                                _SmallBtn(label: 'Snooze', solid: false, onTap: () {}),
+                                _SmallBtn(
+                                  label: 'Snooze',
+                                  solid: false,
+                                  onTap: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Snoozed for 1 hour')),
+                                    );
+                                  },
+                                ),
                                 const Spacer(),
                               ],
                             ),
@@ -1784,7 +1794,12 @@ class _PondCard extends StatelessWidget {
                       onTap: () => AccessControlHooks.showUpgradeDialog(
                           context, FeatureIds.profitTracking),
                     ),
-                  const _PondStat(label: 'DO', value: '—', dimmed: true),
+                  _PondStat(
+                    label: 'ABW',
+                    value: pond.currentAbw != null ? pond.currentAbw!.toStringAsFixed(1) : '—',
+                    unit: 'g',
+                    dimmed: pond.currentAbw == null,
+                  ),
                 ],
               ),
             ),

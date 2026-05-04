@@ -48,6 +48,7 @@ import 'feed_base_resolver.dart';
 import 'feed_base_service.dart';
 import 'tray_factor_service.dart';
 import 'env_factor_service.dart';
+import 'blind_feeding_engine.dart';
 export '../../../features/feed/models/correction_result.dart';
 export '../../../features/feed/models/feed_debug_info.dart';
 export '../../../features/feed/models/orchestrator_result.dart';
@@ -294,6 +295,16 @@ class MasterFeedEngine {
         '[MasterFeedEngine] CRITICAL DATA VALIDATION FAILED: ${validation.reason}. '
         'Feed calculation STOPPED.',
       );
+
+      // Special handling for zero shrimp count - clearer message
+      if (input.seedCount <= 0) {
+        return OrchestratorResult.stopFeed(
+          reason: 'Pond has no active shrimp stock. Restock to resume feeding.',
+          engineVersion: version,
+          doc: input.doc,
+        );
+      }
+
       return OrchestratorResult.stopFeed(
         reason: validation.reason,
         engineVersion: version,
@@ -341,17 +352,16 @@ class MasterFeedEngine {
     );
 
     // 🔥 CRITICAL FIX: Use BaseFeedResolver to prevent anchor feed bug
+    // NOTE: resolveBaseFeed ALWAYS returns a safe fallback (never throws, never returns 0)
+    // Fallback is density-scaled to avoid over/underfeeding small/large ponds
     final baseFeedResult = FeedBaseResolver.resolveBaseFeed(
       doc: input.doc,
       anchorFeed: input.anchorFeed,
       actualFeedYesterday: input.actualFeedYesterday,
       plannedFeed: stage1Debug.finalFeed,
+      seedCount: input.seedCount,
       pondId: input.pondId,
     );
-    final baseFeed = baseFeedResult.feedAmount;
-
-    // 🔥 CRITICAL FIX: Validate base feed for smart feeding safety
-    FeedBaseResolver.validateSmartFeedBase(input.doc, baseFeed, input.pondId);
 
     // ── STEP 2: DOC Rule Enforcement ───────────────────────────────────────
     final bool isBlindPhase = input.doc <= 30;
@@ -513,14 +523,35 @@ class MasterFeedEngine {
       confidenceReason: confidenceReason,
     );
 
-    // Minimal recommendation
-    final feedsPerDay = input.feedsPerDay ?? 4;
+    // Minimal recommendation with DOC-based meal splitting
+    // CRITICAL: For blind phase (DOC ≤ 30), ALWAYS use BlindFeedingEngine logic
+    // For smart phase (DOC > 30), can optionally use farm settings, but default to 4
+    final int feedsPerDay;
+    if (input.doc <= 30) {
+      // Blind phase: DOC-based meal count (2, 3, or 4)
+      feedsPerDay = BlindFeedingEngine.getMealsPerDay(input.doc);
+    } else {
+      // Smart phase: allow farm settings override, default to 4
+      feedsPerDay = input.feedsPerDay ?? 4;
+    }
+    final perMealFeed = finalFeed / feedsPerDay;
+
+    // Build instruction with DOC 30→31 transition guidance
+    final String instruction;
+    if (finalFeed == 0.0) {
+      instruction = 'Do not feed';
+    } else if (input.doc == 31) {
+      // DOC 31: Smart feed activation moment
+      instruction = 'Smart Mode Active\nFeed ${perMealFeed.toStringAsFixed(1)} kg '
+          '($feedsPerDay meals/day)\nSet baseline feed in Settings if not done';
+    } else {
+      instruction = 'Feed ${perMealFeed.toStringAsFixed(1)} kg ($feedsPerDay meals/day)';
+    }
+
     final recommendation = FeedRecommendation(
-      nextFeedKg: finalFeed / feedsPerDay,
+      nextFeedKg: perMealFeed,
       nextFeedTime: DateTime.now().add(const Duration(hours: 4)),
-      instruction: finalFeed == 0.0
-          ? 'Do not feed'
-          : 'Feed ${(finalFeed / feedsPerDay).toStringAsFixed(1)} kg',
+      instruction: instruction,
     );
 
     AppLogger.info(

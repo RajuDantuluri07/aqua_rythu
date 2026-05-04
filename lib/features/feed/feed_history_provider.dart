@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
+import '../../systems/feed/blind_feeding_engine.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -90,8 +91,8 @@ class FeedHistoryNotifier
       final existing = pondLogs[todayIdx];
       final newRounds = List<double>.from(existing.rounds);
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
-      // Get feeds per day from farm settings instead of hardcoded 4
-      const feedsPerDay = 4; // TODO: Get from farm settings
+      // Use DOC-based meal logic for blind phase, or farm settings for smart phase
+      final feedsPerDay = _getMealsPerDay(doc);
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
           : List<double>.filled(feedsPerDay, 0.0);
@@ -123,7 +124,7 @@ class FeedHistoryNotifier
       );
     } else {
       // Create new today log
-      const feedsPerDay = 4; // TODO: Get from farm settings
+      final feedsPerDay = _getMealsPerDay(doc);
       final newRounds = List.filled(feedsPerDay, 0.0);
       newRounds[round - 1] = qty;
       final newTrays = List<TrayStatus?>.filled(feedsPerDay, null);
@@ -242,8 +243,8 @@ class FeedHistoryNotifier
     if (todayIdx != -1) {
       final existing = pondLogs[todayIdx];
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
-      // Get feeds per day from farm settings instead of hardcoded 4
-      const feedsPerDay = 4; // TODO: Get from farm settings
+      // Use DOC-based meal logic for blind phase, or default 4 for smart phase
+      final feedsPerDay = _getMealsPerDay(existing.doc);
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
           : List<double>.filled(feedsPerDay, 0.0);
@@ -338,6 +339,17 @@ class FeedHistoryNotifier
     final newState = Map<String, List<FeedHistoryLog>>.from(state);
     newState.remove(pondId);
     state = newState;
+  }
+
+  /// Get meals per day based on DOC (blind phase) or default (smart phase)
+  int _getMealsPerDay(int doc) {
+    if (doc <= 30) {
+      // Blind phase: use DOC-based meal logic
+      return BlindFeedingEngine.getMealsPerDay(doc);
+    } else {
+      // Smart phase: use default 4 meals (farm settings override handled elsewhere)
+      return 4;
+    }
   }
 }
 

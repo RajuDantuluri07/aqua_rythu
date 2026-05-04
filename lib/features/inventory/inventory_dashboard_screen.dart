@@ -188,25 +188,14 @@ class _InventoryDashboardScreenState
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      item.name.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.add_circle_outline,
-                    size: 18,
-                    color: Color(0xFF1B5E20),
-                  ),
-                ],
+              child: Text(
+                item.name.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: Color(0xFF1A1A1A),
+                ),
               ),
             ),
             Padding(

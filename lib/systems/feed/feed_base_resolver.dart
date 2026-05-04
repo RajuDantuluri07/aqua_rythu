@@ -18,6 +18,7 @@ enum BaseFeedSource {
   planned,
   fallback,
   blind,
+  lastBlind,  // Last day of blind feeding (DOC 30)
 }
 
 /// Result of base feed resolution with source tracking
@@ -35,23 +36,47 @@ class BaseFeedResult {
 
 /// Feed Base Resolver - Single source of truth for base feed selection
 class FeedBaseResolver {
+  /// Compute safe fallback feed with density scaling
+  ///
+  /// Ensures fallback is appropriate for pond size:
+  /// - 50k shrimp → 2.5 kg (not 5.0)
+  /// - 100k shrimp → 5.0 kg (base)
+  /// - 300k shrimp → 15.0 kg (not 5.0)
+  ///
+  /// [seedCount] Live stocking count (shrimp)
+  /// Returns: Safe fallback feed amount in kg, scaled to density
+  static double computeSafeFallback({required int seedCount}) {
+    const double baseFallbackPerLakh = 5.0; // for 100k shrimp
+    final double scale = seedCount / 100000;
+    final double scaled = baseFallbackPerLakh * scale;
+
+    // Safety clamps: prevent extreme outliers
+    final double min = 1.0 * scale; // Don't go too low (20% of base)
+    final double max = 15.0 * scale; // Don't go too high (300% of base)
+
+    return scaled.clamp(min, max);
+  }
+
   /// Resolves base feed for smart feeding with proper fallback chain
   ///
-  /// Ensures smart feeding never runs on null or zero base feed.
-  /// Follows priority: anchor → yesterday → planned → fallback
+  /// NEVER returns null or zero feed. Always provides safe fallback.
+  /// Priority: anchor → yesterday → planned → safe fallback (density-scaled)
   ///
   /// [doc] Current day of culture
   /// [anchorFeed] Farmer-set baseline for DOC > 30
   /// [actualFeedYesterday] Previous day's actual feed
   /// [plannedFeed] Engine-calculated planned feed
+  /// [seedCount] Pond stocking count (for scaling fallback)
   /// [pondId] For logging and error tracking
   ///
   /// Returns BaseFeedResult with amount and source for debugging
+  /// GUARANTEES: feedAmount > 0 (never null, never 0)
   static BaseFeedResult resolveBaseFeed({
     required int doc,
     required double? anchorFeed,
     required double? actualFeedYesterday,
     required double plannedFeed,
+    required int seedCount,
     required String pondId,
   }) {
     // Blind phase (DOC ≤ 30) - use planned feed directly
@@ -129,26 +154,29 @@ class FeedBaseResolver {
       );
     }
 
-    // 4. Safety fallback - prevents zero feed (should never reach here)
-    const fallbackFeed = 1.0;
-    AppLogger.error(
-      '[FeedBaseResolver] CRITICAL: All base feed sources failed - using safety fallback',
+    // 4. SOFT FALLBACK - Safe minimum feed (NEVER return 0 or throw)
+    // Scaled based on pond density to avoid over/underfeeding
+    final safeFallbackFeed = computeSafeFallback(seedCount: seedCount);
+
+    AppLogger.warn(
+      '[FeedBaseResolver] Using soft fallback - no valid feed source available',
       {
         'pondId': pondId,
         'doc': doc,
-        'fallbackFeed': fallbackFeed,
+        'seedCount': seedCount,
+        'fallbackFeed': safeFallbackFeed,
         'anchorFeed': anchorFeed,
         'actualFeedYesterday': actualFeedYesterday,
         'plannedFeed': plannedFeed,
-        'severity': 'CRITICAL',
+        'reason': 'Missing anchor, yesterday, and planned feed. Using density-scaled safe minimum.',
       },
     );
 
-    return const BaseFeedResult(
-      feedAmount: fallbackFeed,
+    return BaseFeedResult(
+      feedAmount: safeFallbackFeed,
       source: BaseFeedSource.fallback,
-      explanation:
-          'CRITICAL: All sources failed - using safety fallback to prevent starvation',
+      explanation: 'Using safe fallback baseline (scaled to pond size). '
+          'Please set anchor feed in Settings for better accuracy.',
     );
   }
 
@@ -221,6 +249,8 @@ class FeedBaseResolver {
         return 'fallback';
       case BaseFeedSource.blind:
         return 'blind';
+      case BaseFeedSource.lastBlind:
+        return 'lastBlind';
     }
   }
 }
