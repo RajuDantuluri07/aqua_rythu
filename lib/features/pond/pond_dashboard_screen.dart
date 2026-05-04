@@ -1,3 +1,4 @@
+// ignore_for_file: unused_element
 import 'package:aqua_rythu/core/services/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
@@ -1058,10 +1059,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         final total = recentTray.trays.length;
         if (full > total / 2) {
           traySignal = 'full';
-        } else if (empty > total / 2)
+        } else if (empty > total / 2) {
           traySignal = 'empty';
-        else
+        } else {
           traySignal = 'partial';
+        }
       }
     }
     final bool hasTrayData =
@@ -1886,6 +1888,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       }
                       // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
                       // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
+                      bool saved = false;
                       try {
                         await ref
                             .read(pondDashboardProvider.notifier)
@@ -1893,8 +1896,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                               round,
                               actualQty: actualQty,
                             );
+                        saved = true;
                       } catch (e) {
-                        // 🔴 FAILURE VISIBILITY: Show user-friendly error message
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -1906,7 +1909,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                                 label: 'Retry',
                                 textColor: Colors.white,
                                 onPressed: () async {
-                                  // Retry the same action
                                   await ref
                                       .read(pondDashboardProvider.notifier)
                                       .markFeedDone(
@@ -1919,15 +1921,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                           );
                         }
                       }
-                      // ✅ SUCCESS POPUP: Show feed entry confirmation with updated value
+                      if (!mounted || !saved) return;
+                      // Success feedback only shown after confirmed DB save
                       _showSuccessPopup(
                         context: context,
                         title: 'Feed Logged',
                         message:
                             'Round $round: ${actualQty.toStringAsFixed(2)} kg',
                       );
-                      // V2-01: ₹ delta snackbar — closes dopamine loop after every feed.
-                      // Shows "+₹120 added to pond value" immediately after marking done.
                       final completedAfter = round;
                       final motivationMsg =
                           _feedMotivationMessage(completedAfter);
@@ -1948,7 +1949,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               onLogTray: (isPendingTray || isTraySkipped)
                   ? () async {
                       final result = await openTrayWithResult(round, false);
-                      if (result != null) {
+                      if (result != null && mounted) {
                         // ✅ SUCCESS POPUP: Show tray logged confirmation
                         _showSuccessPopup(
                           context: context,
@@ -2101,6 +2102,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       seedLabel = '${(seedCount / 1000).toStringAsFixed(0)}k';
     }
     final survivalPct = (survivalRate * 100).round();
+    // ignore: deprecated_member_use_from_same_package
     final int pricePerKg = FeedEngineConstants.harvestPricePerKg.round();
 
     // Confidence color thresholds

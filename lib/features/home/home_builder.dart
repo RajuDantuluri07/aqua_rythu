@@ -261,8 +261,11 @@ class HomeBuilder {
       final diff = ((avgA - avgI) / avgI * 100).round();
       if (diff > 8) {
         insight = 'Feeding $diff% above ideal';
-      } else if (diff < -8) insight = 'Feeding ${diff.abs()}% below ideal';
-      else insight = 'Feed aligned with growth ✅';
+      } else if (diff < -8) {
+        insight = 'Feeding ${diff.abs()}% below ideal';
+      } else {
+        insight = 'Feed aligned with growth ✅';
+      }
     }
     return FeedTrendData(actual: actual, ideal: ideal, insight: insight, hasData: true);
   }

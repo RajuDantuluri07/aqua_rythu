@@ -38,7 +38,7 @@ class InventoryService {
       return List<Map<String, dynamic>>.from(result);
     } catch (e) {
       AppLogger.error('Failed to get inventory stock: $e');
-      return [];
+      rethrow;
     }
   }
 

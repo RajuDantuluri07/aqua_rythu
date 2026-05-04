@@ -76,10 +76,12 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
             trayCalibration90Plus: tray90,
           );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Settings saved successfully")),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Error saving settings"),
@@ -255,7 +257,7 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
           initialTime: TimeOfDay.now(),
         );
 
-        if (time != null) {
+        if (time != null && mounted) {
           final updatedTimes = List<String>.from(feedTimes);
           updatedTimes[index] = time.format(context);
           ref.read(farmSettingsProvider.notifier).setFeedTimes(updatedTimes);

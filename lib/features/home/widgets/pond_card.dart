@@ -15,7 +15,6 @@ class PondCard extends StatelessWidget {
     String status;
     Color statusColor;
     Color statusBgColor;
-    Color borderColor = Colors.transparent;
     String? actionText;
 
     // Defensive checks for pond data
@@ -53,13 +52,11 @@ class PondCard extends StatelessWidget {
       status = 'CRITICAL';
       statusColor = const Color(0xFFE53935);
       statusBgColor = const Color(0xFFE53935).withOpacity(0.1);
-      borderColor = const Color(0xFFE53935);
       actionText = '⚠️ Reduce feed by 10-15% today';
     } else if (fcr > 1.4) {
       status = 'WARNING';
       statusColor = const Color(0xFFA67C00);
       statusBgColor = const Color(0xFFFFC107).withOpacity(0.1);
-      borderColor = const Color(0xFFFFC107);
       actionText = '⏳ Do sampling today';
     } else {
       status = 'GOOD';

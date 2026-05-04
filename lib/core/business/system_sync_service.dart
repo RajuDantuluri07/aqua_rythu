@@ -1,4 +1,3 @@
-import '../services/expense_service.dart';
 import '../services/feed_service.dart';
 import '../services/inventory_service.dart';
 import '../utils/logger.dart';
@@ -8,16 +7,13 @@ import '../utils/logger.dart';
 /// Defines the calculation flow: feed → cost → expense → inventory validation
 /// Ensures data consistency across all three systems
 class SystemSyncService {
-  final ExpenseService _expenseService;
   final FeedService _feedService;
   final InventoryService _inventoryService;
 
   SystemSyncService({
-    required ExpenseService expenseService,
     required FeedService feedService,
     required InventoryService inventoryService,
-  })  : _expenseService = expenseService,
-        _feedService = feedService,
+  })  : _feedService = feedService,
         _inventoryService = inventoryService;
 
   /// Main calculation flow: feed → cost → expense → inventory validation

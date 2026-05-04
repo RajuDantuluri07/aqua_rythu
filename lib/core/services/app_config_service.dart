@@ -233,7 +233,6 @@ class AppConfigService {
   static FeaturesConfig? _cachedFeaturesConfig;
   static AnnouncementConfig? _cachedAnnouncementConfig;
   static DebugConfig? _cachedDebugConfig;
-  static ShrimpPricingConfig? _cachedShrimpPricingConfig;
 
   AppConfigService(this._supabase);
 
@@ -249,7 +248,6 @@ class AppConfigService {
     _cachedFeaturesConfig = null;
     _cachedAnnouncementConfig = null;
     _cachedDebugConfig = null;
-    _cachedShrimpPricingConfig = null;
   }
 
   Future<Map<String, dynamic>?> _getConfig(String key) async {

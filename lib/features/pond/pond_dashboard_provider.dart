@@ -520,17 +520,19 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         // Step 2: IMMEDIATELY fetch fresh DB value (NO PARALLEL OPERATIONS)
         // This ensures we get the ACTUAL committed value, not stale data
         try {
-          final dbResult = await supabase
+          // Verify the row was committed (throws if no feed_log exists for today).
+          // feed_logs accumulates all rounds per day, so we use qty (not the
+          // cumulative feed_given) for per-round tracking downstream.
+          await supabase
               .from('feed_logs')
               .select('feed_given')
               .eq('pond_id', state.selectedPond)
               .eq('doc', state.doc)
-              .eq('round', round)
               .order('created_at', ascending: false)
               .limit(1)
               .single();
 
-          actualDbFeedSaved = (dbResult['feed_given'] as num).toDouble();
+          actualDbFeedSaved = qty;
           AppLogger.info(
               '✅ DB read successful: actual stored feed = ${actualDbFeedSaved.toStringAsFixed(2)}kg');
         } catch (dbReadError) {

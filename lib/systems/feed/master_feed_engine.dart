@@ -699,7 +699,7 @@ class MasterFeedEngine {
         status = TrayStatus.heavy;
       }
       final trayReason = _trayFactorService.getTrayReason(status);
-      if (trayReason != null) reasons.add(trayReason);
+      reasons.add(trayReason);
     }
 
     if (envFactor < 1.0) {

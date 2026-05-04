@@ -215,6 +215,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
                         doc: pondState.doc,
                       );
 
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(

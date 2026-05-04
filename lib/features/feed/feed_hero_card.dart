@@ -62,7 +62,6 @@ class _FeedHeroCardState extends State<FeedHeroCard> {
   static const _amberBorder = Color(0xFFFDE68A);
   static const _blue = Color(0xFF2563EB);
   static const _purple = Color(0xFF7C3AED);
-  static const _slate200 = Color(0xFFE2E8F0);
   static const _slate300 = Color(0xFFCBD5E1);
   static const _slate400 = Color(0xFF94A3B8);
   static const _slate500 = Color(0xFF64748B);

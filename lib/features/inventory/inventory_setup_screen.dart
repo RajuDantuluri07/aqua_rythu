@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/inventory_service.dart';
 import '../../features/farm/farm_provider.dart';
+import 'inventory_provider.dart';
 
 class InventorySetupScreen extends ConsumerStatefulWidget {
   const InventorySetupScreen({super.key});
@@ -64,8 +65,9 @@ class _InventorySetupScreenState extends ConsumerState<InventorySetupScreen> {
       await _inventoryService.createInventoryItems(rows);
 
       if (!mounted) return;
+      ref.invalidate(inventoryProvider(farm.id));
       _toast('Inventory ready', Colors.green);
-      Navigator.of(context).pushReplacementNamed('/inventory_dashboard');
+      Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       _toast('Failed to save inventory: $e', Colors.red);

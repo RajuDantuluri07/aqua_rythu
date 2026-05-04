@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/inventory_item.dart';
-import '../../core/services/inventory_service.dart';
 import '../../features/farm/farm_provider.dart';
+import 'add_stock_screen.dart';
+import 'inventory_provider.dart';
 import 'inventory_setup_screen.dart';
 
 class InventoryDashboardScreen extends ConsumerStatefulWidget {
@@ -15,9 +16,6 @@ class InventoryDashboardScreen extends ConsumerStatefulWidget {
 
 class _InventoryDashboardScreenState
     extends ConsumerState<InventoryDashboardScreen> {
-  final _inventoryService = InventoryService();
-  List<InventoryItem> _items = [];
-  bool _isLoading = true;
   String _selectedCategory = 'all';
 
   static const _categories = [
@@ -31,81 +29,74 @@ class _InventoryDashboardScreenState
   static const _green = Color(0xFF1B5E20);
   static const _bg = Color(0xFFF2F4F0);
 
-  @override
-  void initState() {
-    super.initState();
-    _loadInventory();
+  List<InventoryItem> _filtered(List<InventoryItem> items) {
+    if (_selectedCategory == 'all') return items;
+    return items.where((i) => i.category == _selectedCategory).toList();
   }
 
-  List<InventoryItem> get _filteredItems {
-    if (_selectedCategory == 'all') return _items;
-    return _items.where((i) => i.category == _selectedCategory).toList();
-  }
-
-  Future<void> _loadInventory() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-    try {
-      final farm = ref.read(farmProvider).currentFarm;
-      if (farm == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
-      final rows = await _inventoryService.getInventoryStock(farm.id);
-      if (!mounted) return;
-      setState(() {
-        _items = rows.map(InventoryItem.fromView).toList();
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to load inventory: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _navigateToAddInventory() {
+  void _navigateToSetup(String farmId) {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const InventorySetupScreen()))
-        .then((_) => _loadInventory());
+        .then((_) => ref.invalidate(inventoryProvider(farmId)));
+  }
+
+  void _navigateToAddStock(InventoryItem item, String farmId) {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => AddStockScreen(item: item)))
+        .then((updated) {
+      if (updated == true) ref.invalidate(inventoryProvider(farmId));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final farm = ref.watch(farmProvider).currentFarm;
+    if (farm == null) {
+      return Scaffold(
+        backgroundColor: _bg,
+        appBar: _appBar(null),
+        body: const Center(child: Text('No farm selected')),
+      );
+    }
+
+    final inventoryAsync = ref.watch(inventoryProvider(farm.id));
+
     return Scaffold(
       backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        title: const Text(
-          'Inventory Ledger',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-          ),
+      appBar: _appBar(farm.id),
+      body: inventoryAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => _buildErrorState(e.toString(), farm.id),
+        data: (items) => Column(
+          children: [
+            _buildCategoryFilter(),
+            Expanded(child: _buildBody(items, farm.id)),
+          ],
         ),
-        actions: [
+      ),
+      bottomNavigationBar: _buildAddButton(farm.id),
+    );
+  }
+
+  PreferredSizeWidget _appBar(String? farmId) {
+    return AppBar(
+      backgroundColor: _bg,
+      elevation: 0,
+      title: const Text(
+        'Inventory Ledger',
+        style: TextStyle(
+          color: Color(0xFF1A1A1A),
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+        ),
+      ),
+      actions: [
+        if (farmId != null)
           IconButton(
-            onPressed: _loadInventory,
+            onPressed: () => ref.invalidate(inventoryProvider(farmId)),
             icon: const Icon(Icons.refresh, color: Color(0xFF1A1A1A)),
           ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildCategoryFilter(),
-                Expanded(child: _buildBody()),
-              ],
-            ),
-      bottomNavigationBar: _buildAddButton(),
+      ],
     );
   }
 
@@ -129,8 +120,7 @@ class _InventoryDashboardScreenState
                   color: isSelected ? _green : Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color:
-                        isSelected ? _green : const Color(0xFFDDDDDD),
+                    color: isSelected ? _green : const Color(0xFFDDDDDD),
                   ),
                 ),
                 child: Text(
@@ -150,10 +140,10 @@ class _InventoryDashboardScreenState
     );
   }
 
-  Widget _buildBody() {
-    if (_items.isEmpty) return _buildEmptyState();
+  Widget _buildBody(List<InventoryItem> items, String farmId) {
+    if (items.isEmpty) return _buildEmptyState();
 
-    final filtered = _filteredItems;
+    final filtered = _filtered(items);
     if (filtered.isEmpty) {
       return Center(
         child: Text(
@@ -164,72 +154,86 @@ class _InventoryDashboardScreenState
     }
 
     return RefreshIndicator(
-      onRefresh: _loadInventory,
+      onRefresh: () async => ref.invalidate(inventoryProvider(farmId)),
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         itemCount: filtered.length,
-        itemBuilder: (_, i) => _buildItemCard(filtered[i]),
+        itemBuilder: (_, i) => _buildItemCard(filtered[i], farmId),
       ),
     );
   }
 
-  Widget _buildItemCard(InventoryItem item) {
+  Widget _buildItemCard(InventoryItem item, String farmId) {
     final purchased = item.openingQuantity;
     final used = item.totalUsed;
     final left = item.remainingQuantity.clamp(0.0, double.infinity);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Text(
-              item.name.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.6,
-                color: Color(0xFF1A1A1A),
-              ),
+    return GestureDetector(
+      onTap: () => _navigateToAddStock(item, farmId),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 16, bottom: 12),
-            child: _statusBadge(item.status),
-          ),
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8F9F8),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFEEEEEE)),
-            ),
-            child: IntrinsicHeight(
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Row(
                 children: [
-                  _statColumn('Purchased', _fmt(purchased)),
-                  _verticalDivider(),
-                  _statColumn('Used', _fmt(used)),
-                  _verticalDivider(),
-                  _statColumn('Left', _fmt(left), isLeft: true),
+                  Expanded(
+                    child: Text(
+                      item.name.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.add_circle_outline,
+                    size: 18,
+                    color: Color(0xFF1B5E20),
+                  ),
                 ],
               ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 12),
+              child: _statusBadge(item.status),
+            ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8F9F8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFEEEEEE)),
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  children: [
+                    _statColumn('Purchased', _fmt(purchased)),
+                    _verticalDivider(),
+                    _statColumn('Used', _fmt(used)),
+                    _verticalDivider(),
+                    _statColumn('Left', _fmt(left), isLeft: true),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -266,10 +270,7 @@ class _InventoryDashboardScreenState
   }
 
   Widget _verticalDivider() {
-    return Container(
-      width: 1,
-      color: const Color(0xFFEEEEEE),
-    );
+    return Container(width: 1, color: const Color(0xFFEEEEEE));
   }
 
   Widget _statusBadge(PackStatus status) {
@@ -289,7 +290,7 @@ class _InventoryDashboardScreenState
     );
   }
 
-  Widget _buildAddButton() {
+  Widget _buildAddButton(String farmId) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -297,7 +298,7 @@ class _InventoryDashboardScreenState
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: _navigateToAddInventory,
+            onPressed: () => _navigateToSetup(farmId),
             icon: const Icon(Icons.add_box_outlined, color: Colors.white),
             label: const Text(
               'Add Inventory',
@@ -339,6 +340,37 @@ class _InventoryDashboardScreenState
               'Track feed and supplies. Feed deducts automatically when you log feeding.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error, String farmId) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'Failed to load inventory',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => ref.invalidate(inventoryProvider(farmId)),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
             ),
           ],
         ),

@@ -107,9 +107,7 @@ class DashboardScreen extends ConsumerWidget {
               .fold(0.0, (sum, amount) => sum + amount);
 
           // Simplified biomass and FCR from controller data
-          final double biomass = feedState.finalFeed != null
-              ? (pond.seedCount * 0.95 * abw) / 1000 // Simplified calculation
-              : 0.0;
+          final double biomass = (pond.seedCount * 0.95 * abw) / 1000;
           final double fcr = biomass > 0.1 ? todayFeed / biomass : 0.0;
 
           // Status based on controller feed result
