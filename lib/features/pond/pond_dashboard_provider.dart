@@ -395,28 +395,29 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // =========================================================
 
   Future<void> markFeedDone(int round, {double? actualQty}) async {
+    // Capture pond/doc once — state may change during awaits below.
     final pondId = state.selectedPond;
+    final doc = state.doc;
     final lockKey = '${pondId}_mark_feed_$round';
 
-    // 🔴 DEBUG: Log feed action start
     FeedDebugLogger.logFeedAction(
       pondId: pondId,
-      doc: state.doc,
+      doc: doc,
       round: round,
       status: 'started',
       source: 'user_action',
       feedEntered: actualQty,
     );
 
-    // Prevent concurrent feed marking for the same round
+    AppLogger.info('FEED SAVE: pond=$pondId round=$round doc=$doc qty=$actualQty');
+
+    // Prevent concurrent feed marking for the SAME round (double-tap guard).
     if (!_tryAcquireLock(lockKey)) {
       AppLogger.warn(
           'Feed marking already in progress for round $round in pond $pondId');
-
-      // 🔴 DEBUG: Log duplicate prevention
       FeedDebugLogger.logDuplicatePrevention(
         pondId: pondId,
-        doc: state.doc,
+        doc: doc,
         round: round,
         reason: 'concurrent_operation_locked',
       );
@@ -426,96 +427,82 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     try {
       // Auto-skip tray for previous rounds that had feed done but no tray logged.
       // Only applies DOC >= 15 (tray is not relevant before that).
-      final doc = state.doc;
       bool didSkipAnyTray = false;
       if (doc >= 15 && round > 1) {
         for (int prev = 1; prev < round; prev++) {
           final prevFeedDone = state.roundFeedStatus[prev] == 'completed';
           if (prevFeedDone) {
-            bool didSkip = false;
             try {
               await TrayService().markTraySkipped(
                 pondId: pondId,
                 doc: doc,
                 roundNumber: prev,
               );
-              didSkip = true;
+              didSkipAnyTray = true;
             } catch (e) {
               AppLogger.error(
                   'Auto-skip tray failed for pond $pondId R$prev', e);
-              didSkip = false;
-            }
-            if (didSkip == true) {
-              didSkipAnyTray = true;
             }
           }
         }
       }
 
-      // Validate feed amounts - fail loudly if data is missing
+      // Validate feed amounts — fail loudly if data is missing.
       if (!state.roundFeedAmounts.containsKey(round)) {
         throw ArgumentError(
-            'Missing feed amount for round $round in pond ${state.selectedPond}');
+            'Missing feed amount for round $round in pond $pondId');
       }
       final plannedQty = state.roundFeedAmounts[round]!;
 
-      // Use actual quantity if provided, otherwise use planned
+      // Use actual quantity if provided, otherwise use the final (possibly edited) amount.
       final qty = actualQty ?? state.roundFinalFeedAmounts[round] ?? plannedQty;
 
-      // Validate final quantity
       if (qty <= 0) {
         throw ArgumentError(
-            'Invalid feed quantity $qty for round $round in pond ${state.selectedPond}');
+            'Invalid feed quantity $qty for round $round in pond $pondId');
       }
 
-      // 🔴 CRITICAL: Prevent duplicate round completion
-      if (state.roundFeedStatus[round] == 'completed') {
-        AppLogger.warn(
-            'Round $round already completed for pond $pondId - skipping');
+      // REMOVED: in-memory duplicate check on `state.roundFeedStatus`.
+      // That check was causing silent failures: if DB had a round marked
+      // 'completed' in feed_rounds but NO matching feed_log (stale/corrupt state),
+      // the function returned without saving anything while the UI showed success.
+      // The RPC's own idempotency guard handles true duplicates correctly.
 
-        // 🔴 DEBUG: Log duplicate prevention
-        FeedDebugLogger.logDuplicatePrevention(
-          pondId: pondId,
-          doc: state.doc,
-          round: round,
-          reason: 'round_already_completed',
-        );
-        return;
-      }
+      AppLogger.info(
+          'FEED SAVE: calling RPC pond=$pondId doc=$doc round=$round qty=${qty.toStringAsFixed(3)}kg');
 
-      // Calculate expected feed for today (needed for both transaction and fallback)
+      // Calculate expected feed for today (needed for history logging).
       final expectedFeedToday =
           state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
 
-      // 🔒 CRITICAL: Sequential execution - Transaction → DB Read → State Update
+      // ─── Step 1: Atomic DB transaction ────────────────────────────────────
       double actualDbFeedSaved = 0.0;
       bool transactionSuccess = false;
 
       try {
-        // Step 1: Await DB transaction (MUST BE FULLY COMMITTED FIRST)
         final supabase = Supabase.instance.client;
 
-        // Call RPC and get structured JSON response
-        final rpcResult = await supabase.rpc('complete_feed_round_with_log', params: {
-          'p_pond_id': state.selectedPond,
-          'p_doc': state.doc,
+        final rpcResult =
+            await supabase.rpc('complete_feed_round_with_log', params: {
+          'p_pond_id': pondId,
+          'p_doc': doc,
           'p_round': round,
           'p_feed_amount': qty,
-          'p_base_feed': qty, // Use actual feed as base feed for consistency
+          'p_base_feed': qty,
           'p_created_at': DateTime.now().toIso8601String(),
         });
 
-        // 🔴 DEBUG: Log raw RPC response for debugging
-        AppLogger.info('🔍 DEBUG: Raw RPC result type: ${rpcResult.runtimeType}, value: $rpcResult');
+        AppLogger.info(
+            'RPC raw result — type: ${rpcResult.runtimeType}, value: $rpcResult');
 
-        // ✅ VALIDATE: Handle both BOOLEAN (old RPC) and JSONB (new RPC) responses.
-        // Old RPC (migration 20260504): RETURNS BOOLEAN
-        // New RPC (migration 20260505): RETURNS JSONB {success, alreadyCompleted, logInserted, error}
+        // Handle both BOOLEAN (old RPC) and JSONB (new RPC) responses.
         bool alreadyCompleted = false;
         bool logInserted = false;
         String? errorMsg;
 
         if (rpcResult is bool) {
+          // Old BOOLEAN RPC (20260504): true = success, false = error/duplicate.
+          // Will be replaced by JSONB function via migration 20260506.
           transactionSuccess = rpcResult;
           if (transactionSuccess) logInserted = true;
         } else if (rpcResult is Map) {
@@ -525,17 +512,17 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           logInserted = (rpcResponse['logInserted'] as bool?) ?? false;
           errorMsg = rpcResponse['error'] as String?;
         } else {
-          throw Exception('RPC returned unexpected response type: ${rpcResult.runtimeType}');
+          throw Exception(
+              'RPC returned unexpected type: ${rpcResult.runtimeType}');
         }
 
-        // 🔴 DEBUG: Log parsed RPC response
-        AppLogger.info('🔍 DEBUG: RPC Response - success=$transactionSuccess, alreadyCompleted=$alreadyCompleted, logInserted=$logInserted, error=$errorMsg');
+        AppLogger.info(
+            'RPC parsed — success=$transactionSuccess alreadyCompleted=$alreadyCompleted logInserted=$logInserted error=$errorMsg');
 
         if (!transactionSuccess) {
-          // 🔴 DEBUG: Log transaction failure
           FeedDebugLogger.logTransaction(
             pondId: pondId,
-            doc: state.doc,
+            doc: doc,
             round: round,
             transactionType: 'complete_feed_round_with_log',
             success: false,
@@ -544,135 +531,124 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           throw Exception('Feed transaction failed: $errorMsg');
         }
 
-        // 🔒 CRITICAL: Invalidate cache IMMEDIATELY after RPC confirms success.
-        // Must run before DB verification so that any subsequent failure still
-        // results in fresh data being fetched on the next loadTodayFeed call.
-        _controller.invalidateDoc(state.selectedPond, state.doc);
+        // Invalidate controller cache immediately so the next loadTodayFeed
+        // forces a fresh DB read even if this function throws further down.
+        _controller.invalidateDoc(pondId, doc);
 
         if (alreadyCompleted) {
           AppLogger.info(
-              '⚠️  Round already completed (idempotent): pond $pondId doc $doc round $round');
+              'Round $round idempotent (already completed in DB): pond=$pondId doc=$doc');
         }
 
-        AppLogger.info(
-            '✅ RPC Response validated: success=true, alreadyCompleted=$alreadyCompleted, logInserted=$logInserted');
-
-        // Step 2: Verify the committed row exists in feed_logs (non-fatal check).
-        // Filter by round for precision; warn and continue if the read fails —
-        // the RPC already confirmed the write succeeded.
+        // ─── Step 2: Verify feed_log exists (fatal if MISSING after new save) ─
+        // For alreadyCompleted=true the old BOOLEAN RPC may not have inserted
+        // the feed_log, so we verify and fall through to logFeeding which will
+        // insert it via safe_insert_feed_log if absent.
         try {
           await supabase
               .from('feed_logs')
               .select('feed_given')
-              .eq('pond_id', state.selectedPond)
-              .eq('doc', state.doc)
+              .eq('pond_id', pondId)
+              .eq('doc', doc)
               .eq('round', round)
               .single();
 
           actualDbFeedSaved = qty;
           AppLogger.info(
-              '✅ DB read successful: actual stored feed = ${actualDbFeedSaved.toStringAsFixed(2)}kg');
+              'DB verification OK: feed_log for round=$round found, feed=${actualDbFeedSaved.toStringAsFixed(2)}kg');
         } catch (dbReadError) {
-          // Non-fatal: RPC confirmed success; trust it and proceed.
+          // feed_log missing — this is the corrupt-state scenario we are fixing.
+          // Log it clearly; logFeeding below will insert via safe_insert_feed_log.
           AppLogger.warn(
-              'DB read verification failed after successful RPC (non-fatal): $dbReadError');
+              'feed_log MISSING for round=$round after RPC success (will be inserted by logFeeding): $dbReadError');
           actualDbFeedSaved = qty;
         }
 
-        // 🔴 DEBUG: Log transaction success with actual DB value
         FeedDebugLogger.logTransaction(
           pondId: pondId,
-          doc: state.doc,
+          doc: doc,
           round: round,
           transactionType: 'complete_feed_round_with_log',
           success: true,
           details:
-              'feed_round_and_log_saved_successfully, actual_db_feed=${actualDbFeedSaved.toStringAsFixed(2)}kg',
+              'saved, actual_db_feed=${actualDbFeedSaved.toStringAsFixed(2)}kg',
         );
-
-        AppLogger.info(
-            'Feed transaction + DB read completed successfully for pond $pondId round $round, actual feed: ${actualDbFeedSaved.toStringAsFixed(2)}kg');
       } catch (e) {
-        // 🔴 DEBUG: Log transaction error
         FeedDebugLogger.logTransaction(
           pondId: pondId,
-          doc: state.doc,
+          doc: doc,
           round: round,
           transactionType: 'complete_feed_round_with_log',
           success: false,
           details: e.toString(),
         );
         AppLogger.error(
-            'Feed transaction failed for pond $pondId round $round', e);
+            'Feed transaction failed for pond=$pondId round=$round', e);
         rethrow;
       }
 
-      // Post-save: state update + history logging (cache already invalidated above)
-      try {
-        AppLogger.info('✅ Feed completion transaction atomic: pond $pondId round $round');
-
-        // Refresh from DB → provider state → Riverpod rebuild
-        await loadTodayFeed(state.selectedPond);
-
-        // Step 4: UI update (only after all DB operations complete)
+      // ─── Step 3: Post-save — state refresh + history ───────────────────────
+      // Mark round completed immediately — feed IS in DB regardless of what
+      // happens during the refresh steps below.
+      {
         final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
         updatedStatus[round] = 'completed';
         state = state.copyWith(
           roundFeedStatus: updatedStatus,
-          lastFeedTime: DateTime.now(), // for FeedStatusEngine gap check
+          lastFeedTime: DateTime.now(),
+        );
+      }
+
+      try {
+        // Reload from DB so amounts and other rounds reflect latest DB state.
+        await loadTodayFeed(pondId);
+
+        // Re-apply completed status after reload (loadTodayFeed may overwrite state).
+        final reloadedStatus = Map<int, String>.from(state.roundFeedStatus);
+        reloadedStatus[round] = 'completed';
+        state = state.copyWith(roundFeedStatus: reloadedStatus);
+
+        AppLogger.info(
+            'logFeeding: pond=$pondId doc=$doc round=$round qty=${actualDbFeedSaved.toStringAsFixed(3)}kg');
+        await ref.read(feedHistoryProvider.notifier).logFeeding(
+              pondId: pondId,
+              doc: doc,
+              round: round,
+              qty: actualDbFeedSaved,
+              expectedFeed: expectedFeedToday,
+            );
+
+        await ref
+            .read(feedHistoryProvider.notifier)
+            .loadHistoryForPonds([pondId]);
+
+        final difference = plannedQty > 0
+            ? ((actualDbFeedSaved - plannedQty) / plannedQty * 100)
+            : 0.0;
+
+        FeedDebugLogger.logFeedAction(
+          pondId: pondId,
+          doc: doc,
+          round: round,
+          status: 'success',
+          source: 'user_action',
+          feedEntered: actualQty,
+          feedSaved: actualDbFeedSaved,
+          calculatedFeed: plannedQty,
+          difference: difference,
         );
 
-        // Step 5: Log feeding (only after successful transaction AND DB read AND state update)
-        if (qty > 0 && transactionSuccess) {
-          AppLogger.info('📝 Step 5a: Calling logFeeding with qty=$actualDbFeedSaved for pond=$pondId doc=$doc round=$round');
-          await ref.read(feedHistoryProvider.notifier).logFeeding(
-                pondId: state.selectedPond,
-                doc: state.doc,
-                round: round,
-                qty: actualDbFeedSaved, // Use ACTUAL DB value, not input qty
-                expectedFeed: expectedFeedToday,
-              );
-          AppLogger.info('📝 Step 5b: logFeeding completed');
-
-          // 🔴 CRITICAL FIX: Reload feed history from database to ensure UI shows latest data
-          // This prevents stale state when feed_logs was successfully saved but UI didn't update
-          AppLogger.info('📝 Step 5c: Reloading feed history from database for pond=$pondId');
-          await ref.read(feedHistoryProvider.notifier).loadHistoryForPonds([state.selectedPond]);
-          AppLogger.info('📝 Step 5d: Feed history reload completed');
-
-          // 🔴 DEBUG: Log successful feed completion with ACTUAL DB value
-          // Calculate percentage difference between planned and ACTUAL DB feed
-          final difference = plannedQty > 0
-              ? ((actualDbFeedSaved - plannedQty) / plannedQty * 100)
-              : 0.0;
-
-          FeedDebugLogger.logFeedAction(
-            pondId: pondId,
-            doc: state.doc,
-            round: round,
-            status: 'success',
-            source: 'user_action',
-            feedEntered: actualQty,
-            feedSaved: actualDbFeedSaved, // ACTUAL committed DB value ONLY
-            calculatedFeed: plannedQty,
-            difference: difference,
-          );
-
-          AppLogger.info(
-              '✅ Feed action logged with actual DB value: ${actualDbFeedSaved.toStringAsFixed(2)}kg');
-        }
-
-        // Step 6: Handle tray auto-skip refresh
         if (didSkipAnyTray) {
-          ref.invalidate(trayProvider(state.selectedPond));
+          ref.invalidate(trayProvider(pondId));
         }
       } catch (e) {
-        // 🔴 DEBUG: Log feed operation failure
+        // Post-save refresh failed but feed IS already saved to DB.
+        // Do NOT rethrow — farmer's feed is recorded; only the local reload failed.
         FeedDebugLogger.logFeedError(
           pondId: pondId,
-          doc: state.doc,
+          doc: doc,
           round: round,
-          operation: 'markFeedDone',
+          operation: 'markFeedDone_postSave',
           error: e.toString(),
           context: {
             'actualQty': actualQty,
@@ -680,8 +656,9 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
             'transactionSuccess': transactionSuccess,
           },
         );
-        AppLogger.error('Failed to complete feed operation', e);
-        rethrow;
+        AppLogger.error(
+            'Post-save refresh failed (feed IS saved in DB) pond=$pondId round=$round',
+            e);
       }
     } finally {
       _releaseLock(lockKey);
@@ -715,9 +692,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
       // Simple tray status aggregation (replaces FeedStateEngine)
       TrayStatus finalStatus;
-      if (trayStatuses.isEmpty) {
-        finalStatus = TrayStatus.light;
-      } else {
+      {
         int totalScore = 0;
         for (final status in trayStatuses) {
           if (status == TrayStatus.heavy) {

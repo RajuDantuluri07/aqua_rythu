@@ -95,7 +95,7 @@ class FeedHistoryNotifier
       final feedsPerDay = _getMealsPerDay(doc);
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
-          : List<double>.filled(feedsPerDay, 0.0);
+          : List<double>.filled(feedsPerDay, 0.0, growable: true);
 
       // Expand rounds if needed (using feedsPerDay instead of hardcoded 4)
       if (newRounds.length < round) {
@@ -247,7 +247,7 @@ class FeedHistoryNotifier
       final feedsPerDay = _getMealsPerDay(existing.doc);
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
-          : List<double>.filled(feedsPerDay, 0.0);
+          : List<double>.filled(feedsPerDay, 0.0, growable: true);
 
       // Ensure capacity if rounds are expanding dynamically
       if (newTrays.length < round) {
