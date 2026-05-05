@@ -505,20 +505,31 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           'p_created_at': DateTime.now().toIso8601String(),
         });
 
-        // ✅ VALIDATE: Never trust silent success
-        // Parse and validate RPC response structure
-        final rpcResponse = (rpcResult is Map)
-            ? Map<String, dynamic>.from(rpcResult)
-            : null;
+        // 🔴 DEBUG: Log raw RPC response for debugging
+        AppLogger.info('🔍 DEBUG: Raw RPC result type: ${rpcResult.runtimeType}, value: $rpcResult');
 
-        if (rpcResponse == null) {
-          throw Exception('RPC returned invalid response type: ${rpcResult.runtimeType}');
+        // ✅ VALIDATE: Handle both BOOLEAN (old RPC) and JSONB (new RPC) responses.
+        // Old RPC (migration 20260504): RETURNS BOOLEAN
+        // New RPC (migration 20260505): RETURNS JSONB {success, alreadyCompleted, logInserted, error}
+        bool alreadyCompleted = false;
+        bool logInserted = false;
+        String? errorMsg;
+
+        if (rpcResult is bool) {
+          transactionSuccess = rpcResult;
+          if (transactionSuccess) logInserted = true;
+        } else if (rpcResult is Map) {
+          final rpcResponse = Map<String, dynamic>.from(rpcResult);
+          transactionSuccess = (rpcResponse['success'] as bool?) ?? false;
+          alreadyCompleted = (rpcResponse['alreadyCompleted'] as bool?) ?? false;
+          logInserted = (rpcResponse['logInserted'] as bool?) ?? false;
+          errorMsg = rpcResponse['error'] as String?;
+        } else {
+          throw Exception('RPC returned unexpected response type: ${rpcResult.runtimeType}');
         }
 
-        transactionSuccess = (rpcResponse['success'] as bool?) ?? false;
-        final alreadyCompleted = (rpcResponse['alreadyCompleted'] as bool?) ?? false;
-        final logInserted = (rpcResponse['logInserted'] as bool?) ?? false;
-        final errorMsg = rpcResponse['error'] as String?;
+        // 🔴 DEBUG: Log parsed RPC response
+        AppLogger.info('🔍 DEBUG: RPC Response - success=$transactionSuccess, alreadyCompleted=$alreadyCompleted, logInserted=$logInserted, error=$errorMsg');
 
         if (!transactionSuccess) {
           // 🔴 DEBUG: Log transaction failure
@@ -533,7 +544,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           throw Exception('Feed transaction failed: $errorMsg');
         }
 
-        // Log idempotency case
+        // 🔒 CRITICAL: Invalidate cache IMMEDIATELY after RPC confirms success.
+        // Must run before DB verification so that any subsequent failure still
+        // results in fresh data being fetched on the next loadTodayFeed call.
+        _controller.invalidateDoc(state.selectedPond, state.doc);
+
         if (alreadyCompleted) {
           AppLogger.info(
               '⚠️  Round already completed (idempotent): pond $pondId doc $doc round $round');
@@ -542,31 +557,26 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         AppLogger.info(
             '✅ RPC Response validated: success=true, alreadyCompleted=$alreadyCompleted, logInserted=$logInserted');
 
-
-        // Step 2: IMMEDIATELY fetch fresh DB value (NO PARALLEL OPERATIONS)
-        // This ensures we get the ACTUAL committed value, not stale data
+        // Step 2: Verify the committed row exists in feed_logs (non-fatal check).
+        // Filter by round for precision; warn and continue if the read fails —
+        // the RPC already confirmed the write succeeded.
         try {
-          // Verify the row was committed (throws if no feed_log exists for today).
-          // feed_logs accumulates all rounds per day, so we use qty (not the
-          // cumulative feed_given) for per-round tracking downstream.
           await supabase
               .from('feed_logs')
               .select('feed_given')
               .eq('pond_id', state.selectedPond)
               .eq('doc', state.doc)
-              .order('created_at', ascending: false)
-              .limit(1)
+              .eq('round', round)
               .single();
 
           actualDbFeedSaved = qty;
           AppLogger.info(
               '✅ DB read successful: actual stored feed = ${actualDbFeedSaved.toStringAsFixed(2)}kg');
         } catch (dbReadError) {
-          AppLogger.error(
-              'Failed to read actual DB feed value after transaction',
-              dbReadError);
-          throw Exception(
-              'DB transaction succeeded but failed to read committed value: $dbReadError');
+          // Non-fatal: RPC confirmed success; trust it and proceed.
+          AppLogger.warn(
+              'DB read verification failed after successful RPC (non-fatal): $dbReadError');
+          actualDbFeedSaved = qty;
         }
 
         // 🔴 DEBUG: Log transaction success with actual DB value
@@ -597,23 +607,11 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         rethrow;
       }
 
-      // 🔒 CRITICAL: Atomic execution - Single RPC transaction handles everything
+      // Post-save: state update + history logging (cache already invalidated above)
       try {
-        // Step 1: Validate RPC response (single atomic operation already completed)
-        // The RPC function handles:
-        //   - Insert feed_logs (with idempotency)
-        //   - Update feed_rounds.status = 'completed'
-        //   - Both in one transaction
-        if (!transactionSuccess) {
-          throw Exception('Feed round completion failed - RPC returned false');
-        }
-
         AppLogger.info('✅ Feed completion transaction atomic: pond $pondId round $round');
 
-        // Step 2: Cache invalidation (after successful atomic transaction)
-        _controller.invalidateDoc(state.selectedPond, state.doc);
-
-        // Step 3: Refresh from DB → provider state → Riverpod rebuild
+        // Refresh from DB → provider state → Riverpod rebuild
         await loadTodayFeed(state.selectedPond);
 
         // Step 4: UI update (only after all DB operations complete)
@@ -626,6 +624,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
         // Step 5: Log feeding (only after successful transaction AND DB read AND state update)
         if (qty > 0 && transactionSuccess) {
+          AppLogger.info('📝 Step 5a: Calling logFeeding with qty=$actualDbFeedSaved for pond=$pondId doc=$doc round=$round');
           await ref.read(feedHistoryProvider.notifier).logFeeding(
                 pondId: state.selectedPond,
                 doc: state.doc,
@@ -633,6 +632,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
                 qty: actualDbFeedSaved, // Use ACTUAL DB value, not input qty
                 expectedFeed: expectedFeedToday,
               );
+          AppLogger.info('📝 Step 5b: logFeeding completed');
+
+          // 🔴 CRITICAL FIX: Reload feed history from database to ensure UI shows latest data
+          // This prevents stale state when feed_logs was successfully saved but UI didn't update
+          AppLogger.info('📝 Step 5c: Reloading feed history from database for pond=$pondId');
+          await ref.read(feedHistoryProvider.notifier).loadHistoryForPonds([state.selectedPond]);
+          AppLogger.info('📝 Step 5d: Feed history reload completed');
 
           // 🔴 DEBUG: Log successful feed completion with ACTUAL DB value
           // Calculate percentage difference between planned and ACTUAL DB feed

@@ -40,7 +40,7 @@ class FeedTimelineCard extends StatefulWidget {
   final bool isPendingTray;
   final List<TrayStatus>? trayStatuses;
   final List<String> supplements;
-  final VoidCallback? onMarkDone;
+  final Future<void> Function()? onMarkDone;
   final VoidCallback? onLogTray;
   final void Function(double newQty)? onEdit;
   final double? lastFeedKg;
@@ -678,7 +678,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                         HapticFeedback.mediumImpact(); // Tactile feedback
                         setState(() => _isSubmitting = true);
                         try {
-                          await Future.sync(() => widget.onMarkDone!());
+                          await widget.onMarkDone!();
                         } finally {
                           if (mounted) setState(() => _isSubmitting = false);
                         }
@@ -1342,7 +1342,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             : () async {
                 setState(() => _isSubmitting = true);
                 try {
-                  await Future.sync(() => widget.onMarkDone?.call());
+                  await widget.onMarkDone?.call();
                 } finally {
                   if (mounted) setState(() => _isSubmitting = false);
                 }
@@ -1576,7 +1576,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             : () async {
                 setState(() => _isSubmitting = true);
                 try {
-                  await Future.sync(() => widget.onMarkDone?.call());
+                  await widget.onMarkDone?.call();
                 } finally {
                   if (mounted) setState(() => _isSubmitting = false);
                 }
