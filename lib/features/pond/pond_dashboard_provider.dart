@@ -494,8 +494,9 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       try {
         // Step 1: Await DB transaction (MUST BE FULLY COMMITTED FIRST)
         final supabase = Supabase.instance.client;
-        transactionSuccess =
-            await supabase.rpc('complete_feed_round_with_log', params: {
+
+        // Call RPC and get structured JSON response
+        final rpcResult = await supabase.rpc('complete_feed_round_with_log', params: {
           'p_pond_id': state.selectedPond,
           'p_doc': state.doc,
           'p_round': round,
@@ -503,6 +504,21 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           'p_base_feed': qty, // Use actual feed as base feed for consistency
           'p_created_at': DateTime.now().toIso8601String(),
         });
+
+        // ✅ VALIDATE: Never trust silent success
+        // Parse and validate RPC response structure
+        final rpcResponse = (rpcResult is Map)
+            ? Map<String, dynamic>.from(rpcResult)
+            : null;
+
+        if (rpcResponse == null) {
+          throw Exception('RPC returned invalid response type: ${rpcResult.runtimeType}');
+        }
+
+        transactionSuccess = (rpcResponse['success'] as bool?) ?? false;
+        final alreadyCompleted = (rpcResponse['alreadyCompleted'] as bool?) ?? false;
+        final logInserted = (rpcResponse['logInserted'] as bool?) ?? false;
+        final errorMsg = rpcResponse['error'] as String?;
 
         if (!transactionSuccess) {
           // 🔴 DEBUG: Log transaction failure
@@ -512,10 +528,20 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
             round: round,
             transactionType: 'complete_feed_round_with_log',
             success: false,
-            details: 'likely_duplicate_entry',
+            details: 'rpc_error: ${errorMsg ?? "unknown"}',
           );
-          throw Exception('Feed transaction failed - likely duplicate entry');
+          throw Exception('Feed transaction failed: $errorMsg');
         }
+
+        // Log idempotency case
+        if (alreadyCompleted) {
+          AppLogger.info(
+              '⚠️  Round already completed (idempotent): pond $pondId doc $doc round $round');
+        }
+
+        AppLogger.info(
+            '✅ RPC Response validated: success=true, alreadyCompleted=$alreadyCompleted, logInserted=$logInserted');
+
 
         // Step 2: IMMEDIATELY fetch fresh DB value (NO PARALLEL OPERATIONS)
         // This ensures we get the ACTUAL committed value, not stale data
