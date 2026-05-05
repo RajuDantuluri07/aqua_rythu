@@ -574,13 +574,26 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // 🔒 CRITICAL: Sequential execution - Transaction → DB Read → State Update → UI
       try {
         // Step 1: DB transaction (already completed above with immediate DB read)
-        // Step 2: Cache invalidation (after successful DB read)
+        // Step 2: ✅ UPDATE FEED_ROUNDS STATUS TO COMPLETED (ENSURE DB = SSOT)
+        // This is critical: mark the round as completed in feed_rounds so DB persists the state
+        final feedId = state.roundToFeedId[round];
+        if (feedId != null && feedId.isNotEmpty) {
+          try {
+            await FeedService().markFeedPlanCompleted(feedPlanId: feedId);
+            AppLogger.info('✅ Feed round status updated to completed in DB for pond $pondId round $round');
+          } catch (e) {
+            AppLogger.error('Failed to update feed_rounds status to completed', e);
+            // Don't rethrow - the transaction already succeeded, just log the error
+          }
+        }
+
+        // Step 3: Cache invalidation (after successful DB read)
         _controller.invalidateDoc(state.selectedPond, state.doc);
 
-        // Step 3: Refresh from DB → provider state → Riverpod rebuild
+        // Step 4: Refresh from DB → provider state → Riverpod rebuild
         await loadTodayFeed(state.selectedPond);
 
-        // Step 4: UI update (only after all DB operations complete)
+        // Step 5: UI update (only after all DB operations complete)
         final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
         updatedStatus[round] = 'completed';
         state = state.copyWith(
@@ -588,7 +601,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           lastFeedTime: DateTime.now(), // for FeedStatusEngine gap check
         );
 
-        // Step 5: Log feeding (only after successful transaction AND DB read AND state update)
+        // Step 6: Log feeding (only after successful transaction AND DB read AND state update)
         if (qty > 0 && transactionSuccess) {
           await ref.read(feedHistoryProvider.notifier).logFeeding(
                 pondId: state.selectedPond,
@@ -620,7 +633,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
               '✅ Feed action logged with actual DB value: ${actualDbFeedSaved.toStringAsFixed(2)}kg');
         }
 
-        // Step 6: Handle tray auto-skip refresh
+        // Step 7: Handle tray auto-skip refresh
         if (didSkipAnyTray) {
           ref.invalidate(trayProvider(state.selectedPond));
         }
