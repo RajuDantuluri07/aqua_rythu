@@ -70,8 +70,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   int _lastFeedbackRound = -1;
   // Flag to prevent repeated anchor feed dialog popup
   bool _anchorFeedDialogShown = false;
-  // Show DOC > 30 PRO paywall once per pond per session for FREE users
-  bool _smartModePaywallShown = false;
 
   @override
   void initState() {
@@ -125,17 +123,21 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     required int totalRounds,
     required Map<int, bool> feedDone,
     required Map<int, bool> trayDone,
+    bool isPro = false,
   }) {
     final isDone = feedDone[round] ?? false;
     final isTrayLogged = trayDone[round] ?? false;
-    final isLocked = _isLocked(doc, round, feedDone, trayDone);
-    // Current = first round that is not fully cleared
-    // For DOC > 30: a round is "cleared" only when both feed done AND tray logged
-    final currentRound = _getCurrentRound(doc, feedDone, trayDone, totalRounds);
+    final isLocked = _isLocked(doc, round, feedDone, trayDone, isPro: isPro);
+    // Current = first round that is not fully cleared.
+    // PRO DOC ≥ 31: cleared = feed done AND tray logged (tray drives smart calc).
+    // FREE DOC ≥ 31: cleared = feed done only (tray is optional, never blocks).
+    final currentRound =
+        _getCurrentRound(doc, feedDone, trayDone, totalRounds, isPro: isPro);
     final isCurrent = !isDone && round == currentRound;
-    // Tray CTA: feed done but tray not yet logged
-    // DOC 15–29: optional (show button but doesn't block next round)
-    // DOC ≥ 30:  mandatory (blocks next round until logged)
+    // Tray CTA: show button when feed done but tray not yet logged.
+    // DOC 15–29: optional for everyone.
+    // DOC ≥ 30 PRO: mandatory (blocks next round).
+    // DOC ≥ 30 FREE: shown but never blocks.
     final showTrayCTA = isDone && doc >= 15 && !isTrayLogged;
 
     return {
@@ -148,30 +150,32 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   }
 
   /// Returns the next round that needs action (feed or tray).
-  /// DOC ≤ 30: first round where feed is not done.
-  /// DOC ≥ 31: first round where feed is not done, but only after previous
-  ///           round's tray is logged.
+  /// DOC ≤ 30 / FREE: first round where feed is not done.
+  /// DOC ≥ 31 PRO: first round where feed is not done, or previous tray
+  ///               is not logged (tray data drives smart recalculation).
   int _getCurrentRound(int doc, Map<int, bool> feedDone,
-      Map<int, bool> trayDone, int totalRounds) {
+      Map<int, bool> trayDone, int totalRounds,
+      {bool isPro = false}) {
     for (int i = 1; i <= totalRounds; i++) {
       if (!(feedDone[i] ?? false)) return i;
-      // Fix #4: tray blocks next round only in smart mode (DOC ≥ 31).
-      if (doc >= 31 && !(trayDone[i] ?? false)) return i;
+      // Tray blocks next round only for PRO users in smart mode (DOC ≥ 31).
+      if (doc >= 31 && isPro && !(trayDone[i] ?? false)) return i;
     }
     return totalRounds + 1;
   }
 
   /// A round is locked when the previous round is not fully cleared.
-  /// DOC ≤ 30: cleared = feed done.
-  /// DOC ≥ 31: cleared = feed done AND tray logged.
+  /// DOC ≤ 30 / FREE: cleared = feed done.
+  /// DOC ≥ 31 PRO: cleared = feed done AND tray logged.
   bool _isLocked(
-      int doc, int round, Map<int, bool> feedDone, Map<int, bool> trayDone) {
+      int doc, int round, Map<int, bool> feedDone, Map<int, bool> trayDone,
+      {bool isPro = false}) {
     if (round <= 1) return false;
     final prev = round - 1;
     final prevFeedDone = feedDone[prev] ?? false;
     if (!prevFeedDone) return true;
-    // Fix #4: tray mandatory-block only activates in smart mode (DOC ≥ 31).
-    if (doc >= 31 && !(trayDone[prev] ?? false)) return true;
+    // Tray mandatory-block only for PRO users in smart mode (DOC ≥ 31).
+    if (doc >= 31 && isPro && !(trayDone[prev] ?? false)) return true;
     return false;
   }
 
@@ -666,24 +670,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       // DOC <= 30: Popup shown only once via _anchorFeedDialogShown flag
       final currentDoc = ref.read(docProvider(next.selectedPond));
 
-      // PRO paywall: when a FREE user lands on a DOC > 30 pond, smart-feed
-      // intelligence is already disabled at the service level — surface the
-      // upgrade CTA once per session so they understand what's missing.
-      final isProForPaywall = ref.read(subscriptionProvider).isPro;
-      if (currentDoc > 30 &&
-          !isProForPaywall &&
-          !_smartModePaywallShown &&
-          mounted) {
-        _smartModePaywallShown = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            AccessControlHooks.showUpgradeDialog(
-              context,
-              FeatureIds.smartFeedEngine,
-            );
-          }
-        });
-      }
+      // PRO paywall intentionally removed: DOC > 30 does NOT gate feed logging.
+      // Smart feed RECOMMENDATIONS are PRO-only (engine already handles this),
+      // but logging feed must always succeed for any DOC 1–150.
       if (next.needsAnchorFeedInput &&
           !(previous?.needsAnchorFeedInput ?? false) &&
           currentDoc <= 30 &&
@@ -1015,14 +1004,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     print(
         "🏡 POND DASHBOARD FEED: Pond=${currentPond.name}, PlannedFeed=${plannedFeed.toStringAsFixed(2)}kg, ConsumedFeed=${consumedFeed.toStringAsFixed(2)}kg, DOC=$currentDoc");
 
-    // Smart Feed auto-enables at DOC > 30 (smart_feeding = doc > 30).
-    // The DB flag `isSmartFeedEnabled` is the farmer's manual preference; even if
-    // never toggled, Smart Mode activates at DOC 31 because MasterFeedEngine
-    // only applies smart corrections when doc > 30.
-    // DOC <= 30: blind feed (base curve + density scaling only)
-    // DOC > 30: smart feed (+ tray factor + env factor + FCR)
+    // Smart Feed UI activates at DOC > 30 for PRO users only.
+    // FREE users always see blind-feed UI (manual input) regardless of DOC.
+    // DOC <= 30: blind feed for everyone
+    // DOC > 30 + PRO: smart feed (+ tray factor + env factor + FCR)
+    // DOC > 30 + FREE: blind feed / manual input (no smart recommendations)
     final isSmartFeedEnabled =
-        currentPond.isSmartFeedEnabled || (currentDoc > 30);
+        isPro && (currentPond.isSmartFeedEnabled || (currentDoc > 30));
 
     // ── DOC-adaptive mode ────────────────────────────────────────────────────
     final String mode;
@@ -1346,7 +1334,34 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               if (isCompleted)
                 _buildCompletedDashboard(context, ref, currentPond, isPro: isPro)
               else ...[
-                if (currentDoc > 120) ...[
+                if (currentDoc > 150) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: AppRadius.rs,
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock_outline,
+                            size: 16, color: Colors.red.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'DOC $currentDoc — Crop period ended. Feed logging disabled. Please close this crop cycle.',
+                            style: TextStyle(
+                                color: Colors.red.shade700,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (currentDoc > 120) ...[
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1431,6 +1446,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                         smartFeedOutput: null,
                         currentPond: currentPond,
                         isSmartFeedEnabled: isSmartFeedEnabled,
+                        isPro: isPro,
                         valueDelta: pondValue.delta,
                         showDoneRoundsOnly: false,
                         nextFeedAt: nextFeedAt,
@@ -1464,6 +1480,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                           smartFeedOutput: null,
                           currentPond: currentPond,
                           isSmartFeedEnabled: isSmartFeedEnabled,
+                          isPro: isPro,
                           valueDelta: pondValue.delta,
                           showDoneRoundsOnly: true,
                         ),
@@ -1630,6 +1647,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     required dynamic smartFeedOutput, // SmartFeedOutput type not found
     required Pond? currentPond,
     required bool isSmartFeedEnabled,
+    required bool isPro,
     required double valueDelta,
     bool showDoneRoundsOnly = false,
     DateTime? nextFeedAt,
@@ -1736,6 +1754,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               ),
               feedDone: feedDoneMap,
               trayDone: trayDone,
+              isPro: isPro,
             );
 
             final bool isDone = roundState['isDone'] as bool;
@@ -1744,8 +1763,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
             // A tray log exists but it was auto-skipped (farmer moved on without logging)
             final bool isTraySkipped =
                 isTrayLogged && (todayTrayMap[round]?.isSkipped ?? false);
-            // DOC 15–29: tray is optional — show the button but don't block progression.
-            // DOC ≥ 30:  tray is mandatory — handled by _isLocked/_getCurrentRound.
+            // DOC 15–29: tray optional for everyone.
+            // DOC ≥ 30 PRO: tray mandatory (handled by _isLocked/_getCurrentRound).
+            // DOC ≥ 30 FREE: tray shown but never blocks progression.
             // isPendingTray = tray not yet handled at all (neither logged nor skipped)
             final bool isPendingTray =
                 isDone && currentDoc >= 15 && !isTrayLogged;
@@ -1829,8 +1849,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                           );
                     }
                   : null,
-              // MARK AS FED: always available on the current round, for all DOCs
-              onMarkDone: isCurrent
+              // MARK AS FED: available for current round, DOC 1–150 only.
+              onMarkDone: isCurrent && currentDoc <= 150
                   ? () async {
                       // T13 — show feedback prompt on the done card after this round
                       setState(() => _lastFeedbackRound = round);

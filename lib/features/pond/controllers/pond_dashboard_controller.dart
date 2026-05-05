@@ -416,7 +416,10 @@ class PondDashboardController {
             ? result.baseFeed
             : result.finalFeed;
 
-    // Inject amount for the NEXT pending round only
+    // Inject amounts for ALL pending rounds so the full day's schedule is visible
+    // from the moment a DOC > 30 pond is first loaded (no DB rows yet).
+    // Done rounds are skipped; amounts are recalculated on every reload so the
+    // latest engine result is always reflected for the remaining rounds.
     final totalRounds = config.splits.length;
     for (int r = 1; r <= totalRounds; r++) {
       final alreadyDone = feedData.statuses[r] == 'completed';
@@ -427,7 +430,6 @@ class PondDashboardController {
           (safeFinalFeed * config.splits[r - 1]).toStringAsFixed(3),
         );
         feedData.statuses[r] ??= 'pending';
-        break; // Only the immediate next round
       }
     }
   }

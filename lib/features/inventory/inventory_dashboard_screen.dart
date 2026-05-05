@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/inventory_item.dart';
+import '../../core/services/inventory_service.dart';
 import '../../features/farm/farm_provider.dart';
 import 'add_stock_screen.dart';
 import 'inventory_provider.dart';
@@ -187,15 +188,54 @@ class _InventoryDashboardScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                item.name.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: Color(0xFF1A1A1A),
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 4, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.name.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert,
+                        color: Color(0xFF777777), size: 20),
+                    onSelected: (value) {
+                      if (value == 'edit') _showEditDialog(item, farmId);
+                      if (value == 'delete') _showDeleteDialog(item, farmId);
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined,
+                                size: 18, color: Color(0xFF333333)),
+                            SizedBox(width: 10),
+                            Text('Edit'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline,
+                                size: 18, color: Color(0xFFC62828)),
+                            SizedBox(width: 10),
+                            Text('Delete',
+                                style: TextStyle(color: Color(0xFFC62828))),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
             Padding(
@@ -223,6 +263,99 @@ class _InventoryDashboardScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditDialog(InventoryItem item, String farmId) {
+    final nameCtrl = TextEditingController(text: item.name);
+    final unitCtrl = TextEditingController(text: item.unit);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Item'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Name'),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: unitCtrl,
+              decoration: const InputDecoration(labelText: 'Unit (e.g. kg, L)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _green),
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final unit = unitCtrl.text.trim();
+              Navigator.pop(ctx);
+              if (name.isEmpty) return;
+              try {
+                await InventoryService().updateInventoryItem(
+                  item.id,
+                  name: name != item.name ? name : null,
+                  unit: unit != item.unit ? unit : null,
+                );
+                ref.invalidate(inventoryProvider(farmId));
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to update: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Save',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteDialog(InventoryItem item, String farmId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Item'),
+        content: Text(
+            'Delete "${item.name}" and all its stock history? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFC62828)),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await InventoryService().deleteInventoryItem(item.id);
+                ref.invalidate(inventoryProvider(farmId));
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

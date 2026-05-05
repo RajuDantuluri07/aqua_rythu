@@ -279,6 +279,36 @@ class InventoryService {
     }
   }
 
+  // Update inventory item name and/or unit
+  Future<void> updateInventoryItem(
+    String itemId, {
+    String? name,
+    String? unit,
+  }) async {
+    try {
+      final updates = <String, dynamic>{};
+      if (name != null) updates['name'] = name;
+      if (unit != null) updates['unit'] = unit;
+      if (updates.isEmpty) return;
+      await supabase.from('inventory_items').update(updates).eq('id', itemId);
+      AppLogger.info('Updated inventory item $itemId');
+    } catch (e) {
+      AppLogger.error('Failed to update inventory item: $e');
+      rethrow;
+    }
+  }
+
+  // Delete an inventory item and all related records
+  Future<void> deleteInventoryItem(String itemId) async {
+    try {
+      await supabase.from('inventory_items').delete().eq('id', itemId);
+      AppLogger.info('Deleted inventory item $itemId');
+    } catch (e) {
+      AppLogger.error('Failed to delete inventory item: $e');
+      rethrow;
+    }
+  }
+
   // Calculate daily feed cost
   Future<double> calculateDailyFeedCost(String itemId) async {
     try {
