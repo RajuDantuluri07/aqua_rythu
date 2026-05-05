@@ -439,6 +439,46 @@ class FeedService {
     });
   }
 
+  int getNextRoundFromHistory(List<FeedLog> logs, int doc) {
+    final sameDayLogs = logs.where((l) => l.doc == doc).toList();
+
+    if (sameDayLogs.isEmpty) {
+      return 1;
+    }
+
+    final lastRound =
+        sameDayLogs.map((l) => l.round).reduce((a, b) => a > b ? a : b);
+
+    return lastRound + 1;
+  }
+
+  Future<void> saveFeedEntry({
+    required String pondId,
+    required int doc,
+    required double feedKg,
+    required int? selectedRound,
+    required bool isPro,
+  }) async {
+    if (doc > 150) {
+      throw Exception('Crop completed');
+    }
+
+    final logs = await fetchFeedLogs(pondId);
+    final parsedLogs = logs.map(FeedLog.fromMap).toList();
+
+    final round = selectedRound ?? getNextRoundFromHistory(parsedLogs, doc);
+
+    await supabase.from('feed_logs').insert({
+      'pond_id': pondId,
+      'doc': doc,
+      'feed_kg': feedKg,
+      'feed_given': feedKg,
+      'round': round,
+      'source': isPro ? 'smart' : 'manual',
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
   /// Validate feed amount and fail loudly if invalid
   static double _validateFeedAmount(
       dynamic value, String roundName, String pondId, int doc) {
@@ -461,5 +501,22 @@ class FeedService {
     }
 
     return amount;
+  }
+}
+
+class FeedLog {
+  final int doc;
+  final int round;
+
+  FeedLog({
+    required this.doc,
+    required this.round,
+  });
+
+  factory FeedLog.fromMap(Map<String, dynamic> map) {
+    return FeedLog(
+      doc: (map['doc'] as num?)?.toInt() ?? 0,
+      round: (map['round'] as num?)?.toInt() ?? 0,
+    );
   }
 }

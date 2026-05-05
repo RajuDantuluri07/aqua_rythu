@@ -469,123 +469,21 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // The RPC's own idempotency guard handles true duplicates correctly.
 
       AppLogger.info(
-          'FEED SAVE: calling RPC pond=$pondId doc=$doc round=$round qty=${qty.toStringAsFixed(3)}kg');
+          'FEED SAVE: direct insert pond=$pondId doc=$doc round=$round qty=${qty.toStringAsFixed(3)}kg');
 
       // Calculate expected feed for today (needed for history logging).
       final expectedFeedToday =
           state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
 
-      // ─── Step 1: Atomic DB transaction ────────────────────────────────────
-      double actualDbFeedSaved = 0.0;
-      bool transactionSuccess = false;
-
-      try {
-        final supabase = Supabase.instance.client;
-
-        final rpcResult =
-            await supabase.rpc('complete_feed_round_with_log', params: {
-          'p_pond_id': pondId,
-          'p_doc': doc,
-          'p_round': round,
-          'p_feed_amount': qty,
-          'p_base_feed': qty,
-          'p_created_at': DateTime.now().toIso8601String(),
-        });
-
-        AppLogger.info(
-            'RPC raw result — type: ${rpcResult.runtimeType}, value: $rpcResult');
-
-        // Handle both BOOLEAN (old RPC) and JSONB (new RPC) responses.
-        bool alreadyCompleted = false;
-        bool logInserted = false;
-        String? errorMsg;
-
-        if (rpcResult is bool) {
-          // Old BOOLEAN RPC (20260504): true = success, false = error/duplicate.
-          // Will be replaced by JSONB function via migration 20260506.
-          transactionSuccess = rpcResult;
-          if (transactionSuccess) logInserted = true;
-        } else if (rpcResult is Map) {
-          final rpcResponse = Map<String, dynamic>.from(rpcResult);
-          transactionSuccess = (rpcResponse['success'] as bool?) ?? false;
-          alreadyCompleted = (rpcResponse['alreadyCompleted'] as bool?) ?? false;
-          logInserted = (rpcResponse['logInserted'] as bool?) ?? false;
-          errorMsg = rpcResponse['error'] as String?;
-        } else {
-          throw Exception(
-              'RPC returned unexpected type: ${rpcResult.runtimeType}');
-        }
-
-        AppLogger.info(
-            'RPC parsed — success=$transactionSuccess alreadyCompleted=$alreadyCompleted logInserted=$logInserted error=$errorMsg');
-
-        if (!transactionSuccess) {
-          FeedDebugLogger.logTransaction(
-            pondId: pondId,
-            doc: doc,
-            round: round,
-            transactionType: 'complete_feed_round_with_log',
-            success: false,
-            details: 'rpc_error: ${errorMsg ?? "unknown"}',
-          );
-          throw Exception('Feed transaction failed: $errorMsg');
-        }
-
-        // Invalidate controller cache immediately so the next loadTodayFeed
-        // forces a fresh DB read even if this function throws further down.
-        _controller.invalidateDoc(pondId, doc);
-
-        if (alreadyCompleted) {
-          AppLogger.info(
-              'Round $round idempotent (already completed in DB): pond=$pondId doc=$doc');
-        }
-
-        // ─── Step 2: Verify feed_log exists (fatal if MISSING after new save) ─
-        // For alreadyCompleted=true the old BOOLEAN RPC may not have inserted
-        // the feed_log, so we verify and fall through to logFeeding which will
-        // insert it via safe_insert_feed_log if absent.
-        try {
-          await supabase
-              .from('feed_logs')
-              .select('feed_given')
-              .eq('pond_id', pondId)
-              .eq('doc', doc)
-              .eq('round', round)
-              .single();
-
-          actualDbFeedSaved = qty;
-          AppLogger.info(
-              'DB verification OK: feed_log for round=$round found, feed=${actualDbFeedSaved.toStringAsFixed(2)}kg');
-        } catch (dbReadError) {
-          // feed_log missing — this is the corrupt-state scenario we are fixing.
-          // Log it clearly; logFeeding below will insert via safe_insert_feed_log.
-          AppLogger.warn(
-              'feed_log MISSING for round=$round after RPC success (will be inserted by logFeeding): $dbReadError');
-          actualDbFeedSaved = qty;
-        }
-
-        FeedDebugLogger.logTransaction(
-          pondId: pondId,
-          doc: doc,
-          round: round,
-          transactionType: 'complete_feed_round_with_log',
-          success: true,
-          details:
-              'saved, actual_db_feed=${actualDbFeedSaved.toStringAsFixed(2)}kg',
-        );
-      } catch (e) {
-        FeedDebugLogger.logTransaction(
-          pondId: pondId,
-          doc: doc,
-          round: round,
-          transactionType: 'complete_feed_round_with_log',
-          success: false,
-          details: e.toString(),
-        );
-        AppLogger.error(
-            'Feed transaction failed for pond=$pondId round=$round', e);
-        rethrow;
-      }
+      await FeedService().saveFeedEntry(
+        pondId: pondId,
+        doc: doc,
+        feedKg: qty,
+        selectedRound: round,
+        isPro: state.recommendation != null,
+      );
+      final actualDbFeedSaved = qty;
+      _controller.invalidateDoc(pondId, doc);
 
       // ─── Step 3: Post-save — state refresh + history ───────────────────────
       // Mark round completed immediately — feed IS in DB regardless of what
@@ -653,7 +551,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           context: {
             'actualQty': actualQty,
             'plannedQty': plannedQty,
-            'transactionSuccess': transactionSuccess,
+            'savePath': 'direct_feed_logs_insert',
           },
         );
         AppLogger.error(
