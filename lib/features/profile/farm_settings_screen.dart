@@ -120,7 +120,7 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
           const SizedBox(height: 10),
 
           _dropdown("Feeds per Day", "${settings.feedsPerDay} Feeds",
-              ["2 Feeds", "3 Feeds", "4 Feeds"], (v) {
+              ["2 Feeds", "3 Feeds", "4 Feeds", "5 Feeds"], (v) {
             if (v != null) {
               final count = int.parse(v.split(" ")[0]);
               ref.read(farmSettingsProvider.notifier).setFeedsPerDay(count);

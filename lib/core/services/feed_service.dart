@@ -96,6 +96,7 @@ class FeedService {
 
   /// Fetch all logged feed entries for a pond, oldest first.
   /// Fix #2: include 'doc' so FeedHistoryLog.doc is populated (was always 0).
+  /// Fix #6: include 'round' so each feed entry can be mapped to its round.
   Future<List<Map<String, dynamic>>> fetchFeedLogs(String pondId) async {
     // ✅ Guard: Return empty list if pondId is empty (prevents invalid UUID errors)
     if (pondId.isEmpty) {
@@ -104,7 +105,7 @@ class FeedService {
 
     return await supabase
         .from('feed_logs')
-        .select('feed_given, base_feed, created_at, doc')
+        .select('feed_given, base_feed, created_at, doc, round')
         .eq('pond_id', pondId)
         .order('created_at', ascending: true);
   }

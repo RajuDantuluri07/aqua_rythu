@@ -291,33 +291,58 @@ class FeedHistoryNotifier
         final rows = await _feedService.fetchFeedLogs(pondId);
         if (rows.isEmpty) continue;
 
-        // Group rows by calendar date, keeping the last (most complete) row per day.
-        // saveFeed inserts once per logFeeding call with the running daily total —
-        // so the last row for a given day is the authoritative daily sum.
-        final Map<String, Map<String, dynamic>> latestByDate = {};
+        // Fix #6: Group rows by calendar date AND reconstruct rounds array per day.
+        // Each row has a round number, so we can properly rebuild the rounds list.
+        final Map<String, List<Map<String, dynamic>>> byDate = {};
         for (final row in rows) {
           final dateKey = (row['created_at'] as String).substring(0, 10);
-          latestByDate[dateKey] = row; // rows are ordered ascending — last wins
+          byDate.putIfAbsent(dateKey, () => []).add(row);
         }
 
         double cumulative = 0.0;
         final logs = <FeedHistoryLog>[];
 
-        for (final entry in latestByDate.entries) {
-          final feedGiven =
-              (entry.value['feed_given'] as num?)?.toDouble() ?? 0.0;
-          final doc = (entry.value['doc'] as int?) ?? 0;
-          cumulative += feedGiven;
+        for (final entry in byDate.entries) {
+          final dateStr = entry.key;
+          final rowsForDay = entry.value;
 
-          // baseFeed written by saveFeed() from OrchestratorResult.baseFeed —
-          // null for records logged before this change, treated as 0 (no expected line).
-          final expected =
-              (entry.value['base_feed'] as num?)?.toDouble() ?? 0.0;
+          // Sort by round number to rebuild the rounds array in order
+          rowsForDay.sort((a, b) {
+            final roundA = (a['round'] as int?) ?? 0;
+            final roundB = (b['round'] as int?) ?? 0;
+            return roundA.compareTo(roundB);
+          });
+
+          // Reconstruct the rounds array from individual round entries
+          final roundsList = <double>[];
+          double dayTotal = 0.0;
+          int doc = 0;
+          double expected = 0.0;
+
+          for (final row in rowsForDay) {
+            final feedGiven = (row['feed_given'] as num?)?.toDouble() ?? 0.0;
+            final round = (row['round'] as int?) ?? 0;
+            doc = (row['doc'] as int?) ?? doc; // Use first non-zero doc
+            expected = (row['base_feed'] as num?)?.toDouble() ?? expected;
+
+            // Pad with zeros if there are gaps in round numbers
+            while (roundsList.length < round) {
+              roundsList.add(0.0);
+            }
+
+            // Set the feed amount for this round (round is 1-indexed)
+            if (round > 0) {
+              roundsList[round - 1] = feedGiven;
+            }
+            dayTotal += feedGiven;
+          }
+
+          cumulative += dayTotal;
 
           logs.add(FeedHistoryLog(
-            date: DateTime.tryParse(entry.key) ?? DateTime.now(),
+            date: DateTime.tryParse(dateStr) ?? DateTime.now(),
             doc: doc,
-            rounds: [feedGiven], // single value representing day total
+            rounds: roundsList,
             trayStatuses: [],
             expected: expected,
             cumulative: cumulative,

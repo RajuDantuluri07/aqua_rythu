@@ -59,9 +59,10 @@ SELECT
 FROM public.inventory_items ii;
 
 -- =============================================================
--- Fix 3: safe_insert_feed_log — idempotent daily feed log insert
+-- Fix 3: safe_insert_feed_log — idempotent round-level feed log insert
 -- Returns TRUE if inserted, FALSE if a log already exists for
--- the same pond + DOC + calendar date (duplicate guard).
+-- the same pond + DOC + round (duplicate guard).
+-- Each round creates its own row — no daily aggregation.
 -- =============================================================
 CREATE OR REPLACE FUNCTION public.safe_insert_feed_log(
   p_pond_id       UUID,
@@ -79,22 +80,24 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_ts   TIMESTAMP := COALESCE(p_created_at::TIMESTAMP, NOW());
-  v_date DATE      := DATE(v_ts);
 BEGIN
+  -- 🔒 FIX: Check on (pond_id, doc, round) — not DATE
+  -- This allows multiple rounds per day, each with its own row
   IF EXISTS (
     SELECT 1 FROM public.feed_logs
     WHERE pond_id = p_pond_id
       AND doc     = p_doc
-      AND DATE(created_at) = v_date
+      AND round   = p_round
   ) THEN
     RETURN FALSE;
   END IF;
 
+  -- 🔒 FIX: Include 'round' in INSERT so each round is tracked separately
   INSERT INTO public.feed_logs (
-    pond_id, doc, feed_given, base_feed,
+    pond_id, doc, round, feed_given, base_feed,
     tray_leftover, stocking_type, density, created_at
   ) VALUES (
-    p_pond_id, p_doc, p_feed_given, p_base_feed,
+    p_pond_id, p_doc, p_round, p_feed_given, p_base_feed,
     p_tray_leftover, p_stocking_type, p_density, v_ts
   );
 
@@ -104,8 +107,9 @@ $$;
 
 -- =============================================================
 -- Fix 4: complete_feed_round_with_log — atomic round completion
--- Marks feed_rounds as completed and accumulates feed_given in
--- feed_logs for the day. Returns FALSE on duplicate.
+-- Marks feed_rounds as completed and saves individual round entries
+-- in feed_logs (one row per round, not daily aggregates).
+-- Returns FALSE on duplicate round completion.
 -- =============================================================
 CREATE OR REPLACE FUNCTION public.complete_feed_round_with_log(
   p_pond_id      UUID,
@@ -120,7 +124,6 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_ts   TIMESTAMP := COALESCE(p_created_at::TIMESTAMP, NOW());
-  v_date DATE      := DATE(v_ts);
 BEGIN
   -- Idempotency: if this round is already completed, reject as duplicate
   IF EXISTS (
@@ -150,23 +153,28 @@ BEGIN
     );
   END IF;
 
-  -- Accumulate feed into feed_logs for the day (upsert)
+  -- 🔒 FIX: Save individual round entry to feed_logs (not daily aggregate)
+  -- Each round gets its own row keyed on (pond_id, doc, round)
   IF EXISTS (
     SELECT 1 FROM public.feed_logs
     WHERE pond_id = p_pond_id
       AND doc     = p_doc
-      AND DATE(created_at) = v_date
+      AND round   = p_round
   ) THEN
+    -- Update existing round entry
     UPDATE public.feed_logs
-    SET feed_given = COALESCE(feed_given, 0) + p_feed_amount
+    SET feed_given = p_feed_amount,
+        base_feed = COALESCE(p_base_feed, base_feed),
+        updated_at = NOW()
     WHERE pond_id = p_pond_id
       AND doc     = p_doc
-      AND DATE(created_at) = v_date;
+      AND round   = p_round;
   ELSE
+    -- Insert new round entry
     INSERT INTO public.feed_logs (
-      pond_id, doc, feed_given, base_feed, created_at
+      pond_id, doc, round, feed_given, base_feed, created_at
     ) VALUES (
-      p_pond_id, p_doc, p_feed_amount, p_base_feed, v_ts
+      p_pond_id, p_doc, p_round, p_feed_amount, p_base_feed, v_ts
     );
   END IF;
 

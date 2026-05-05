@@ -5,7 +5,7 @@ import '../../core/utils/logger.dart';
 
 class FarmSettings {
   final String farmType; // "Semi-Intensive" or "Intensive"
-  final int feedsPerDay; // 2, 3, or 4
+  final int feedsPerDay; // 2, 3, 4, or 5
   final double feedPrice; // ₹/kg
   final int blindFeedingDays; // Duration of blind feeding
   final int feedJumpThreshold; // % threshold for jump

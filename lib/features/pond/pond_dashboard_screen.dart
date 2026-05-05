@@ -48,6 +48,7 @@ import 'package:aqua_rythu/features/home/home_builder.dart';
 import 'package:aqua_rythu/features/home/home_view_model.dart';
 import 'package:aqua_rythu/systems/feed/seed_feed_engine.dart';
 import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card.dart';
+import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card_basic.dart';
 import 'package:aqua_rythu/features/pond/widgets/seed_type_badge.dart';
 import 'package:aqua_rythu/features/upgrade/access_control_hooks.dart';
 import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
@@ -1589,8 +1590,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 if (!isCompleted) ...[
                   const SizedBox(height: 20),
 
-                  // Seed-based feed breakdown (DOC table + tray + smart factors)
-                  FeedBreakdownCard(explanation: seedExplanation),
+                  // POND-FEED-002: Multi-Stage Feed Breakdown System
+                  // DOC 15-30 + tray data: BASIC mode (tray-only factors)
+                  // DOC > 30 OR sampling data: ADVANCED mode (full factor pipeline)
+                  if (currentDoc >= 15 && hasTrayData)
+                    BasicFeedBreakdownCard(explanation: seedExplanation)
+                  else if (currentDoc > 30 || growthLogs.isNotEmpty)
+                    FeedBreakdownCard(explanation: seedExplanation),
 
                   const SizedBox(height: 10),
 

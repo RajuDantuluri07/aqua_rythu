@@ -134,6 +134,252 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _showEditPondDialog(BuildContext context, Pond pond) {
+    final nameController = TextEditingController(text: pond.name);
+    final areaController = TextEditingController(text: pond.area.toString());
+    final seedCountController = TextEditingController(text: pond.seedCount.toString());
+    final plSizeController = TextEditingController(text: pond.plSize.toString());
+    final traysController = TextEditingController(text: pond.numTrays.toString());
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Pond Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pond Name',
+                style: AppTextStyles.smallLabel.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  hintText: 'e.g., Pond 1',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Area (Acres)',
+                style: AppTextStyles.smallLabel.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: areaController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  hintText: 'e.g., 2.5',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Seed Count',
+                style: AppTextStyles.smallLabel.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: seedCountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  hintText: 'e.g., 100000',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'PL Size (mm)',
+                style: AppTextStyles.smallLabel.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: plSizeController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  hintText: 'e.g., 15',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Number of Trays',
+                style: AppTextStyles.smallLabel.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: traysController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  hintText: 'e.g., 3',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: AppTextStyles.body,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              final area = double.tryParse(areaController.text);
+              final seedCount = int.tryParse(seedCountController.text);
+              final plSize = int.tryParse(plSizeController.text);
+              final numTrays = int.tryParse(traysController.text);
+
+              if (area == null || seedCount == null || plSize == null || numTrays == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter valid values for all fields'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              Navigator.of(dialogContext).pop();
+              try {
+                ref.read(farmProvider.notifier).updatePond(
+                  pondId: pond.id,
+                  name: nameController.text,
+                  area: area,
+                  seedCount: seedCount,
+                  plSize: plSize,
+                  stockingDate: pond.stockingDate,
+                  numTrays: numTrays,
+                );
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Pond updated successfully'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeletePondDialog(BuildContext context, Pond pond) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Pond?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${pond.name}"?',
+              style: AppTextStyles.body,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'This action cannot be undone. All data including feed logs, sampling records, and harvest history will be permanently deleted.',
+              style: AppTextStyles.secondaryText.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              try {
+                final farmState = ref.watch(farmProvider);
+                final farmId = farmState.currentFarm?.id;
+
+                if (farmId == null) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Error: Farm not found'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                  return;
+                }
+
+                await ref.read(farmProvider.notifier).deletePond(farmId, pond.id);
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${pond.name} deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Color(0xFFE53935)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Data helpers ──────────────────────────────────────────────────────────
 
   double _totalFeed(List<Pond> ponds) {
@@ -342,8 +588,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     onViewAll: () =>
                         Navigator.pushNamed(context, AppRoutes.pondDashboard),
                     onPondTap: (p) => Navigator.pushNamed(
-                        context, AppRoutes.feedSchedule,
+                        context, AppRoutes.pondDashboard,
                         arguments: p.id),
+                    onPondEdit: _showEditPondDialog,
+                    onPondDelete: _showDeletePondDialog,
                   ),
                   _UpgradeNudge(
                     onTap: () => Navigator.push(
@@ -440,12 +688,9 @@ class _AppBar extends StatelessWidget {
                       Flexible(
                         child: Text(
                           'Hi, $shortName',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                          style: AppTextStyles.h2.copyWith(
                             color: AppColors.textPrimary,
-                            letterSpacing: -0.01 * 16,
-                            height: 1,
+                            letterSpacing: -0.01 * 20,
                           ),
                         ),
                       ),
@@ -457,13 +702,11 @@ class _AppBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 6),
                   Text(
                     'DOC ${doc.toString().padLeft(2, '0')} · $pondCount ACTIVE POND${pondCount != 1 ? 'S' : ''}',
-                    style: AppTextStyles.caption.copyWith(
-                      fontSize: 11,
+                    style: AppTextStyles.secondaryText.copyWith(
                       color: AppColors.textSecondary,
-                      letterSpacing: 0.04 * 11,
                       fontFamily: 'monospace',
                     ),
                   ),
@@ -490,6 +733,7 @@ class _AppBar extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
+                      fontFamily: 'Inter',
                       color: Colors.black,
                       letterSpacing: 0.5,
                     ),
@@ -597,11 +841,8 @@ class _HeroStrip extends StatelessWidget {
             children: [
               Text(
                 "TODAY'S FEEDING STATUS",
-                style: AppTextStyles.caption.copyWith(
-                  fontSize: 10,
+                style: AppTextStyles.smallLabel.copyWith(
                   color: Colors.white.withOpacity(0.7),
-                  letterSpacing: 0.08 * 10,
-                  fontFamily: 'monospace',
                 ),
               ),
               const SizedBox(height: Spacing.sm),
@@ -613,17 +854,15 @@ class _HeroStrip extends StatelessWidget {
                     children: [
                       Text(
                         '${requiredFeed.toStringAsFixed(1)} kg required',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                        style: AppTextStyles.primaryValue.copyWith(
                           color: Colors.white,
+                          letterSpacing: -0.01 * 20,
                         ),
                       ),
                       const SizedBox(height: Spacing.xs),
                       Text(
                         '${completedFeed.toStringAsFixed(1)} kg done • ${pendingFeed.toStringAsFixed(1)} kg pending',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: AppTextStyles.secondaryText.copyWith(
                           color: Colors.white.withOpacity(0.8),
                         ),
                       ),
@@ -641,9 +880,7 @@ class _HeroStrip extends StatelessWidget {
                       ),
                       child: Text(
                         '${((completedFeed / requiredFeed) * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                        style: AppTextStyles.badge.copyWith(
                           color: Colors.white,
                         ),
                       ),
@@ -693,8 +930,7 @@ class _StatsGrid extends StatelessWidget {
                           children: [
                             Text(
                               'Sampling required to unlock biomass',
-                              style: AppTextStyles.caption.copyWith(
-                                fontSize: 12,
+                              style: AppTextStyles.secondaryText.copyWith(
                                 color: AppColors.textSecondary,
                                 height: 1.4,
                               ),
@@ -717,9 +953,11 @@ class _StatsGrid extends StatelessWidget {
                                 ),
                                 minimumSize: const Size(0, 32),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'Start Sampling',
-                                style: TextStyle(fontSize: 11),
+                                style: AppTextStyles.button.copyWith(
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -733,19 +971,15 @@ class _StatsGrid extends StatelessWidget {
                               children: [
                                 Text(
                                   biomass.toStringAsFixed(0),
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
+                                  style: AppTextStyles.primaryValue.copyWith(
                                     color: AppColors.textPrimary,
-                                    letterSpacing: -0.02 * 22,
-                                    height: 1,
+                                    letterSpacing: -0.02 * 20,
                                   ),
                                 ),
                                 const SizedBox(width: Spacing.xs),
                                 Text(
                                   'kg',
-                                  style: AppTextStyles.caption.copyWith(
-                                    fontSize: 13,
+                                  style: AppTextStyles.secondaryText.copyWith(
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -754,8 +988,7 @@ class _StatsGrid extends StatelessWidget {
                             const SizedBox(height: Spacing.xs),
                             Text(
                               'From growth samples',
-                              style: AppTextStyles.caption.copyWith(
-                                fontSize: 11,
+                              style: AppTextStyles.meta.copyWith(
                                 color: AppColors.textSecondary,
                               ),
                             ),
@@ -787,12 +1020,9 @@ class _StatsGrid extends StatelessWidget {
                                   const SizedBox(width: 5),
                                   Text(
                                     '₹—',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
+                                    style: AppTextStyles.primaryValue.copyWith(
                                       color: AppColors.textSecondary,
-                                      letterSpacing: -0.02 * 22,
-                                      height: 1,
+                                      letterSpacing: -0.02 * 20,
                                     ),
                                   ),
                                 ],
@@ -800,10 +1030,9 @@ class _StatsGrid extends StatelessWidget {
                               const SizedBox(height: Spacing.xs),
                               Text(
                                 'Unlock profit insights',
-                                style: AppTextStyles.caption.copyWith(
-                                  fontSize: 11,
+                                style: AppTextStyles.secondaryText.copyWith(
                                   color: _amber,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -814,19 +1043,15 @@ class _StatsGrid extends StatelessWidget {
                                 children: [
                                   Text(
                                     '₹—',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
+                                    style: AppTextStyles.primaryValue.copyWith(
                                       color: AppColors.textSecondary,
-                                      letterSpacing: -0.02 * 22,
-                                      height: 1,
+                                      letterSpacing: -0.02 * 20,
                                     ),
                                   ),
                                   const SizedBox(height: Spacing.xs),
                                   Text(
                                     'Set prices in Settings',
-                                    style: AppTextStyles.caption.copyWith(
-                                      fontSize: 11,
+                                    style: AppTextStyles.secondaryText.copyWith(
                                       color: _amber,
                                     ),
                                   ),
@@ -842,18 +1067,14 @@ class _StatsGrid extends StatelessWidget {
                                     children: [
                                       Text(
                                         '₹${profitL.toStringAsFixed(1)}',
-                                        style: TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w700,
+                                        style: AppTextStyles.primaryValue.copyWith(
                                           color: AppColors.textPrimary,
-                                          letterSpacing: -0.02 * 22,
-                                          height: 1,
+                                          letterSpacing: -0.02 * 20,
                                         ),
                                       ),
                                       Text(
                                         'L',
-                                        style: AppTextStyles.caption.copyWith(
-                                          fontSize: 14,
+                                        style: AppTextStyles.secondaryText.copyWith(
                                           color: AppColors.textSecondary,
                                         ),
                                       ),
@@ -864,8 +1085,7 @@ class _StatsGrid extends StatelessWidget {
                                     profitL >= 0
                                         ? 'Based on your prices'
                                         : 'Loss — review costs',
-                                    style: AppTextStyles.caption.copyWith(
-                                      fontSize: 11,
+                                    style: AppTextStyles.meta.copyWith(
                                       color: profitL >= 0
                                           ? _greenHi
                                           : Colors.red,
@@ -964,19 +1184,14 @@ class _FarmHealthCard extends StatelessWidget {
                   children: [
                     Text(
                       'FARM HEALTH STATUS',
-                      style: AppTextStyles.caption.copyWith(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                      style: AppTextStyles.smallLabel.copyWith(
                         color: AppColors.textSecondary,
-                        letterSpacing: 0.8,
-                        fontFamily: 'monospace',
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       'FCR-based score — PRO feature',
-                      style: AppTextStyles.caption.copyWith(
-                        fontSize: 12,
+                      style: AppTextStyles.secondaryText.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -989,14 +1204,10 @@ class _FarmHealthCard extends StatelessWidget {
                   color: _amberSoft,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text(
+                child: Text(
                   'UNLOCK',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                  style: AppTextStyles.smallLabel.copyWith(
                     color: _amberDeep,
-                    letterSpacing: 0.6,
-                    fontFamily: 'monospace',
                   ),
                 ),
               ),
@@ -1052,8 +1263,7 @@ class _FarmHealthCard extends StatelessWidget {
                     Center(
                       child: Text(
                         '$score',
-                        style: const TextStyle(
-                          fontSize: 11,
+                        style: AppTextStyles.badge.copyWith(
                           fontWeight: FontWeight.w700,
                           color: _greenDeep,
                         ),
@@ -1069,12 +1279,9 @@ class _FarmHealthCard extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
+                      style: AppTextStyles.primaryValue.copyWith(
                         color: _greenDeep,
-                        letterSpacing: -0.02 * 22,
-                        height: 1,
+                        letterSpacing: -0.02 * 20,
                       ),
                     ),
                     const SizedBox(height: Spacing.xs),
@@ -1084,8 +1291,7 @@ class _FarmHealthCard extends StatelessWidget {
                           : score >= 70
                               ? 'FCR is good, monitor feed closely'
                               : 'FCR needs attention — review feeding',
-                      style: AppTextStyles.caption.copyWith(
-                        fontSize: 11.5,
+                      style: AppTextStyles.secondaryText.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -1105,16 +1311,12 @@ class _FarmHealthCard extends StatelessWidget {
                 ),
                 child: Text(
                   label.toUpperCase(),
-                  style: AppTextStyles.caption.copyWith(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
+                  style: AppTextStyles.smallLabel.copyWith(
                     color: score >= 90
                         ? _greenDeep
                         : score >= 70
                             ? _amberDeep
                             : const Color(0xFF8B1A1A),
-                    letterSpacing: 0.06 * 9,
-                    fontFamily: 'monospace',
                   ),
                 ),
               ),
@@ -1199,21 +1401,16 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Text(
             title.toUpperCase(),
-            style: AppTextStyles.caption.copyWith(
+            style: AppTextStyles.sectionTitle.copyWith(
               color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.08 * 12,
             ),
           ),
           GestureDetector(
             onTap: onRight,
             child: Text(
               right,
-              style: AppTextStyles.caption.copyWith(
-                fontWeight: FontWeight.w600,
+              style: AppTextStyles.button.copyWith(
                 color: AppColors.success,
-                letterSpacing: 0.04 * 11,
-                fontFamily: 'monospace',
               ),
             ),
           ),
@@ -1361,55 +1558,32 @@ class _QuickCard extends StatelessWidget {
 
 // ─── Today's Actions ─────────────────────────────────────────────────────────
 
-class _TodaysActions extends StatelessWidget {
+class _TodaysActions extends StatefulWidget {
   final List<Pond> ponds;
   final WidgetRef ref;
 
   const _TodaysActions({required this.ponds, required this.ref});
 
   @override
+  State<_TodaysActions> createState() => _TodaysActionsState();
+}
+
+class _TodaysActionsState extends State<_TodaysActions> {
+  final Set<String> _snoozedPondIds = {};
+
+  @override
   Widget build(BuildContext context) {
     // Collect actions from all ponds and find highest-priority type
     final actions = <DailyAction>[];
-    for (final pond in ponds) {
-      actions.add(DailyActionEngine.getTodaysAction(pond));
+    for (final pond in widget.ponds) {
+      if (!_snoozedPondIds.contains(pond.id)) {
+        actions.add(DailyActionEngine.getTodaysAction(pond));
+      }
     }
 
+    // If no actions remain (all snoozed), hide section
     if (actions.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _SectionHeader(
-            title: "Today's Actions",
-            right: 'ALL DONE',
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
-            child: Container(
-              padding: const EdgeInsets.all(Spacing.lg),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.check_circle_rounded, color: _greenHi, size: 20),
-                  SizedBox(width: Spacing.sm),
-                  Text(
-                    'All caught up for today!',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _greenDeep,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
+      return const SizedBox.shrink();
     }
 
     // Find highest-priority action type
@@ -1436,6 +1610,14 @@ class _TodaysActions extends StatelessWidget {
               AppRoutes.feedSchedule,
               arguments: topAction.pond.id,
             ),
+            onSnooze: () {
+              setState(() {
+                _snoozedPondIds.add(topAction.pond.id);
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Action snoozed for 1 hour')),
+              );
+            },
           ),
         ),
       ],
@@ -1447,10 +1629,12 @@ class _ActionCard extends StatelessWidget {
   final DailyAction action;
   final int affectedPondsCount;
   final VoidCallback onStart;
+  final VoidCallback onSnooze;
 
   const _ActionCard({
     required this.action,
     required this.onStart,
+    required this.onSnooze,
     this.affectedPondsCount = 1,
   });
 
@@ -1505,10 +1689,9 @@ class _ActionCard extends StatelessWidget {
                                 Expanded(
                                   child: Text(
                                     action.title,
-                                    style: AppTextStyles.body.copyWith(
-                                      fontWeight: FontWeight.w700,
+                                    style: AppTextStyles.h2.copyWith(
                                       color: titleColor,
-                                      letterSpacing: -0.01 * 14,
+                                      letterSpacing: -0.01 * 16,
                                     ),
                                   ),
                                 ),
@@ -1523,11 +1706,8 @@ class _ActionCard extends StatelessWidget {
                                     affectedPondsCount > 1
                                         ? '$affectedPondsCount ponds'
                                         : action.pond.name,
-                                    style: AppTextStyles.caption.copyWith(
-                                      fontWeight: FontWeight.w600,
+                                    style: AppTextStyles.badge.copyWith(
                                       color: AppColors.textSecondary,
-                                      letterSpacing: 0.04 * 10,
-                                      fontFamily: 'monospace',
                                     ),
                                   ),
                                 ),
@@ -1536,10 +1716,9 @@ class _ActionCard extends StatelessWidget {
                             const SizedBox(height: Spacing.xs),
                             Text(
                               action.message,
-                              style: AppTextStyles.caption.copyWith(
+                              style: AppTextStyles.secondaryText.copyWith(
                                 color: AppColors.textSecondary,
                                 height: 1.4,
-                                fontSize: 12.5,
                               ),
                             ),
                             const SizedBox(height: Spacing.sm),
@@ -1554,11 +1733,7 @@ class _ActionCard extends StatelessWidget {
                                 _SmallBtn(
                                   label: 'Snooze',
                                   solid: false,
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Snoozed for 1 hour')),
-                                    );
-                                  },
+                                  onTap: onSnooze,
                                 ),
                                 const Spacer(),
                               ],
@@ -1603,10 +1778,11 @@ class _SmallBtn extends StatelessWidget {
         child: Center(
           child: Text(
             label,
-            style: AppTextStyles.caption.copyWith(
-              fontWeight: FontWeight.w600,
-              color: solid ? Colors.white : AppColors.textSecondary,
-            ),
+            style: solid
+                ? AppTextStyles.button.copyWith(color: Colors.white)
+                : AppTextStyles.secondaryText.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
           ),
         ),
       ),
@@ -1623,6 +1799,8 @@ class _PondsSection extends StatelessWidget {
   final bool canViewFcr;
   final VoidCallback onViewAll;
   final void Function(Pond) onPondTap;
+  final Function(BuildContext, Pond)? onPondEdit;
+  final Function(BuildContext, Pond)? onPondDelete;
 
   const _PondsSection({
     required this.ponds,
@@ -1631,6 +1809,8 @@ class _PondsSection extends StatelessWidget {
     required this.canViewFcr,
     required this.onViewAll,
     required this.onPondTap,
+    this.onPondEdit,
+    this.onPondDelete,
   });
 
   @override
@@ -1654,6 +1834,8 @@ class _PondsSection extends StatelessWidget {
                         fcr: pondFcr(p),
                         canViewFcr: canViewFcr,
                         onTap: () => onPondTap(p),
+                        onEdit: onPondEdit != null ? (ctx) => onPondEdit!(ctx, p) : null,
+                        onDelete: onPondDelete != null ? (ctx) => onPondDelete!(ctx, p) : null,
                       ),
                     ))
                 .toList(),
@@ -1670,6 +1852,8 @@ class _PondCard extends StatelessWidget {
   final double fcr;
   final bool canViewFcr;
   final VoidCallback onTap;
+  final Function(BuildContext)? onEdit;
+  final Function(BuildContext)? onDelete;
 
   const _PondCard({
     required this.pond,
@@ -1677,6 +1861,8 @@ class _PondCard extends StatelessWidget {
     required this.fcr,
     required this.canViewFcr,
     required this.onTap,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
@@ -1732,10 +1918,8 @@ class _PondCard extends StatelessWidget {
                         const SizedBox(width: Spacing.xs),
                         Text(
                           statusLabel,
-                          style: AppTextStyles.caption.copyWith(
-                            fontWeight: FontWeight.w700,
+                          style: AppTextStyles.badge.copyWith(
                             color: statusColor,
-                            letterSpacing: 0.08 * 10,
                           ),
                         ),
                       ],
@@ -1747,27 +1931,59 @@ class _PondCard extends StatelessWidget {
                       children: [
                         Text(
                           pond.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                          style: AppTextStyles.h2.copyWith(
+                            fontSize: 16,
                             color: AppColors.textPrimary,
-                            letterSpacing: -0.01 * 13,
+                            letterSpacing: -0.01 * 16,
                           ),
                         ),
                         const SizedBox(width: Spacing.sm),
                         Text(
                           '${pond.area.toStringAsFixed(1)} AC · $seedLac LAC seed',
-                          style: AppTextStyles.caption.copyWith(
+                          style: AppTextStyles.meta.copyWith(
                             color: AppColors.textSecondary,
-                            letterSpacing: 0.04 * 10,
-                            fontFamily: 'monospace',
                           ),
                         ),
                       ],
                     ),
                   ],
                 ),
-                Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary, size: 18),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit' && onEdit != null) {
+                      onEdit!(context);
+                    } else if (value == 'delete' && onDelete != null) {
+                      onDelete!(context);
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    const PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18, color: AppColors.textPrimary),
+                          SizedBox(width: 12),
+                          Text('Edit Pond'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: Color(0xFFE53935)),
+                          SizedBox(width: 12),
+                          Text(
+                            'Delete Pond',
+                            style: TextStyle(color: Color(0xFFE53935)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
+                ),
               ],
             ),
             const SizedBox(height: Spacing.sm),
@@ -1819,19 +2035,16 @@ class _PondCard extends StatelessWidget {
               children: [
                 Text(
                   'Cycle progress',
-                  style: AppTextStyles.caption.copyWith(
-                    fontSize: 9.5,
+                  style: AppTextStyles.smallLabel.copyWith(
+                    fontSize: 11,
                     color: AppColors.textSecondary,
-                    fontFamily: 'monospace',
                   ),
                 ),
                 Text(
                   '${(progress * 100).round()}% · ~$daysLeft days to harvest',
-                  style: AppTextStyles.caption.copyWith(
-                    fontSize: 9.5,
+                  style: AppTextStyles.smallLabel.copyWith(
+                    fontSize: 11,
                     color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'monospace',
                   ),
                 ),
               ],
@@ -1860,12 +2073,8 @@ class _LockedPondStat extends StatelessWidget {
           children: [
             Text(
               label.toUpperCase(),
-              style: AppTextStyles.caption.copyWith(
-                fontSize: 9.5,
+              style: AppTextStyles.smallLabel.copyWith(
                 color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.06 * 9.5,
-                fontFamily: 'monospace',
               ),
             ),
             const SizedBox(height: Spacing.xs),
@@ -1898,12 +2107,8 @@ class _PondStat extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: AppTextStyles.caption.copyWith(
-              fontSize: 9.5,
+            style: AppTextStyles.smallLabel.copyWith(
               color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.06 * 9.5,
-              fontFamily: 'monospace',
             ),
           ),
           const SizedBox(height: 2),
@@ -1913,9 +2118,8 @@ class _PondStat extends StatelessWidget {
             children: [
               Text(
                 value,
-                style: TextStyle(
+                style: AppTextStyles.secondaryValue.copyWith(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
                   color: dimmed ? AppColors.textSecondary : AppColors.textPrimary,
                   letterSpacing: -0.01 * 14,
                 ),
@@ -1924,8 +2128,7 @@ class _PondStat extends StatelessWidget {
                 const SizedBox(width: 2),
                 Text(
                   unit!,
-                  style: AppTextStyles.caption.copyWith(
-                    fontSize: 10,
+                  style: AppTextStyles.meta.copyWith(
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -2002,6 +2205,7 @@ class _UpgradeNudge extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
+                          fontFamily: 'Inter',
                           color: Colors.white,
                           letterSpacing: -0.01 * 13,
                         ),

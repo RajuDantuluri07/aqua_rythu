@@ -62,28 +62,101 @@ class AppSpacing {
 }
 
 class AppTextStyles {
-  static const TextStyle heading = TextStyle(
-    fontSize: 18,
+  // ─── Core Type Scale ──────────────────────────────────────────────────────
+
+  // H1: Page/Screen Heading
+  static const TextStyle h1 = TextStyle(
+    fontSize: 22,
     fontWeight: FontWeight.w600,
-    fontFamily: 'Roboto',
+    fontFamily: 'Inter',
   );
+
+  // H2: Section Heading
+  static const TextStyle h2 = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w600,
+    fontFamily: 'Inter',
+  );
+
+  // Primary Value: Large numbers/metrics that dominate
+  static const TextStyle primaryValue = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    fontFamily: 'Inter',
+  );
+
+  // Secondary Value: Important but not dominant
+  static const TextStyle secondaryValue = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    fontFamily: 'Inter',
+  );
+
+  // Section Title: Uppercase labels with letter spacing
+  static const TextStyle sectionTitle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    fontFamily: 'Inter',
+    letterSpacing: 0.08,
+  );
+
+  // Body: Standard text
+  static const TextStyle body = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'Inter',
+  );
+
+  // Secondary Text: De-emphasized content
+  static const TextStyle secondaryText = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'Inter',
+  );
+
+  // Meta Info: Small muted text
+  static const TextStyle meta = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'Inter',
+  );
+
+  // Button: CTA text
+  static const TextStyle button = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    fontFamily: 'Inter',
+  );
+
+  // Small Label: Uppercase meta labels
+  static const TextStyle smallLabel = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    fontFamily: 'Inter',
+    letterSpacing: 0.05,
+  );
+
+  // Badge: Small badge text
+  static const TextStyle badge = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    fontFamily: 'Inter',
+  );
+
+  // ─── Legacy Aliases (for backwards compatibility) ──────────────────────────
+
+  static const TextStyle heading = h1;
 
   static const TextStyle subheading = TextStyle(
     fontSize: 15,
     fontWeight: FontWeight.w500,
-    fontFamily: 'Roboto',
-  );
-
-  static const TextStyle body = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w400,
-    fontFamily: 'Roboto',
+    fontFamily: 'Inter',
   );
 
   static const TextStyle caption = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w300,
-    fontFamily: 'Roboto',
+    fontFamily: 'Inter',
   );
 }
 
