@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_constants.dart';
-import '../feed/master_feed_engine.dart';
+import '../feed/feed_engine_v2.dart';
+import '../../../features/pond/enums/seed_type.dart';
 import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/utils/logger.dart';
 
@@ -11,7 +12,7 @@ final Set<String> _feedPlanLocks = <String>{};
 
 /// Generates a feeding schedule for a range of DOCs (1–120).
 ///
-/// Uses [MasterFeedEngine.compute] as the single source of truth.
+/// Uses seed-type-specific DOC tables for blind-phase plan generation.
 /// No biomass, no 235 normalization, no FCR.
 /// Tray factor defaults to 1.0 during plan generation (no leftover data yet).
 Future<void> generateFeedPlan({
@@ -40,30 +41,22 @@ Future<void> generateFeedPlan({
         'Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd '
         'type=$stockingType density=$stockingCount');
 
-    final existingRows = await supabase
-        .from('feed_rounds')
-        .select('doc')
-        .eq('pond_id', pondId)
-        .gte('doc', startDoc)
-        .lte('doc', clampedEnd);
-
-    final existingDocs = <int>{
-      for (final row in existingRows) row['doc'] as int,
-    };
-
     final batch = <Map<String, dynamic>>[];
 
     for (int doc = startDoc; doc <= clampedEnd; doc++) {
-      if (existingDocs.contains(doc)) continue;
-
+      // Always generate for all docs in range - upsert will update existing or insert new
       final stockingTypeEnum = stockingType == 'hatchery'
           ? StockingType.hatchery
           : StockingType.nursery;
-      final totalFeed = MasterFeedEngine.compute(
+      final seedType = stockingTypeEnum == StockingType.hatchery
+          ? SeedType.hatcherySmall
+          : SeedType.nurseryBig;
+      final feedResult = await FeedEngineV2.getBlindFeed(
+        seedType: seedType,
         doc: doc,
-        stockingType: stockingTypeEnum,
-        density: stockingCount,
+        seedCountLakhs: stockingCount / 100000,
       );
+      final totalFeed = feedResult.totalFeedKg;
 
       final feedType = getFeedType(doc);
       final config = getFeedConfig(doc);
@@ -84,16 +77,14 @@ Future<void> generateFeedPlan({
 
     if (batch.isNotEmpty) {
       try {
-        // Upsert instead of insert so concurrent auto-recovery calls are safe.
-        // The unique constraint on (pond_id, doc, round) means the second call
-        // simply no-ops on conflicts rather than throwing a duplicate key error.
+        // Upsert to update existing rows with correct seed-type amounts or insert new
         await supabase.from('feed_rounds').upsert(batch,
-            onConflict: 'pond_id,doc,round', ignoreDuplicates: true);
+            onConflict: 'pond_id,doc,round');
         AppLogger.info('Upserted ${batch.length} feed rounds for pond $pondId '
             '(DOC $startDoc–$clampedEnd)');
       } catch (e) {
         AppLogger.error('Feed plan upsert failed for pond $pondId', e);
-        rethrow; // Re-throw to be caught by outer try block
+        rethrow;
       }
     }
   } catch (e) {

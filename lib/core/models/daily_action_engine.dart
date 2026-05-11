@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../features/farm/farm_provider.dart';
-import '../../systems/feed/seed_feed_engine.dart';
+import '../../systems/feed/feed_engine_v2.dart';
 
 // ── Action types ──────────────────────────────────────────────────────────────
 
@@ -211,13 +211,13 @@ class DailyActionEngine {
 
   static double _getFinalFeed(Pond pond) {
     final stockCount = pond.stockCount ?? pond.seedCount;
-    final baseFeed = SeedFeedEngine.getBaseFeed(
+    final feedResult = FeedEngineV2.getBlindFeedSync(
       seedType: pond.seedType,
       doc: pond.doc,
-      seedCount: pond.seedCount,
+      seedCountLakhs: pond.seedCount / 100000,
     );
     final stockFactor =
         pond.seedCount > 0 ? stockCount / pond.seedCount : 1.0;
-    return (baseFeed * stockFactor * 100).round() / 100;
+    return (feedResult.totalFeedKg * stockFactor * 100).round() / 100;
   }
 }

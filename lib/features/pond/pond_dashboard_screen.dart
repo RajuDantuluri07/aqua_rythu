@@ -46,7 +46,7 @@ import 'package:aqua_rythu/features/home/kpi_row.dart';
 import 'package:aqua_rythu/features/home/feed_trend_card.dart';
 import 'package:aqua_rythu/features/home/home_builder.dart';
 import 'package:aqua_rythu/features/home/home_view_model.dart';
-import 'package:aqua_rythu/systems/feed/seed_feed_engine.dart';
+import 'package:aqua_rythu/systems/feed/feed_engine_v2.dart';
 import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card.dart';
 import 'package:aqua_rythu/features/feed/widgets/feed_breakdown_card_basic.dart';
 import 'package:aqua_rythu/features/pond/widgets/seed_type_badge.dart';
@@ -1000,10 +1000,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         .fold(0.0,
             (sum, e) => sum + (dashboardState.roundFeedAmounts[e.key] ?? 0.0));
 
-    // TASK 1: TEMPORARY LOG - Track feed values in Pond Dashboard
-    print(
-        "🏡 POND DASHBOARD FEED: Pond=${currentPond.name}, PlannedFeed=${plannedFeed.toStringAsFixed(2)}kg, ConsumedFeed=${consumedFeed.toStringAsFixed(2)}kg, DOC=$currentDoc");
-
     // Smart Feed UI activates at DOC > 30 for PRO users only.
     // FREE users always see blind-feed UI (manual input) regardless of DOC.
     // DOC <= 30: blind feed for everyone
@@ -1044,7 +1040,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       final recentTray =
           trayLogs.where((l) => !l.isSkipped && l.trays.isNotEmpty).firstOrNull;
       if (recentTray != null) {
-        final full = recentTray.trays.where((t) => t == TrayStatus.heavy).length;
+        final full =
+            recentTray.trays.where((t) => t == TrayStatus.heavy).length;
         final empty =
             recentTray.trays.where((t) => t == TrayStatus.empty).length;
         final total = recentTray.trays.length;
@@ -1100,7 +1097,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 ? 0.0
                 : -1.0;
     final bool emptiedFast = traySignal == 'empty';
-    final seedExplanation = SeedFeedEngine.buildExplanation(
+    final seedExplanation = FeedEngineV2.buildExplanationSync(
       seedType: currentPond.seedType,
       doc: currentDoc,
       seedCount: currentPond.seedCount,
@@ -1317,7 +1314,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
                 // ── GAP 3 — Daily Performance Card (end-of-day intelligence) ──
                 // Daily Performance Card shows FCR and growth intelligence (PRO features)
-                if (isPro && completedRoundsCount >= (currentDoc <= 7 ? 2 : 4)) ...[
+                if (isPro &&
+                    completedRoundsCount >= (currentDoc <= 7 ? 2 : 4)) ...[
                   _DailyPerformanceCard(
                     fcr: pondFcr,
                     currentAbw: currentAbw,
@@ -1332,12 +1330,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               const SizedBox(height: 12),
 
               if (isCompleted)
-                _buildCompletedDashboard(context, ref, currentPond, isPro: isPro)
+                _buildCompletedDashboard(context, ref, currentPond,
+                    isPro: isPro)
               else ...[
                 if (currentDoc > 150) ...[
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
                       borderRadius: AppRadius.rs,
@@ -1467,23 +1466,23 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       const SizedBox(height: 12),
                       const SizedBox(height: 8),
                       ..._buildTimeline(
-                          today: today,
-                          currentDoc: currentDoc,
-                          pondName: currentPond.name,
-                          pondArea: currentPond.area,
-                          todayTrayMap: todayTrayMap,
-                          dashboardState: dashboardState,
-                          trayDone: trayDone,
-                          activePlansToday: activePlansToday,
-                          todaySupplementLogs: todaySupplementLogs,
-                          selectedPond: selectedPond,
-                          smartFeedOutput: null,
-                          currentPond: currentPond,
-                          isSmartFeedEnabled: isSmartFeedEnabled,
-                          isPro: isPro,
-                          valueDelta: pondValue.delta,
-                          showDoneRoundsOnly: true,
-                        ),
+                        today: today,
+                        currentDoc: currentDoc,
+                        pondName: currentPond.name,
+                        pondArea: currentPond.area,
+                        todayTrayMap: todayTrayMap,
+                        dashboardState: dashboardState,
+                        trayDone: trayDone,
+                        activePlansToday: activePlansToday,
+                        todaySupplementLogs: todaySupplementLogs,
+                        selectedPond: selectedPond,
+                        smartFeedOutput: null,
+                        currentPond: currentPond,
+                        isSmartFeedEnabled: isSmartFeedEnabled,
+                        isPro: isPro,
+                        valueDelta: pondValue.delta,
+                        showDoneRoundsOnly: true,
+                      ),
                     ],
                   ),
                 const SizedBox(height: 16),
@@ -1849,8 +1848,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                           );
                     }
                   : null,
-              // MARK AS FED: available for current round, DOC 1–150 only.
-              onMarkDone: isCurrent && currentDoc <= 150
+              // MARK AS FED: available for any undone round, DOC 1–150 only.
+              onMarkDone: !isDone &&
+                      currentDoc <= 150 &&
+                      dashboardState.roundFeedAmounts.containsKey(round)
                   ? () async {
                       // T13 — show feedback prompt on the done card after this round
                       setState(() => _lastFeedbackRound = round);
@@ -1879,8 +1880,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content:
-                                  const Text('Feed not saved. Please retry.'),
+                              content: Text(
+                                e is ArgumentError
+                                    ? (e.message?.toString() ??
+                                        'Feed amount missing. Please refresh.')
+                                    : 'Feed not saved. Please retry.',
+                              ),
                               backgroundColor: Colors.red,
                               duration: const Duration(seconds: 4),
                               action: SnackBarAction(
@@ -2610,7 +2615,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       ? () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => HarvestSummaryScreen(pondId: pond.id)))
+                              builder: (_) =>
+                                  HarvestSummaryScreen(pondId: pond.id)))
                       : () => AccessControlHooks.showUpgradeDialog(
                           context, FeatureIds.cropReport),
                   child: Container(
@@ -2625,14 +2631,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.analytics_rounded,
+                        const Icon(Icons.analytics_rounded,
                             color: Colors.orange, size: 28),
                         const SizedBox(height: 12),
-                        Text("Reports",
-                            style: const TextStyle(
+                        const Text("Reports",
+                            style: TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 14)),
                         if (!isPro)
-                          Text("PRO",
+                          const Text("PRO",
                               style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.orange,

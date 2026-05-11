@@ -412,7 +412,13 @@ class FeedService {
     throw StateError('unreachable');
   }
 
-  /// Save individual feed round for atomic updates
+  /// Save individual feed round for atomic updates.
+  ///
+  /// This uses the canonical DB transaction so `feed_rounds.status` and the
+  /// matching `feed_logs` row are written together. Writing `feed_logs`
+  /// directly has broken in production when app columns drifted from the DB
+  /// schema (for example `feed_kg`/`source` are not part of the current
+  /// feed_logs table).
   Future<void> saveFeedRound({
     required String pondId,
     required int doc,
@@ -420,23 +426,14 @@ class FeedService {
     required double amount,
     required bool isManual,
   }) async {
-    await _withRetry('saveFeedRound(pond=$pondId doc=$doc round=$round)',
-        () async {
-      // 🔒 FIX #1: Use safe insert function to prevent duplicates
-      final inserted = await supabase.rpc('safe_insert_feed_log', params: {
-        'p_pond_id': pondId,
-        'p_doc': doc,
-        'p_round': round,
-        'p_feed_given': amount,
-        'p_created_at': DateTime.now().toIso8601String(),
-      });
-
-      if (!inserted) {
-        AppLogger.warn(
-            'Feed round log skipped - duplicate entry for pond $pondId DOC $doc round $round');
-        return; // Skip silently for duplicates
-      }
-    });
+    await _completeFeedRoundWithLog(
+      pondId: pondId,
+      doc: doc,
+      round: round,
+      amount: amount,
+      baseFeed: amount,
+      createdAt: DateTime.now(),
+    );
   }
 
   int getNextRoundFromHistory(List<FeedLog> logs, int doc) {
@@ -468,14 +465,66 @@ class FeedService {
 
     final round = selectedRound ?? getNextRoundFromHistory(parsedLogs, doc);
 
-    await supabase.from('feed_logs').insert({
-      'pond_id': pondId,
-      'doc': doc,
-      'feed_kg': feedKg,
-      'feed_given': feedKg,
-      'round': round,
-      'source': isPro ? 'smart' : 'manual',
-      'created_at': DateTime.now().toIso8601String(),
+    await _completeFeedRoundWithLog(
+      pondId: pondId,
+      doc: doc,
+      round: round,
+      amount: feedKg,
+      // The RPC persists this as feed_logs.base_feed. The UI already passes the
+      // final quantity for this round here, so use it as the fallback planned
+      // value instead of writing app-only columns that do not exist in DB.
+      baseFeed: feedKg,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  Future<void> _completeFeedRoundWithLog({
+    required String pondId,
+    required int doc,
+    required int round,
+    required double amount,
+    required double baseFeed,
+    required DateTime createdAt,
+  }) async {
+    await _withRetry(
+        'completeFeedRoundWithLog(pond=$pondId doc=$doc round=$round)',
+        () async {
+      final response =
+          await supabase.rpc('complete_feed_round_with_log', params: {
+        'p_pond_id': pondId,
+        'p_doc': doc,
+        'p_round': round,
+        'p_feed_amount': amount,
+        'p_base_feed': baseFeed,
+        'p_created_at': createdAt.toIso8601String(),
+      });
+
+      // Current migrations return JSONB. Some older databases returned BOOLEAN.
+      // Supabase may also wrap scalar RPC outputs in a single-element list.
+      if (response is bool) {
+        if (!response) {
+          throw Exception(
+              'complete_feed_round_with_log returned false for pond $pondId DOC $doc round $round');
+        }
+        return;
+      }
+
+      late final Map<String, dynamic> result;
+      if (response is Map) {
+        result = Map<String, dynamic>.from(response);
+      } else if (response is List &&
+          response.isNotEmpty &&
+          response.first is Map) {
+        result = Map<String, dynamic>.from(response.first as Map);
+      } else {
+        throw Exception(
+            'Unexpected complete_feed_round_with_log response: $response');
+      }
+
+      if (result['success'] != true) {
+        throw Exception(
+            'Feed was not saved for pond $pondId DOC $doc round $round: ${result['error'] ?? 'unknown database error'}');
+      }
     });
   }
 

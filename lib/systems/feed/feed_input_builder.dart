@@ -71,7 +71,7 @@ class FeedInputBuilder {
     final pond = await _supabase
         .from('ponds')
         .select(
-          'seed_count, stocking_date, stocking_type, current_abw, latest_sample_date, anchor_feed',
+          'seed_count, stocking_date, stocking_type, current_abw, latest_sample_date, anchor_feed, area',
         )
         .eq('id', pondId)
         .maybeSingle();
@@ -105,6 +105,7 @@ class FeedInputBuilder {
       );
     }
     final sample = _latestAbwFromPondData(pond);
+    final pondArea = _validateDoubleField(pond['area'], 'area');
     final water = await _latestWaterLog(pondId);
     final trayStatuses = await _latestTrayStatuses(pondId, currentDoc);
     final leftovers = await _last3DaysLeftoverPct(pondId);
@@ -121,6 +122,15 @@ class FeedInputBuilder {
     }
     if (trayStatuses.isEmpty && currentDoc > 30) {
       dataWarnings.add('⚠️ No tray data - appetite signals unavailable');
+    }
+
+    final validationErrors = <String>[];
+    if (pondArea == null) {
+      validationErrors.add('Pond area is missing.');
+    } else if (pondArea <= 0) {
+      validationErrors.add('Pond area must be greater than 0.');
+    } else if (pondArea > 1000) {
+      validationErrors.add('Pond area appears to be in wrong unit (too large).');
     }
 
     final bool hasIncompleteData = dataWarnings.isNotEmpty;
@@ -163,8 +173,10 @@ class FeedInputBuilder {
       anchorFeed: _validateDoubleField(pond['anchor_feed'], 'anchor_feed'),
       pondId: pondId,
       feedsPerDay: 4, // Default to 4 feeds per day
+      pondArea: pondArea,
       dataWarnings: dataWarnings,
-      hasIncompleteData: hasIncompleteData,
+      hasIncompleteData: hasIncompleteData || validationErrors.isNotEmpty,
+      validationErrors: validationErrors,
     );
   }
 

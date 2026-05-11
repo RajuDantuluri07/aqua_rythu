@@ -33,10 +33,12 @@ class FeedInput {
 
   // Number of feed rounds per day for feed splitting
   final int? feedsPerDay;
+  final double? pondArea;
 
   // Data quality warnings for UI display
   final List<String> dataWarnings;
   final bool hasIncompleteData;
+  final List<String> validationErrors;
 
   FeedInput({
     required this.seedCount,
@@ -59,7 +61,9 @@ class FeedInput {
     this.anchorFeed,
     required this.pondId,
     this.feedsPerDay,
+    this.pondArea,
     this.dataWarnings = const [],
     this.hasIncompleteData = false,
+    this.validationErrors = const [],
   });
 }

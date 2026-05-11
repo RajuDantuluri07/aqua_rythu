@@ -49,6 +49,7 @@ import 'feed_base_service.dart';
 import 'tray_factor_service.dart';
 import 'env_factor_service.dart';
 import 'blind_feeding_engine.dart';
+import 'feed_intelligence_layer.dart';
 export '../../../features/feed/models/correction_result.dart';
 export '../../../features/feed/models/feed_debug_info.dart';
 export '../../../features/feed/models/orchestrator_result.dart';
@@ -425,8 +426,17 @@ class MasterFeedEngine {
     }
 
     // ── STEP 4: Final feed integration ───────────────────────────────────────
-    final rawIntegratedFeed = baseFeedKg * trayFactor * envFactor;
+    final blendResult = FeedIntelligenceLayer.blendBaseFeed(
+      curveFeed: baseFeedKg,
+      trayFactor: trayFactor,
+      envFactor: envFactor,
+      input: input,
+    );
+    final rawIntegratedFeed = blendResult.blendedFeed;
     double feed = rawIntegratedFeed;
+
+    // Ramp mode for late onboarding (DOC 31-35): gradual transition.
+    feed = FeedIntelligenceLayer.applyRampMode(doc: input.doc, feed: feed);
 
     // ── STEP 3.5: Apply Global Multiplier from Admin Panel ───────────────────
     feed = feed * feedEngineConfig.globalFeedMultiplier;
@@ -467,8 +477,14 @@ class MasterFeedEngine {
         (trayFactor == 0.0 || envFactor == 0.0 || rawIntegratedFeed == 0.0);
     final reductionReasons = _buildReductionReasons(
         trayFactor, envFactor, leftoverPercent, envReasons);
-    final confidenceLevel = buildFeedConfidenceLevel(trayFactor, envFactor);
-    final confidenceReason = buildFeedConfidenceReason(trayFactor, envFactor);
+    final confidenceDetail = FeedIntelligenceLayer.buildConfidence(
+      trayFactor: trayFactor,
+      envFactor: envFactor,
+      input: input,
+    );
+    final confidenceLevel = confidenceDetail.level;
+    final confidenceReason =
+        "${confidenceDetail.summary}. ${confidenceDetail.factorExplanations.join('; ')}";
 
     // ── STEP 5: Build minimal result objects for backward compatibility ────
     final feedStage = FeedStageResolver.resolve(
@@ -515,9 +531,13 @@ class MasterFeedEngine {
       recommendations: reductionReasons,
       decisionTrace: [
         'Base Feed: ${baseFeedKg.toStringAsFixed(3)} kg',
+        'Blend Weights: curve=${(blendResult.curveWeight * 100).toStringAsFixed(0)}%, observed=${(blendResult.observedWeight * 100).toStringAsFixed(0)}%',
         'Tray Factor: ${trayFactor.toStringAsFixed(3)}',
         'Env Factor: ${envFactor.toStringAsFixed(3)}',
         'Final Feed: ${finalFeed.toStringAsFixed(3)} kg',
+        ...confidenceDetail.factorExplanations,
+        if (input.validationErrors.isNotEmpty)
+          'Validation Errors: ${input.validationErrors.join(' | ')}',
       ],
       confidence: confidenceLevel,
       confidenceReason: confidenceReason,
@@ -540,8 +560,8 @@ class MasterFeedEngine {
     final String instruction;
     if (finalFeed == 0.0) {
       instruction = 'Do not feed';
-    } else if (input.doc == 31) {
-      // DOC 31: Smart feed activation moment
+    } else if (input.doc == 31 && !useBlindFeeding) {
+      // DOC 31: Smart feed activation moment (PRO + smart enabled only)
       instruction = 'Smart Mode Active\nFeed ${perMealFeed.toStringAsFixed(1)} kg '
           '($feedsPerDay meals/day)\nSet baseline feed in Settings if not done';
     } else {

@@ -1377,6 +1377,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   // ═══════════════════════════════════════════════════════════════════
 
   Widget _upcomingCard() {
+    final hasConfirmButton = widget.onMarkDone != null;
+    
     return Container(
       margin: const EdgeInsets.only(bottom: Spacing.sm),
       decoration: BoxDecoration(
@@ -1385,73 +1387,127 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         border: Border.all(color: AppColors.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
-        child: Row(
+        padding: const EdgeInsets.all(Spacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        "ROUND ${widget.round}",
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      if (widget.isNext) ...[
-                        const SizedBox(width: Spacing.sm),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: Spacing.sm, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            "NEXT",
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+            // Header: ROUND label + status
+            Row(
+              children: [
+                Text(
+                  "ROUND ${widget.round}",
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.2,
                   ),
-                  const SizedBox(height: Spacing.xs),
-                  Text(
-                    widget.time,
-                    style: AppTextStyles.subheading.copyWith(
-                      color: AppColors.textSecondary,
+                ),
+                if (widget.isNext) ...[
+                  const SizedBox(width: Spacing.sm),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: Spacing.sm, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      "NEXT",
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ),
                 ],
+              ],
+            ),
+            const SizedBox(height: Spacing.xs),
+            Text(
+              widget.time,
+              style: AppTextStyles.subheading.copyWith(
+                color: AppColors.textSecondary,
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            const SizedBox(height: Spacing.sm),
+            
+            // Feed quantity
+            Row(
               children: [
+                const Text(
+                  "Planned Feed:",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Text(
                   widget.finalFeedKg <= 0
                       ? "Do not feed"
                       : "${widget.finalFeedKg.toStringAsFixed(1)} kg",
-                  style: AppTextStyles.subheading.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                Text(
-                  "UPCOMING",
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.border,
-                    letterSpacing: 0.5,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _ink,
                   ),
                 ),
               ],
             ),
+            
+            // Confirm button for upcoming rounds that can be confirmed
+            if (hasConfirmButton) ...[
+              const SizedBox(height: Spacing.lg),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting
+                      ? null
+                      : () async {
+                          HapticFeedback.mediumImpact();
+                          setState(() => _isSubmitting = true);
+                          try {
+                            await widget.onMarkDone!();
+                          } finally {
+                            if (mounted) setState(() => _isSubmitting = false);
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    disabledBackgroundColor: AppColors.border,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    _isSubmitting
+                        ? "Confirming..."
+                        : "Confirm Feed",
+                    style: AppTextStyles.body.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // Status for rounds that cannot be confirmed yet
+              const SizedBox(height: Spacing.xs),
+              const Text(
+                "UPCOMING",
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: _slate400,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ],
         ),
       ),

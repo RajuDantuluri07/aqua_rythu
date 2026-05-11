@@ -53,32 +53,27 @@ class PondService {
     }
 
     try {
-      final response = await supabase.rpc(
-        'create_pond_with_feed_plan',
-        params: {
-          'p_farm_id': farmId,
-          'p_name': name,
-          'p_area': area,
-          'p_stocking_date': stockingDate.toIso8601String().split('T')[0],
-          'p_seed_count': seedCount,
-          'p_pl_size': plSize,
-          'p_num_trays': numTrays,
-          'p_user_id': user.id,
-        },
-      );
-
-      if (response == null || response is! String) {
-        throw Exception('Invalid response from pond creation');
-      }
-
-      final pondId = response;
-      AppLogger.info("Created pond: $pondId");
-
-      // Persist seed/stocking type (RPC doesn't accept this param yet)
       final resolvedSeedType = seedType ?? SeedTypeX.fromPlSize(plSize);
-      await supabase.from('ponds').update({
-        'stocking_type': resolvedSeedType.dbValue,
-      }).eq('id', pondId);
+
+      final response = await supabase
+          .from('ponds')
+          .insert({
+            'farm_id': farmId,
+            'name': name,
+            'area': area,
+            'stocking_date': stockingDate.toIso8601String().split('T')[0],
+            'seed_count': seedCount,
+            'pl_size': plSize,
+            'num_trays': numTrays,
+            'user_id': user.id,
+            'stocking_type': resolvedSeedType.dbValue,
+            'status': 'active',
+          })
+          .select('id')
+          .single();
+
+      final pondId = response['id'] as String;
+      AppLogger.info("Created pond: $pondId");
 
       // MANDATORY: Generate feed schedule immediately after pond creation
       await generateFeedSchedule(pondId);
@@ -98,7 +93,7 @@ class PondService {
     // Look up pond details needed for scaled generation
     final pond = await supabase
         .from('ponds')
-        .select('stocking_date, seed_count, area')
+        .select('stocking_date, seed_count, area, stocking_type')
         .eq('id', pondId)
         .maybeSingle();
 
@@ -106,6 +101,8 @@ class PondService {
       AppLogger.error("Cannot generate feed: pond $pondId not found");
       return;
     }
+
+    final stockingType = (pond['stocking_type'] as String?) ?? 'nursery';
 
     // Generate ONLY the blind feeding phase (DOC 1–25).
     // DOC 26–29 (transitional) are added by ensureFutureFeedExists rolling recovery.
@@ -117,6 +114,7 @@ class PondService {
       stockingCount: pond['seed_count'] ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
       stockingDate: DateTime.parse(pond['stocking_date']).toUtc(),
+      stockingType: stockingType,
     );
 
     AppLogger.info(

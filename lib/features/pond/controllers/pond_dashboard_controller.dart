@@ -7,6 +7,7 @@ import '../../../systems/planning/feed_plan_constants.dart';
 import '../../../systems/feed/feed_models.dart';
 import '../../../systems/feed/master_feed_engine.dart';
 import '../../../features/feed/enums/feed_stage.dart';
+import '../../../features/pond/enums/seed_type.dart';
 
 /// ===========================================
 /// POND VIEW STATE - Immutable state snapshot
@@ -165,7 +166,13 @@ class PondDashboardController {
         final dbRounds = await _feedService.getFeedRounds(pondId, doc);
         if (dbRounds.isEmpty) {
           didAutoRecover = await _regenerateBlindSchedule(
-              pondId, doc, pond.seedCount, pond.area, pond.stockingDate);
+              pondId,
+              doc,
+              pond.seedCount,
+              pond.area,
+              pond.stockingDate,
+              pond.seedType.dbValue,
+          );
           if (didAutoRecover) {
             final recovered = await _loadFeedRounds(pondId, doc, null);
             feedData.amounts.addAll(recovered.amounts);
@@ -443,10 +450,11 @@ class PondDashboardController {
     int seedCount,
     double pondArea,
     DateTime stockingDate,
+    String stockingType,
   ) async {
     try {
       AppLogger.info(
-          'Controller: Regenerating blind schedule for pond=$pondId DOC=$doc');
+          'Controller: Regenerating blind schedule for pond=$pondId DOC=$doc type=$stockingType');
 
       await generateFeedPlan(
         pondId: pondId,
@@ -455,6 +463,7 @@ class PondDashboardController {
         stockingCount: seedCount,
         pondArea: pondArea,
         stockingDate: stockingDate,
+        stockingType: stockingType,
       );
 
       AppLogger.info(

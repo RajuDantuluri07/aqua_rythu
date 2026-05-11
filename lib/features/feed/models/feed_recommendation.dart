@@ -1,8 +1,8 @@
-/// Feed recommendation model for smart feeding suggestions
+/// Feed recommendation model for smart feeding suggestions.
 class FeedRecommendation {
   final String pondId;
   final int doc;
-  final double baseFeedAmount;
+  final double baselineFeed;
   final double adjustedFeedAmount;
   final double adjustmentFactor;
   final List<String> factors;
@@ -12,7 +12,7 @@ class FeedRecommendation {
   const FeedRecommendation({
     required this.pondId,
     required this.doc,
-    required this.baseFeedAmount,
+    required this.baselineFeed,
     required this.adjustedFeedAmount,
     required this.adjustmentFactor,
     required this.factors,
@@ -21,11 +21,19 @@ class FeedRecommendation {
   });
 
   factory FeedRecommendation.fromJson(Map<String, dynamic> json) {
+    final adjustedFeed = (json['adjusted_feed_amount'] as num?)?.toDouble() ??
+        (json['actual_feed'] as num?)?.toDouble() ??
+        (json['recommended_feed'] as num?)?.toDouble() ??
+        0.0;
+
     return FeedRecommendation(
       pondId: json['pond_id'] as String,
       doc: json['doc'] as int,
-      baseFeedAmount: (json['base_feed_amount'] as num?)?.toDouble() ?? 0.0,
-      adjustedFeedAmount: (json['adjusted_feed_amount'] as num?)?.toDouble() ?? 0.0,
+      baselineFeed: (json['baseline_feed'] as num?)?.toDouble() ??
+          (json['base_feed'] as num?)?.toDouble() ??
+          (json['recommended_feed'] as num?)?.toDouble() ??
+          adjustedFeed,
+      adjustedFeedAmount: adjustedFeed,
       adjustmentFactor: (json['adjustment_factor'] as num?)?.toDouble() ?? 1.0,
       factors: (json['factors'] as List<dynamic>?)?.cast<String>() ?? [],
       confidence: json['confidence'] as String? ?? 'medium',
@@ -37,7 +45,7 @@ class FeedRecommendation {
     return {
       'pond_id': pondId,
       'doc': doc,
-      'base_feed_amount': baseFeedAmount,
+      'baseline_feed': baselineFeed,
       'adjusted_feed_amount': adjustedFeedAmount,
       'adjustment_factor': adjustmentFactor,
       'factors': factors,
