@@ -318,9 +318,10 @@ class FeedScheduleNotifier extends StateNotifier<FeedScheduleState> {
     try {
       await _feedService.saveFeedPlans(pondId, state.days);
 
-      // Invalidate related caches to ensure fresh data
+      // Invalidate related caches to ensure fresh feed history after save
+      // Note: Do NOT invalidate feedScheduleProvider itself — this notifier
+      // IS that provider, and invalidating it creates a circular dependency.
       _ref.invalidate(feedHistoryProvider);
-      _ref.invalidate(feedScheduleProvider);
 
       state = state.copyWith(isSaving: false);
     } catch (e) {
