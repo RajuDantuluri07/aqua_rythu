@@ -69,7 +69,7 @@ class PricingCard extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    "499",
+                    "999",
                     style: theme.textTheme.displaySmall?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -105,35 +105,6 @@ class PricingCard extends ConsumerWidget {
                 ),
               ),
 
-              const SizedBox(height: 16),
-
-              // Price increase warning
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.trending_up,
-                      color: Colors.orange.shade700,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      "Will increase to ₹999",
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.orange.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),

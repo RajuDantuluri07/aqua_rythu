@@ -151,7 +151,7 @@ class _DynamicSavingsHeroState extends ConsumerState<DynamicSavingsHero>
                 onPressed: () {
                   UpgradeMetrics.trackCtaClick(
                     source: 'loss_hero',
-                    plan: '499_crop',
+                    plan: 'full_crop',
                     insight: insight,
                   );
                   widget.onPrimaryCta?.call();

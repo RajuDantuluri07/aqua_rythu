@@ -53,10 +53,15 @@ class FeedService {
     });
   }
 
-  /// Check inventory stock and log warnings for negative/low stock
+  /// Check inventory stock before feeding.
+  ///
+  /// Throws [InsufficientStockException] if feeding [feedAmount] would push
+  /// stock negative — callers must surface this to the farmer before saving.
+  /// Non-stock errors (DB unavailable, missing farm_id) are swallowed so they
+  /// never block feeding when inventory data is simply absent.
   Future<void> _checkInventoryStock(String pondId, double feedAmount) async {
+    InsufficientStockException? stockError;
     try {
-      // Resolve farm_id from pond
       final pondRow = await supabase
           .from('ponds')
           .select('farm_id')
@@ -80,18 +85,22 @@ class FeedService {
           (feedStock['expected_stock'] as num?)?.toDouble() ?? 0.0;
       final newStock = currentStock - feedAmount;
 
-      // Log warnings
       if (newStock < 0) {
-        AppLogger.warn(
-            'NEGATIVE STOCK WARNING: Pond $pondId feeding ${feedAmount}kg will result in ${newStock.toStringAsFixed(1)}kg stock');
+        stockError = InsufficientStockException(
+          'Insufficient feed stock: need ${feedAmount.toStringAsFixed(1)} kg '
+          'but only ${currentStock.toStringAsFixed(1)} kg available. '
+          'Please restock before feeding.',
+        );
       } else if (newStock <= 20.0) {
         AppLogger.info(
-            'LOW STOCK WARNING: Pond $pondId has ${newStock.toStringAsFixed(1)}kg stock remaining after feeding');
+            'LOW STOCK WARNING: Pond $pondId has ${newStock.toStringAsFixed(1)} kg remaining after feeding');
       }
     } catch (e) {
-      // Don't fail feeding if stock check fails, just log the error
+      // DB/inventory errors must not block feeding — just log and continue.
       AppLogger.error('Failed to check inventory stock: $e');
     }
+    // Rethrow outside the catch so the block-feeding path is never swallowed.
+    if (stockError != null) throw stockError;
   }
 
   /// Fetch all logged feed entries for a pond, oldest first.
@@ -551,6 +560,13 @@ class FeedService {
 
     return amount;
   }
+}
+
+class InsufficientStockException implements Exception {
+  final String message;
+  const InsufficientStockException(this.message);
+  @override
+  String toString() => message;
 }
 
 class FeedLog {

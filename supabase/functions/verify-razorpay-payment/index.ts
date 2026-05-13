@@ -54,6 +54,30 @@ serve(async (req) => {
   )
   if (authError || !user) return new Response('Unauthorized', { status: 401 })
 
+  // ── Cross-check amount vs order (prevent tampering) ────────────────────────────
+  const { data: orderRow, error: orderError } = await supabase
+    .from('payment_orders')
+    .select('amount, plan_type')
+    .eq('order_id', order_id)
+    .maybeSingle()
+
+  if (orderError || !orderRow) {
+    return json({ error: 'Order not found. Please retry.' }, 404)
+  }
+
+  const priceInPaise = Math.round(price * 100)
+  if (orderRow.amount !== priceInPaise) {
+    await logPayment(supabase, {
+      userId: user.id,
+      orderId: order_id,
+      paymentId: payment_id,
+      status: 'failed',
+      source: 'client',
+      errorMessage: `amount_mismatch: expected ${orderRow.amount}, got ${priceInPaise}`,
+    })
+    return json({ error: 'Payment amount mismatch — request rejected.' }, 400)
+  }
+
   // ── T27: Persist payment proof in backend BEFORE creating subscription ─────────
   // Upsert so re-tries don't fail on duplicate payment_id
   await supabase.from('pending_payments').upsert(

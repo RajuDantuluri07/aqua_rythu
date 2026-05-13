@@ -4,6 +4,11 @@
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const PLAN_DURATIONS: Record<string, number> = {
+  full_crop: 120,
+  yearly_pro: 365,
+}
+
 export interface UpsertParams {
   paymentId: string
   orderId: string
@@ -35,15 +40,21 @@ export async function upsertSubscription(
   }
 
   const now = new Date().toISOString()
+  const normalizedPlanType = planType.toLowerCase()
+  const durationDays = PLAN_DURATIONS[normalizedPlanType] ?? 120
+  const expiresAt = new Date(
+    Date.now() + durationDays * 24 * 60 * 60 * 1000,
+  ).toISOString()
 
   const { data, error } = await supabase
     .from('subscriptions')
     .insert({
       user_id: userId,
-      farm_id: userId,
-      plan_type: planType.toLowerCase(),
-      start_date: now,
+      plan: 'pro',
+      plan_type: normalizedPlanType,
       status: 'active',
+      activated_at: now,
+      expires_at: expiresAt,
       price,
       currency: 'INR',
       payment_id: paymentId,

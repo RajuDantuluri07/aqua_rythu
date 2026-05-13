@@ -1,11 +1,13 @@
 import '../../tray/enums/tray_status.dart';
 import '../../pond/enums/stocking_type.dart';
+import '../../pond/enums/seed_type.dart';
 
 class FeedInput {
   final int seedCount;
   final int doc;
   final double? abw;
   final StockingType stockingType;
+  final SeedType seedType;
 
   final double feedingScore;
   final double intakePercent;
@@ -45,6 +47,7 @@ class FeedInput {
     required this.doc,
     this.abw,
     this.stockingType = StockingType.nursery,
+    required this.seedType,
     required this.feedingScore,
     required this.intakePercent,
     required this.dissolvedOxygen,

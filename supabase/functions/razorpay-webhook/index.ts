@@ -77,22 +77,28 @@ serve(async (req) => {
     source: 'webhook',
   })
 
-  // ── Resolve user_id + plan_type from payment_orders if not in notes ───────────
-  let resolvedUserId = userId
-  let planType = 'PRO'
-  let price = amount / 100
-
+  // ── Resolve user_id + plan_type from payment_orders ──────────────────────────
   const { data: order } = await supabase
     .from('payment_orders')
     .select('user_id, plan_type, amount')
     .eq('order_id', orderId)
     .maybeSingle()
 
-  if (order) {
-    resolvedUserId = order.user_id
-    planType = order.plan_type
-    price = order.amount / 100
+  if (!order) {
+    await logPayment(supabase, {
+      userId,
+      orderId,
+      paymentId,
+      status: 'failed',
+      source: 'webhook',
+      errorMessage: 'No matching payment_order — plan type cannot be resolved',
+    })
+    return new Response('OK — order not found', { status: 200 })
   }
+
+  const resolvedUserId = order.user_id
+  const planType = order.plan_type
+  const price = order.amount / 100
 
   if (!resolvedUserId) {
     await logPayment(supabase, {
@@ -101,9 +107,8 @@ serve(async (req) => {
       paymentId,
       status: 'failed',
       source: 'webhook',
-      errorMessage: 'Cannot resolve user_id — no matching payment_order',
+      errorMessage: 'Cannot resolve user_id from payment_order',
     })
-    // Return 200 to Razorpay so it stops retrying; we cannot fix this.
     return new Response('OK — unresolvable user', { status: 200 })
   }
 

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/spacing.dart';
-import '../../widgets/app_card.dart';
 import '../../systems/feed/feed_models.dart';
 import '../../features/tray/enums/tray_status.dart';
 
@@ -210,8 +209,6 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       widget.nextFeedAt != null && _timeRemaining.inMinutes < -30;
 
   static const _green = Color(0xFF16A34A);
-  static const _greenLight = Color(0xFF22C55E);
-  static const _greenBg = Color(0xFFF0FDF4);
   static const _greenBorder = Color(0xFFBBF7D0);
   static const _amber = Color(0xFFD97706);
   static const _amberBg = Color(0xFFFFFBEB);
@@ -220,7 +217,6 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   static const _blue = Color(0xFF2563EB);
   static const _purple = Color(0xFF7C3AED);
   static const _slate100 = Color(0xFFF1F5F9);
-  static const _slate200 = Color(0xFFE2E8F0);
   static const _slate300 = Color(0xFFCBD5E1);
   static const _slate400 = Color(0xFF94A3B8);
   static const _slate500 = Color(0xFF64748B);
@@ -360,7 +356,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
           // ── Tray results: 4 columns ──────────────────────────────────
           if (hasTray) ...[
-            Divider(height: 1, color: AppColors.border),
+            const Divider(height: 1, color: AppColors.border),
             Padding(
               padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.lg, Spacing.sm),
               child: Row(
@@ -400,7 +396,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
           // ── Supplements used ──────────────────────────────────────────
           if (hasSupplements) ...[
-            Divider(height: 1, color: AppColors.border),
+            const Divider(height: 1, color: AppColors.border),
             Padding(
               padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.lg, Spacing.md),
               child: Column(
@@ -960,7 +956,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+              const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
               const SizedBox(width: Spacing.xs),
               Text(
                 isOver ? "Overfeeding" : "Underfeeding",
@@ -1110,7 +1106,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 border: Border.all(color: AppColors.success.withOpacity(0.3)),
               ),
               child:
-                  Icon(Icons.thumb_up_rounded, size: 16, color: AppColors.success),
+                  const Icon(Icons.thumb_up_rounded, size: 16, color: AppColors.success),
             ),
           ),
           const SizedBox(width: Spacing.sm),
@@ -1127,7 +1123,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 border: Border.all(color: AppColors.danger.withOpacity(0.3)),
               ),
               child:
-                  Icon(Icons.thumb_down_rounded, size: 16, color: AppColors.danger),
+                  const Icon(Icons.thumb_down_rounded, size: 16, color: AppColors.danger),
             ),
           ),
         ],
@@ -1754,7 +1750,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
           style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
         ),
         style: OutlinedButton.styleFrom(
-          side: BorderSide(color: AppColors.warning, width: 1.5),
+          side: const BorderSide(color: AppColors.warning, width: 1.5),
           foregroundColor: AppColors.warning,
           padding: const EdgeInsets.symmetric(vertical: Spacing.md),
           shape:

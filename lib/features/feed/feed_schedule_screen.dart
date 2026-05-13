@@ -359,10 +359,6 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     final totalFeed = feedScheduleState.days
         .fold(0.0, (sum, day) => sum + day.rounds.fold(0.0, (s, r) => s + r));
 
-    // TASK 1: TEMPORARY LOG - Track feed values in Feed Schedule
-    print(
-        "📅 FEED SCHEDULE: Pond=${widget.pondId}, TotalFeed=${totalFeed.toStringAsFixed(2)}kg, Days=${feedScheduleState.days.length}");
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

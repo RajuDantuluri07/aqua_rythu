@@ -13,26 +13,24 @@ enum SubscriptionStatus {
 class Subscription {
   final String id;
   final String userId;
-  final String farmId;
   final PlanType planType;
-  final DateTime startDate;
-  final DateTime? endDate;
+  final DateTime? activatedAt;
+  final DateTime? expiresAt;
   final SubscriptionStatus status;
-  final double price;
-  final String currency;
+  final String? paymentStatus;
+  final String? razorpaySubscriptionId;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
   Subscription({
     required this.id,
     required this.userId,
-    required this.farmId,
     required this.planType,
-    required this.startDate,
-    this.endDate,
+    this.activatedAt,
+    this.expiresAt,
     required this.status,
-    required this.price,
-    this.currency = 'INR',
+    this.paymentStatus,
+    this.razorpaySubscriptionId,
     required this.createdAt,
     this.updatedAt,
   });
@@ -41,19 +39,18 @@ class Subscription {
     return Subscription(
       id: json['id'] as String,
       userId: json['user_id'] as String,
-      farmId: json['farm_id'] as String,
       planType: PlanType.values.firstWhere(
-        (e) => e.name.toLowerCase() == (json['plan_type'] as String?)?.toLowerCase(),
+        (e) => e.name.toLowerCase() == (json['plan'] as String?)?.toLowerCase(),
         orElse: () => PlanType.FREE,
       ),
-      startDate: DateTime.parse(json['start_date'] as String),
-      endDate: json['end_date'] != null ? DateTime.parse(json['end_date'] as String) : null,
+      activatedAt: json['activated_at'] != null ? DateTime.parse(json['activated_at'] as String) : null,
+      expiresAt: json['expires_at'] != null ? DateTime.parse(json['expires_at'] as String) : null,
       status: SubscriptionStatus.values.firstWhere(
         (e) => e.name.toLowerCase() == (json['status'] as String?)?.toLowerCase(),
         orElse: () => SubscriptionStatus.PENDING,
       ),
-      price: (json['price'] as num?)?.toDouble() ?? 0.0,
-      currency: json['currency'] as String? ?? 'INR',
+      paymentStatus: json['payment_status'] as String?,
+      razorpaySubscriptionId: json['razorpay_subscription_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : null,
     );
@@ -63,46 +60,43 @@ class Subscription {
     return {
       'id': id,
       'user_id': userId,
-      'farm_id': farmId,
-      'plan_type': planType.name,
-      'start_date': startDate.toIso8601String(),
-      'end_date': endDate?.toIso8601String(),
+      'plan': planType.name.toLowerCase(),
+      'activated_at': activatedAt?.toIso8601String(),
+      'expires_at': expiresAt?.toIso8601String(),
       'status': status.name.toLowerCase(),
-      'price': price,
-      'currency': currency,
+      'payment_status': paymentStatus,
+      'razorpay_subscription_id': razorpaySubscriptionId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
   bool get isActive => status == SubscriptionStatus.ACTIVE &&
-      (endDate == null || endDate!.isAfter(DateTime.now()));
+      (expiresAt == null || expiresAt!.isAfter(DateTime.now()));
 
   bool get isPro => planType == PlanType.PRO && isActive;
 
   Subscription copyWith({
     String? id,
     String? userId,
-    String? farmId,
     PlanType? planType,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? activatedAt,
+    DateTime? expiresAt,
     SubscriptionStatus? status,
-    double? price,
-    String? currency,
+    String? paymentStatus,
+    String? razorpaySubscriptionId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
     return Subscription(
       id: id ?? this.id,
       userId: userId ?? this.userId,
-      farmId: farmId ?? this.farmId,
       planType: planType ?? this.planType,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      activatedAt: activatedAt ?? this.activatedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
       status: status ?? this.status,
-      price: price ?? this.price,
-      currency: currency ?? this.currency,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      razorpaySubscriptionId: razorpaySubscriptionId ?? this.razorpaySubscriptionId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

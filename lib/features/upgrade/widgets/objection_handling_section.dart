@@ -35,7 +35,7 @@ class _ObjectionHandlingSectionState extends State<ObjectionHandlingSection> {
     {
       'question': 'Is payment one-time?',
       'answer':
-          'The ₹499 plan is one-time per crop. The ₹999 plan gives yearly access for farmers running multiple crops.',
+          'The ₹999 plan is one-time per crop. The ₹2999 plan gives yearly access for farmers running multiple crops.',
     },
   ];
 

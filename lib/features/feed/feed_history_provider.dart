@@ -4,6 +4,7 @@ import '../../features/tray/enums/tray_status.dart';
 import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../../core/utils/logger.dart';
 import '../../systems/feed/blind_feeding_engine.dart';
+import '../pond/controllers/pond_dashboard_controller.dart';
 
 class FeedHistoryLog {
   final DateTime date;
@@ -87,17 +88,16 @@ class FeedHistoryNotifier
         log.date.month == today.month &&
         log.date.day == today.day);
 
+    // ── Build updated log with placeholder cumulative (filled in after DB write)
     if (todayIdx != -1) {
       final existing = pondLogs[todayIdx];
       final newRounds = List<double>.from(existing.rounds);
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
-      // Use DOC-based meal logic for blind phase, or farm settings for smart phase
       final feedsPerDay = _getMealsPerDay(doc);
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
           : List<double>.filled(feedsPerDay, 0.0, growable: true);
 
-      // Expand rounds if needed (using feedsPerDay instead of hardcoded 4)
       if (newRounds.length < round) {
         final diff = round - newRounds.length;
         newRounds.addAll(List.filled(diff, 0.0));
@@ -109,9 +109,6 @@ class FeedHistoryNotifier
         newSmartFeeds[round - 1] = smartFeedQty;
       }
 
-      // 🔒 FIX #5: Calculate cumulative from database instead of index-based
-      final cumulativeFromDB = await _getCumulativeFeedFromDB(pondId, today);
-
       pondLogs[todayIdx] = FeedHistoryLog(
         date: existing.date,
         doc: doc,
@@ -120,10 +117,9 @@ class FeedHistoryNotifier
             newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
         trayStatuses: newTrays,
         expected: expected,
-        cumulative: cumulativeFromDB,
+        cumulative: existing.cumulative, // placeholder — updated after DB write
       );
     } else {
-      // Create new today log
       final feedsPerDay = _getMealsPerDay(doc);
       final newRounds = List.filled(feedsPerDay, 0.0);
       newRounds[round - 1] = qty;
@@ -132,9 +128,6 @@ class FeedHistoryNotifier
       if (smartFeedQty != null) {
         newSmartFeeds[round - 1] = smartFeedQty;
       }
-
-      // 🔒 FIX #5: Calculate cumulative from database for new log too
-      final cumulativeFromDB = await _getCumulativeFeedFromDB(pondId, today);
 
       pondLogs.insert(
           0,
@@ -146,21 +139,35 @@ class FeedHistoryNotifier
                 newSmartFeeds.any((v) => v > 0) ? newSmartFeeds : null,
             trayStatuses: newTrays,
             expected: expected,
-            cumulative: cumulativeFromDB,
+            cumulative: 0.0, // placeholder — updated after DB write
           ));
     }
 
-    // ✅ Persist to database FIRST to ensure data consistency
-    final logToSave = pondLogs[todayIdx != -1 ? todayIdx : 0];
-    await _persistFeedLog(
-      pondId: pondId,
-      log: logToSave,
+    // ── BUG #4 FIX: Persist to DB FIRST, then fetch cumulative ──────────────
+    // Fetching cumulative before the write returns a stale value that doesn't
+    // include the round we're about to save, causing the display to jump backward
+    // when multiple rounds are logged in quick succession.
+    final logIdx = todayIdx != -1 ? todayIdx : 0;
+    await _persistFeedLog(pondId: pondId, log: pondLogs[logIdx]);
+
+    // Now the DB includes the current write — cumulative is accurate.
+    final cumulativeFromDB = await _getCumulativeFeedFromDB(pondId, today);
+
+    final savedLog = pondLogs[logIdx];
+    pondLogs[logIdx] = FeedHistoryLog(
+      date: savedLog.date,
+      doc: savedLog.doc,
+      rounds: savedLog.rounds,
+      smartFeedRecommendations: savedLog.smartFeedRecommendations,
+      trayStatuses: savedLog.trayStatuses,
+      expected: savedLog.expected,
+      cumulative: cumulativeFromDB,
     );
 
-    // ✅ Update local state AFTER DB write succeeds
     state = Map<String, List<FeedHistoryLog>>.from(state)..[pondId] = pondLogs;
 
-    // 🔄 State update triggers automatic refresh of dependent providers
+    // ── BUG #5 FIX: Invalidate controller cache so next load re-runs engine ──
+    pondDashboardController.invalidate(pondId);
   }
 
   /// 🔒 FIX #5: Get cumulative feed from database (replaces index-based calculation)
@@ -210,7 +217,8 @@ class FeedHistoryNotifier
           isManual: false,
         );
       }
-      AppLogger.info('Feed log saved: pond $pondId DOC ${log.doc} (${log.rounds.length} rounds)');
+      AppLogger.info(
+          'Feed log saved: pond $pondId DOC ${log.doc} (${log.rounds.length} rounds)');
     } catch (e) {
       AppLogger.error('Failed to save feed log to DB', e);
       // Data is still in local state, can retry later
@@ -244,6 +252,7 @@ class FeedHistoryNotifier
       final existing = pondLogs[todayIdx];
       final newTrays = List<TrayStatus?>.from(existing.trayStatuses);
       // Use DOC-based meal logic for blind phase, or default 4 for smart phase
+      // For now, use default meal logic until we can get pond seedType
       final feedsPerDay = _getMealsPerDay(existing.doc);
       final newSmartFeeds = existing.smartFeedRecommendations != null
           ? List<double>.from(existing.smartFeedRecommendations!)
@@ -368,11 +377,10 @@ class FeedHistoryNotifier
 
   /// Get meals per day based on DOC (blind phase) or default (smart phase)
   int _getMealsPerDay(int doc) {
+    if (doc < 1) return 2; // Guard for invalid/zero DOC
     if (doc <= 30) {
-      // Blind phase: use DOC-based meal logic
       return BlindFeedingEngine.getMealsPerDay(doc);
     } else {
-      // Smart phase: use default 4 meals (farm settings override handled elsewhere)
       return 4;
     }
   }

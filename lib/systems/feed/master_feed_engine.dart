@@ -243,7 +243,9 @@ class MasterFeedEngine {
             .clamp(kAbsoluteMaxFeed, 500.0);
     final_ = final_.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
     if (final_.isNaN || final_.isInfinite) {
-      final_ = adjustedBase.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
+      final double safeAdjustedBase =
+          (adjustedBase.isNaN || adjustedBase.isInfinite) ? 0.0 : adjustedBase;
+      final_ = safeAdjustedBase.clamp(kAbsoluteMinFeed, effectiveMaxFeed);
     }
 
     final bool clamped = (adjustedBase - final_).abs() > 0.001;
@@ -378,6 +380,7 @@ class MasterFeedEngine {
       input.doc,
       input.seedCount,
       previousDayFeedKg: input.actualFeedYesterday,
+      seedType: input.seedType,
     );
     final currentTrayLeftover =
         _trayFactorService.getLeftoverPercentFromStatuses(input.trayStatuses);
@@ -426,17 +429,20 @@ class MasterFeedEngine {
     }
 
     // ── STEP 4: Final feed integration ───────────────────────────────────────
+    // Apply ramp mode to the base curve BEFORE blending with tray/env factors
+    // so that DOC 31-35 transition doesn't compound with stress corrections
+    // (which would produce an aggressive double-cut and trigger false stop-feed).
+    final rampedBaseFeedKg =
+        FeedIntelligenceLayer.applyRampMode(doc: input.doc, feed: baseFeedKg);
+
     final blendResult = FeedIntelligenceLayer.blendBaseFeed(
-      curveFeed: baseFeedKg,
+      curveFeed: rampedBaseFeedKg,
       trayFactor: trayFactor,
       envFactor: envFactor,
       input: input,
     );
     final rawIntegratedFeed = blendResult.blendedFeed;
     double feed = rawIntegratedFeed;
-
-    // Ramp mode for late onboarding (DOC 31-35): gradual transition.
-    feed = FeedIntelligenceLayer.applyRampMode(doc: input.doc, feed: feed);
 
     // ── STEP 3.5: Apply Global Multiplier from Admin Panel ───────────────────
     feed = feed * feedEngineConfig.globalFeedMultiplier;
@@ -549,7 +555,8 @@ class MasterFeedEngine {
     final int feedsPerDay;
     if (input.doc <= 30) {
       // Blind phase: DOC-based meal count (2, 3, or 4)
-      feedsPerDay = BlindFeedingEngine.getMealsPerDay(input.doc);
+      feedsPerDay = BlindFeedingEngine.getMealsPerDay(input.doc,
+          seedType: input.seedType);
     } else {
       // Smart phase: allow farm settings override, default to 4
       feedsPerDay = input.feedsPerDay ?? 4;
@@ -562,10 +569,12 @@ class MasterFeedEngine {
       instruction = 'Do not feed';
     } else if (input.doc == 31 && !useBlindFeeding) {
       // DOC 31: Smart feed activation moment (PRO + smart enabled only)
-      instruction = 'Smart Mode Active\nFeed ${perMealFeed.toStringAsFixed(1)} kg '
+      instruction =
+          'Smart Mode Active\nFeed ${perMealFeed.toStringAsFixed(1)} kg '
           '($feedsPerDay meals/day)\nSet baseline feed in Settings if not done';
     } else {
-      instruction = 'Feed ${perMealFeed.toStringAsFixed(1)} kg ($feedsPerDay meals/day)';
+      instruction =
+          'Feed ${perMealFeed.toStringAsFixed(1)} kg ($feedsPerDay meals/day)';
     }
 
     final recommendation = FeedRecommendation(

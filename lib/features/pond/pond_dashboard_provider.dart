@@ -457,11 +457,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // Use actual quantity if provided, otherwise use the final (possibly edited) amount.
       final qty = actualQty ?? state.roundFinalFeedAmounts[round] ?? plannedQty;
 
-      if (qty <= 0) {
+      if (qty < 0) {
         throw ArgumentError(
             'Invalid feed quantity $qty for round $round in pond $pondId');
       }
 
+      // Allow zero-kg rounds to be confirmed as "Do not feed".
+      // This is a valid action for rounds where the engine recommends no feed.
       // REMOVED: in-memory duplicate check on `state.roundFeedStatus`.
       // That check was causing silent failures: if DB had a round marked
       // 'completed' in feed_rounds but NO matching feed_log (stale/corrupt state),

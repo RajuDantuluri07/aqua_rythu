@@ -82,12 +82,14 @@ class BlindFeedingEngine {
     }
 
     // ── NURSERY DOC 10 BOUNDARY ────────────────────────────────────────────
-    if (seedType.toLowerCase() == 'nursery' && safeDOC > 10) {
+    // When nursery DOC > 10, transition to hatchery (regular) feed with warning
+    final bool isNurseryTransition = seedType.toLowerCase() == 'nursery' && safeDOC > 10;
+    if (isNurseryTransition) {
       AppLogger.warn(
         '[BlindFeedingEngine] Nursery DOC > 10 detected ($safeDOC). '
-        'Nursery phase ends at DOC 10. Switch to regular pond mode.',
+        'Nursery phase ends at DOC 10. Transitioning to regular feed mode.',
       );
-      return 0.0;
+      // Fall through to use hatchery calculation instead of returning 0.0
     }
 
     // ── CALCULATION ────────────────────────────────────────────────────────

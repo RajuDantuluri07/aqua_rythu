@@ -7,6 +7,11 @@ const RAZORPAY_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+const PLAN_AMOUNTS: Record<string, number> = {
+  full_crop: 99900,
+  yearly_pro: 299900,
+}
+
 serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
@@ -29,7 +34,27 @@ serve(async (req) => {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const { amount, currency = 'INR', receipt, plan_type = 'PRO' } = await req.json()
+  const { amount, currency = 'INR', receipt, plan_type = '' } = await req.json()
+
+  // Validate plan type
+  const normalizedPlan = (plan_type ?? '').toLowerCase()
+  const expectedAmount = PLAN_AMOUNTS[normalizedPlan]
+
+  if (!expectedAmount) {
+    return new Response(
+      JSON.stringify({ error: 'Invalid plan type. Must be full_crop or yearly_pro.' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  if (amount !== expectedAmount) {
+    return new Response(
+      JSON.stringify({
+        error: `Amount mismatch. Expected ${expectedAmount} paise for ${normalizedPlan}.`,
+      }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
 
   // Create order with Razorpay
   const credentials = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
@@ -57,7 +82,7 @@ serve(async (req) => {
     user_id: user.id,
     status: 'created',
     amount,
-    plan_type: plan_type.toLowerCase(),
+    plan_type: normalizedPlan,
     created_at: new Date().toISOString(),
   })
 

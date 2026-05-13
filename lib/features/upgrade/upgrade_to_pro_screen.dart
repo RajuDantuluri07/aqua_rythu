@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:aqua_rythu/core/models/subscription_model.dart';
+import 'package:aqua_rythu/core/models/subscription_plans.dart';
 import 'subscription_provider.dart';
 import 'upgrade_insight_provider.dart';
 
@@ -50,6 +50,44 @@ class _State extends ConsumerState<UpgradeToProScreen> {
     });
 
     final sub = ref.watch(subscriptionProvider);
+
+    // Show shimmer/loading state while subscription is hydrating from backend
+    if (!sub.isHydrated) {
+      return Scaffold(
+        backgroundColor: _screenBg,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _topBar(sub),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Shimmer loading state
+                      const SizedBox(height: 24),
+                      Container(
+                        height: 24,
+                        width: 200,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      _shimmerCard(),
+                      const SizedBox(height: 20),
+                      _shimmerCard(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: _screenBg,
@@ -193,6 +231,48 @@ class _State extends ConsumerState<UpgradeToProScreen> {
       ),
     );
     if (found) Navigator.of(context).pop();
+  }
+
+  Widget _shimmerCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 20,
+            width: 100,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 16,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 16,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _basicCard() {
@@ -467,7 +547,7 @@ class _State extends ConsumerState<UpgradeToProScreen> {
   }
 
   Widget _payButton(SubscriptionState sub, bool isPerCrop) {
-    const plan = PlanType.PRO;
+    final plan = isPerCrop ? SubscriptionPlans.fullCrop : SubscriptionPlans.yearly;
     final busy = sub.isLoading;
 
     final label = switch (sub.paymentPhase) {
@@ -486,7 +566,7 @@ class _State extends ConsumerState<UpgradeToProScreen> {
             : () {
                 UpgradeMetrics.trackCtaClick(
                   source: 'upgrade_screen',
-                  plan: isPerCrop ? '999_crop' : '2999_year',
+                  plan: isPerCrop ? 'full_crop' : 'yearly_pro',
                   insight: UpgradeLossInsight.simulated(),
                 );
                 ref

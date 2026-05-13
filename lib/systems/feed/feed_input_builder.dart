@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/pond/enums/stocking_type.dart';
+import '../../../features/pond/enums/seed_type.dart';
 import '../../../core/utils/doc_utils.dart';
 import '../../../core/utils/time_provider.dart';
 import '../../../core/utils/logger.dart';
@@ -130,7 +131,8 @@ class FeedInputBuilder {
     } else if (pondArea <= 0) {
       validationErrors.add('Pond area must be greater than 0.');
     } else if (pondArea > 1000) {
-      validationErrors.add('Pond area appears to be in wrong unit (too large).');
+      validationErrors
+          .add('Pond area appears to be in wrong unit (too large).');
     }
 
     final bool hasIncompleteData = dataWarnings.isNotEmpty;
@@ -146,17 +148,26 @@ class FeedInputBuilder {
       abw: sample.abw,
     );
 
+    final stockingTypeStr =
+        _validateStringField(pond['stocking_type'], 'stocking_type', 'nursery');
+    final seedType = SeedTypeX.fromDb(stockingTypeStr);
+
+    // Nursery transition warning
+    if (stockingTypeStr.toLowerCase() == 'nursery' && currentDoc > 10) {
+      dataWarnings.add(
+        '⚠️ Nursery phase complete (DOC > 10). Pond has transitioned to regular feeding mode.'
+      );
+    }
+
     return FeedInput(
       seedCount: seedCount,
       doc: currentDoc,
       abw: sample.abw,
       stockingType: StockingType.values.firstWhere(
-        (type) =>
-            type.name ==
-            _validateStringField(
-                pond['stocking_type'], 'stocking_type', 'nursery'),
+        (type) => type.name == stockingTypeStr,
         orElse: () => StockingType.nursery,
       ),
+      seedType: seedType,
       feedingScore: 3.0,
       intakePercent: 85.0,
       dissolvedOxygen: water.dissolvedOxygen,
@@ -261,7 +272,7 @@ class FeedInputBuilder {
           .select('dissolved_oxygen, ammonia, temperature, ph, created_at')
           .eq('pond_id', pondId)
           .order('created_at', ascending: false)
-          .limit(1);
+          .limit(2);
 
       if (rows.isEmpty) {
         AppLogger.warn(
@@ -278,13 +289,14 @@ class FeedInputBuilder {
         );
       }
 
-      final row = rows.first;
+      final latestRow = rows.first;
+      final previousRow = rows.length > 1 ? rows[1] : null;
 
       // Discard readings older than 48 hours. A stale low-DO reading blocks
       // feeding long after conditions recover; a stale safe reading gives false
       // confidence when current water is actually critical.
       final createdAt = DateTime.tryParse(
-          _validateStringField(row['created_at'], 'created_at', ''));
+          _validateStringField(latestRow['created_at'], 'created_at', ''));
       if (createdAt != null) {
         final ageHours = TimeProvider.now().difference(createdAt).inHours;
         if (ageHours > 48) {
@@ -305,7 +317,7 @@ class FeedInputBuilder {
 
       // Validate critical DO reading - if missing, use safe default but warn
       final doValue =
-          _validateDoubleField(row['dissolved_oxygen'], 'dissolved_oxygen');
+          _validateDoubleField(latestRow['dissolved_oxygen'], 'dissolved_oxygen');
       if (doValue == null) {
         AppLogger.warn(
           '[FeedInputBuilder] MISSING DO reading for pond $pondId. '
@@ -313,13 +325,23 @@ class FeedInputBuilder {
         );
       }
 
+      // Calculate pH change from latest vs previous water log
+      double calculatedPhChange = safeDefaults.phChange;
+      final latestPh = _validateDoubleField(latestRow['ph'], 'ph');
+      if (latestPh != null && previousRow != null) {
+        final previousPh = _validateDoubleField(previousRow['ph'], 'ph');
+        if (previousPh != null) {
+          calculatedPhChange = latestPh - previousPh;
+        }
+      }
+
       return (
         dissolvedOxygen: doValue ?? safeDefaults.dissolvedOxygen,
-        ammonia: _validateDoubleField(row['ammonia'], 'ammonia') ??
+        ammonia: _validateDoubleField(latestRow['ammonia'], 'ammonia') ??
             safeDefaults.ammonia,
-        temperature: _validateDoubleField(row['temperature'], 'temperature') ??
+        temperature: _validateDoubleField(latestRow['temperature'], 'temperature') ??
             safeDefaults.temperature,
-        phChange: 0.0,
+        phChange: calculatedPhChange,
         hasValidData: doValue != null,
         fallbackReason: doValue == null ? 'Missing DO reading' : '',
       );

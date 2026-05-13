@@ -515,7 +515,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           elevation: 0,
         ),
         bottomNavigationBar: const AppBottomBar(currentIndex: 0),
-        body: Center(
+        body: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -695,7 +695,7 @@ class _AppBar extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: Spacing.xs),
-                      Icon(
+                      const Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 18,
                         color: AppColors.textSecondary,
@@ -763,7 +763,7 @@ class _BellButton extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          Center(
+          const Center(
             child: Icon(Icons.notifications_outlined, color: AppColors.textSecondary, size: 18),
           ),
           Positioned(
@@ -1015,7 +1015,7 @@ class _StatsGrid extends StatelessWidget {
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.lock_outline_rounded,
+                                  const Icon(Icons.lock_outline_rounded,
                                       size: 15, color: AppColors.textSecondary),
                                   const SizedBox(width: 5),
                                   Text(
@@ -1982,14 +1982,14 @@ class _PondCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  child: Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
+                  child: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
                 ),
               ],
             ),
             const SizedBox(height: Spacing.sm),
             Container(
               padding: const EdgeInsets.only(top: Spacing.sm),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: AppColors.border, style: BorderStyle.solid)),
               ),
               child: Row(

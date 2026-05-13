@@ -17,7 +17,6 @@ class SubscriptionService {
           .from(_table)
           .select()
           .eq('user_id', user.id)
-          .eq('status', 'active')
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
@@ -25,8 +24,8 @@ class SubscriptionService {
       if (response == null) return null;
 
       final sub = Subscription.fromJson(response);
-      // T23: Client-side expiry guard — treats end_date < now as expired
-      // even if the DB row hasn't been swept yet by expire_subscriptions().
+      // T23: Client-side expiry guard — treats expires_at < now as expired
+      // even if the DB row hasn't been swept yet.
       if (!sub.isActive) return null;
       return sub;
     } catch (e) {
@@ -36,9 +35,7 @@ class SubscriptionService {
 
   // Create new subscription
   Future<Subscription> createSubscription({
-    required String farmId,
     required PlanType planType,
-    required double price,
   }) async {
     try {
       final user = _client.auth.currentUser;
@@ -47,13 +44,13 @@ class SubscriptionService {
       final now = DateTime.now();
       final subscriptionData = {
         'user_id': user.id,
-        'farm_id': farmId,
-        'plan_type': planType.name,
-        'start_date': now.toIso8601String(),
+        'plan': planType.name.toLowerCase(),
         'status': 'active',
-        'price': price,
-        'currency': 'INR',
+        'activated_at': now.toIso8601String(),
+        'expires_at': now.add(const Duration(days: 30)).toIso8601String(),
+        'payment_status': 'verified',
         'created_at': now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
       };
 
       final response = await _client.from(_table).insert(subscriptionData).select().single();
@@ -111,18 +108,18 @@ class SubscriptionService {
     }
   }
 
-  // Check if user has active PRO subscription for specific farm
-  Future<bool> hasActiveProSubscription(String farmId) async {
+  // Check if user has active PRO subscription
+  Future<bool> hasActiveProSubscription() async {
     try {
       final subscription = await getCurrentSubscription();
-      return subscription?.isPro == true && subscription?.farmId == farmId;
+      return subscription?.isPro == true;
     } catch (e) {
       return false;
     }
   }
 
   // Validate subscription access for feature
-  Future<bool> canAccessFeature(String featureId, {String? farmId}) async {
+  Future<bool> canAccessFeature(String featureId) async {
     try {
       final subscription = await getCurrentSubscription();
       if (subscription == null || !subscription.isActive) {
@@ -135,7 +132,7 @@ class SubscriptionService {
       if (!feature.isProFeature) return true; // Free features always allowed
 
       // PRO features require active PRO subscription
-      return subscription.isPro && (farmId == null || subscription.farmId == farmId);
+      return subscription.isPro;
     } catch (e) {
       return false;
     }
@@ -149,7 +146,7 @@ class SubscriptionService {
 
       final response = await _client
           .from(_table)
-          .select('plan_type, status, price, created_at')
+          .select('plan, status, expires_at, created_at')
           .eq('user_id', user.id);
 
       final subscriptions = (response as List)
@@ -157,14 +154,12 @@ class SubscriptionService {
           .toList();
 
       final activeSubscriptions = subscriptions.where((s) => s.isActive).toList();
-      final totalSpent = subscriptions.fold<double>(0.0, (sum, s) => sum + s.price);
 
       return {
         'total_subscriptions': subscriptions.length,
         'active_subscriptions': activeSubscriptions.length,
-        'total_spent': totalSpent,
-        'current_plan': activeSubscriptions.isNotEmpty 
-            ? activeSubscriptions.first.planType.name 
+        'current_plan': activeSubscriptions.isNotEmpty
+            ? activeSubscriptions.first.planType.name
             : 'FREE',
         'has_pro': activeSubscriptions.any((s) => s.isPro),
       };

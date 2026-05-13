@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
-import '../models/shrimp_pricing.dart';
 
 // =============================================================================
 // WARNING: STRICT READ-ONLY ACCESS TO app_config TABLE

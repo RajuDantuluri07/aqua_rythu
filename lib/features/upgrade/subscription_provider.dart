@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:aqua_rythu/core/models/subscription_model.dart';
+import 'package:aqua_rythu/core/models/subscription_plans.dart';
 import 'package:aqua_rythu/core/services/payment_service.dart';
 import 'package:aqua_rythu/core/services/subscription_gate.dart';
 import 'package:aqua_rythu/core/services/subscription_service.dart';
@@ -63,6 +64,7 @@ class SubscriptionState {
   final PaymentPhase paymentPhase;
   final PendingVerification? pendingVerification;
   final String? error;
+  final bool isHydrated;
 
   const SubscriptionState({
     required this.currentPlan,
@@ -70,6 +72,7 @@ class SubscriptionState {
     this.paymentPhase = PaymentPhase.idle,
     this.pendingVerification,
     this.error,
+    this.isHydrated = false,
   });
 
   SubscriptionState copyWith({
@@ -79,6 +82,7 @@ class SubscriptionState {
     PendingVerification? pendingVerification,
     bool clearPending = false,
     String? error,
+    bool? isHydrated,
   }) {
     return SubscriptionState(
       currentPlan: currentPlan ?? this.currentPlan,
@@ -87,6 +91,7 @@ class SubscriptionState {
       pendingVerification:
           clearPending ? null : pendingVerification ?? this.pendingVerification,
       error: error,
+      isHydrated: isHydrated ?? this.isHydrated,
     );
   }
 
@@ -102,9 +107,16 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   final Ref _ref;
 
   SubscriptionNotifier(this._ref)
-      : super(const SubscriptionState(currentPlan: PlanType.FREE)) {
+      : super(const SubscriptionState(currentPlan: PlanType.FREE, isHydrated: false)) {
     SubscriptionGate.setPro(false);
     _loadPendingVerification();
+    _initializeFromBackend();
+  }
+
+  /// Initializes subscription state from backend during app startup
+  Future<void> _initializeFromBackend() async {
+    await hydrateFromBackend();
+    state = state.copyWith(isHydrated: true);
   }
 
   @override
@@ -174,12 +186,10 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
   // ── Initiate payment ────────────────────────────────────────────────────────
 
-  Future<void> initiatePayment(PlanType plan) async {
-    final amountPaise = plan == PlanType.PRO ? 99900 : 299900;
-    final price = plan == PlanType.PRO ? 999.0 : 2999.0;
-    final description = plan == PlanType.PRO
-        ? 'PRO Subscription (Per Crop)'
-        : 'Business Subscription (Yearly)';
+  Future<void> initiatePayment(SubscriptionPlan plan) async {
+    final amountPaise = plan.amountPaise;
+    final price = plan.price;
+    final description = plan.description;
 
     final paymentService = _ref.read(paymentServiceProvider);
     final user = Supabase.instance.client.auth.currentUser;
@@ -192,7 +202,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     );
 
     try {
-      final orderId = await paymentService.createOrder(amountPaise, planType: plan.name);
+      final orderId = await paymentService.createOrder(amountPaise, planType: plan.id);
 
       // Phase 2: Razorpay sheet is open
       state = state.copyWith(paymentPhase: PaymentPhase.awaitingPayment);
@@ -220,7 +230,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         paymentId: result.paymentId!,
         orderId: result.orderId!,
         signature: result.signature!,
-        planType: plan.name,
+        planType: plan.id,
         price: price,
       );
       // Fast path: SharedPreferences (survives crash)
@@ -238,7 +248,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         pendingVerification: pending,
       );
 
-      await _runVerification(pending, plan);
+      await _runVerification(pending);
     } catch (e) {
       state = state.copyWith(
         paymentPhase: PaymentPhase.failed,
@@ -254,23 +264,18 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     final pending = state.pendingVerification;
     if (pending == null) return;
 
-    final plan = PlanType.values.firstWhere(
-      (p) => p.name.toLowerCase() == pending.planType.toLowerCase(),
-      orElse: () => PlanType.PRO,
-    );
-
     state = state.copyWith(
       paymentPhase: PaymentPhase.verifying,
       isLoading: true,
       error: null,
     );
 
-    await _runVerification(pending, plan);
+    await _runVerification(pending);
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
-  Future<void> _runVerification(PendingVerification pending, PlanType plan) async {
+  Future<void> _runVerification(PendingVerification pending) async {
     try {
       await _ref.read(paymentServiceProvider).verifyPayment(
         paymentId: pending.paymentId,
@@ -283,7 +288,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       // Verified — clear pending and activate PRO
       await _clearPendingVerification();
       state = state.copyWith(
-        currentPlan: plan,
+        currentPlan: PlanType.PRO,
         paymentPhase: PaymentPhase.success,
         isLoading: false,
         clearPending: true,

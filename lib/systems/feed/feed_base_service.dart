@@ -1,4 +1,5 @@
 import 'blind_feeding_engine.dart';
+import '../../features/pond/enums/seed_type.dart';
 
 class FeedBaseService {
   /// Calculate base feed using BlindFeedingEngine (optimized, no loops)
@@ -11,6 +12,7 @@ class FeedBaseService {
     int doc,
     int shrimpCount, {
     double? previousDayFeedKg,
+    SeedType? seedType,
   }) {
     final safeDoc = doc < 1 ? 1 : doc;
     final safeShrimpCount = shrimpCount < 0 ? 0 : shrimpCount;
@@ -19,6 +21,7 @@ class FeedBaseService {
     var baseFeed = BlindFeedingEngine.calculateBlindFeed(
       doc: safeDoc,
       seedCount: safeShrimpCount,
+      seedType: seedType?.dbValue ?? 'hatchery',
     );
 
     // Apply continuity damping: prevent sudden jumps
@@ -27,8 +30,8 @@ class FeedBaseService {
         previousDayFeedKg > 0 &&
         !previousDayFeedKg.isNaN &&
         !previousDayFeedKg.isInfinite) {
-      final minAllowed = previousDayFeedKg * 0.7;  // Don't drop more than 30%
-      final maxAllowed = previousDayFeedKg * 1.3;  // Don't jump more than 30%
+      final minAllowed = previousDayFeedKg * 0.7; // Don't drop more than 30%
+      final maxAllowed = previousDayFeedKg * 1.3; // Don't jump more than 30%
       baseFeed = baseFeed.clamp(minAllowed, maxAllowed).toDouble();
     }
 

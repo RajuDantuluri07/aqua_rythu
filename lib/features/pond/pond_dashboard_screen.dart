@@ -1,6 +1,5 @@
 // ignore_for_file: unused_element
 import 'package:aqua_rythu/core/services/farm_service.dart';
-import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
@@ -350,9 +349,27 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
   /// Returns feed round display cards for scheduled feed rounds.
   /// Uses FeedTimelineCard to show rich round data (amount, status, tray, etc.)
+  /// Only the next incomplete round can be marked done; others are disabled.
   List<Widget> _buildTimeline(int doc, Map<int, double> roundFeedAmounts,
-      [Pond? pond]) {
+      [Pond? pond, Map<int, bool> trayDone = const {}]) {
     final config = getFeedConfig(doc);
+    final dashboardState = ref.watch(pondDashboardProvider);
+    final roundFeedStatus = dashboardState.roundFeedStatus;
+
+    // Get tray logs to retrieve individual tray statuses per round
+    final selectedPond = dashboardState.selectedPond;
+    final trayLogs = ref.watch(trayProvider(selectedPond));
+
+    // Build a map of round -> individual tray statuses
+    final Map<int, List<TrayStatus>> trayStatusesPerRound = {};
+    final today = DateTime.now();
+    for (final log in trayLogs) {
+      if (log.time.year == today.year &&
+          log.time.month == today.month &&
+          log.time.day == today.day) {
+        trayStatusesPerRound[log.round] = log.trays;
+      }
+    }
 
     if (roundFeedAmounts.isEmpty) {
       // No DB data yet — show 4 placeholder rounds
@@ -365,11 +382,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           recommendedFeedKg: 0,
           finalFeedKg: 0,
           isManuallyEdited: false,
-          state: FeedRoundState.upcoming,
+          state: i == 0 ? FeedRoundState.current : FeedRoundState.upcoming,
           isPendingTray: false,
           trayStatuses: const [],
           supplements: const [],
-          onMarkDone: null,
+          onMarkDone: i == 0 ? () async {} : null,
           onLogTray: null,
           onEdit: null,
           isNext: i == 0,
@@ -384,6 +401,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       return idx >= 0 && idx < config.splits.length && config.splits[idx] > 0;
     }).toList();
 
+    // Find the first incomplete round (the one that should be "current").
+    // Only this round will have a button enabled; all others are disabled/inactive.
+    // Once this round is marked done, the next incomplete round becomes current.
+    int? nextIncompleteRound;
+    for (final r in activeRounds) {
+      final status = roundFeedStatus[r] ?? 'pending';
+      if (status != 'completed') {
+        nextIncompleteRound = r;
+        break;
+      }
+    }
+
     final result = <Widget>[];
     for (final r in activeRounds) {
       final idx = r - 1;
@@ -394,21 +423,66 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       }
 
       final amount = roundFeedAmounts[r] ?? 0.0;
-      final pondId = pond?.id ?? '';
+      final status = roundFeedStatus[r] ?? 'pending';
+      final isDone = status == 'completed';
+      final isCurrent = r == nextIncompleteRound;
+      final isNext = r == nextIncompleteRound;
 
-      // Callback to mark this round as done
-      Future<void> onMarkDone() async {
-        final feedService = FeedService();
-        await feedService.saveFeedRound(
-          pondId: pondId,
-          doc: doc,
-          round: r,
-          amount: amount,
-          isManual: false,
-        );
-        // Refresh the dashboard state after marking done
-        ref.invalidate(pondDashboardProvider);
+      // Determine card state
+      final cardState = isDone
+          ? FeedRoundState.done
+          : isCurrent
+              ? FeedRoundState.current
+              : FeedRoundState.upcoming;
+
+      // Only allow marking done for the current (next incomplete) round
+      Future<void> Function()? onMarkDone;
+      if (isCurrent) {
+        onMarkDone = () async {
+          final scaffoldContext = context;
+          try {
+            await ref.read(pondDashboardProvider.notifier).markFeedDone(r);
+            // Show success message
+            if (scaffoldContext.mounted) {
+              ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                SnackBar(
+                  content: Text('Round $r feed saved successfully'),
+                  backgroundColor: const Color(0xFF16A34A),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          } catch (e) {
+            if (scaffoldContext.mounted) {
+              ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to save feed: $e'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        };
       }
+
+      // Tray logging for nursery seed type
+      // Optional DOC 1-7, mandatory from DOC 8+
+      bool showTrayButton = false;
+      VoidCallback? onLogTray;
+
+      if (pond?.seedType == SeedType.nurseryBig && isDone) {
+        showTrayButton = true;
+        final isTrayLogged = trayDone[r] ?? false;
+
+        if (!isTrayLogged) {
+          onLogTray = () => openTrayWithResult(r, false);
+        }
+      }
+
+      // Get individual tray statuses for this round (all 4 trays)
+      final trayStatusesForRound = trayStatusesPerRound[r] ?? const <TrayStatus>[];
 
       result.add(
         FeedTimelineCard(
@@ -417,14 +491,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           recommendedFeedKg: amount,
           finalFeedKg: amount,
           isManuallyEdited: false,
-          state: FeedRoundState.upcoming,
-          isPendingTray: false,
-          trayStatuses: const [],
+          state: cardState,
+          isPendingTray: showTrayButton && !(trayDone[r] ?? false),
+          trayStatuses: trayStatusesForRound,
           supplements: const [],
           onMarkDone: onMarkDone,
-          onLogTray: null,
+          onLogTray: onLogTray,
           onEdit: null,
-          isNext: false,
+          isNext: isNext,
           isSmartFeed: doc > 30,
         ),
       );
@@ -1471,6 +1545,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                         currentDoc,
                         dashboardState.roundFeedAmounts,
                         currentPond,
+                        trayDone,
                       ),
                       const SizedBox(height: 16),
                     ],

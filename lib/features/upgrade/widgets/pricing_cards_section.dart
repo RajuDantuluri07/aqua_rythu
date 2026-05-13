@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../subscription_provider.dart';
-import '../../../core/models/subscription_model.dart';
+import '../../../core/models/subscription_plans.dart';
 import '../upgrade_insight_provider.dart';
 
 class PricingCardsSection extends ConsumerStatefulWidget {
@@ -41,7 +41,7 @@ class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
           ),
           const SizedBox(height: 8),
           Text(
-            '₹499 is selected because it recovers fastest from feed savings.',
+            'Pay once per crop. Recover cost from feed savings in days.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface.withOpacity(0.68),
               fontWeight: FontWeight.w600,
@@ -61,7 +61,8 @@ class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
                     ref,
                     insight,
                     source: 'pricing_crop',
-                    plan: '499_crop',
+                    analyticsId: 'full_crop',
+                    plan: SubscriptionPlans.fullCrop,
                   ),
                 ),
                 _YearlyPlanCard(
@@ -75,7 +76,8 @@ class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
                     ref,
                     insight,
                     source: _isPerCrop ? 'pricing_crop' : 'pricing_yearly',
-                    plan: _isPerCrop ? '499_crop' : '999_year',
+                    analyticsId: _isPerCrop ? 'full_crop' : 'yearly_pro',
+                    plan: _isPerCrop ? SubscriptionPlans.fullCrop : SubscriptionPlans.yearly,
                   ),
                 ),
               ];
@@ -124,10 +126,11 @@ class _PricingCardsSectionState extends ConsumerState<PricingCardsSection> {
     WidgetRef ref,
     UpgradeLossInsight insight, {
     required String source,
-    required String plan,
+    required String analyticsId,
+    required SubscriptionPlan plan,
   }) async {
-    UpgradeMetrics.trackCtaClick(source: source, plan: plan, insight: insight);
-    await ref.read(subscriptionProvider.notifier).initiatePayment(PlanType.PRO);
+    UpgradeMetrics.trackCtaClick(source: source, plan: analyticsId, insight: insight);
+    await ref.read(subscriptionProvider.notifier).initiatePayment(plan);
     UpgradeMetrics.track('purchase_complete', {
       'source': source,
       'plan': plan,
@@ -216,7 +219,7 @@ class _CropPlanCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹499',
+                '₹999',
                 style: theme.textTheme.displaySmall?.copyWith(
                   fontWeight: FontWeight.w900,
                   color: green,
