@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_constants.dart';
 import '../../features/tray/enums/tray_status.dart';
+import '../../features/feed/feed_schedule_provider.dart';
 import '../utils/logger.dart';
 import 'inventory_service.dart';
 
@@ -302,21 +303,13 @@ class FeedService {
 
   /// Save feed schedule — always upserts exactly 4 rows per DOC.
   /// Never deletes rows; qty=0 means inactive (no card shown on dashboard).
-  Future<void> saveFeedPlans(String pondId, List<dynamic> feedPlans) async {
+  Future<void> saveFeedPlans(String pondId, List<FeedDayPlan> feedPlans) async {
     if (pondId.isEmpty) throw Exception('Invalid pondId');
 
     try {
       for (final plan in feedPlans) {
-        final doc = plan.doc is int ? plan.doc as int : plan['doc'] as int;
-        final List<double> amounts = plan['rounds'] != null
-            ? List<double>.from(
-                (plan.rounds as List).map((v) => (v as num).toDouble()))
-            : [
-                _validateFeedAmount(plan['r1'], 'r1', pondId, doc),
-                _validateFeedAmount(plan['r2'], 'r2', pondId, doc),
-                _validateFeedAmount(plan['r3'], 'r3', pondId, doc),
-                _validateFeedAmount(plan['r4'], 'r4', pondId, doc),
-              ];
+        final doc = plan.doc;
+        final List<double> amounts = List<double>.from(plan.rounds);
 
         // Enforce config constraints: inactive rounds for this DOC are always 0.
         // This is the write gate — DB must never hold feed amounts for rounds
@@ -537,29 +530,6 @@ class FeedService {
     });
   }
 
-  /// Validate feed amount and fail loudly if invalid
-  static double _validateFeedAmount(
-      dynamic value, String roundName, String pondId, int doc) {
-    if (value == null) {
-      throw ArgumentError(
-          'Missing feed amount for $roundName in pond $pondId, DOC $doc');
-    }
-
-    final amount = (value as num).toDouble();
-
-    if (amount < 0) {
-      throw ArgumentError(
-          'Invalid negative feed amount $amount for $roundName in pond $pondId, DOC $doc');
-    }
-
-    if (amount > 1000) {
-      // Sanity check - no round should exceed 1000kg
-      AppLogger.warn(
-          'Very high feed amount $amount for $roundName in pond $pondId, DOC $doc');
-    }
-
-    return amount;
-  }
 }
 
 class InsufficientStockException implements Exception {
