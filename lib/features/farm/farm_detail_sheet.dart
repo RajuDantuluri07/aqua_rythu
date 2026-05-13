@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/core/services/farm_member_service.dart';
 import 'package:aqua_rythu/features/farm/farm_provider.dart';
+import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
+import 'package:aqua_rythu/features/upgrade/widgets/role_limit_bottom_sheet.dart';
 import 'add_member_sheet.dart';
 
-class FarmDetailSheet extends StatefulWidget {
+class FarmDetailSheet extends ConsumerStatefulWidget {
   final Farm farm;
 
   const FarmDetailSheet({super.key, required this.farm});
 
   @override
-  State<FarmDetailSheet> createState() => _FarmDetailSheetState();
+  ConsumerState<FarmDetailSheet> createState() => _FarmDetailSheetState();
 }
 
-class _FarmDetailSheetState extends State<FarmDetailSheet> {
+class _FarmDetailSheetState extends ConsumerState<FarmDetailSheet> {
   static const _primaryGreen = Color(0xFF1B8A4C);
 
   late Future<List<FarmMember>> _membersFuture;
@@ -77,6 +80,13 @@ class _FarmDetailSheetState extends State<FarmDetailSheet> {
   }
 
   void _openAddMember() {
+    final isPro = ref.read(subscriptionProvider).isPro;
+
+    if (!isPro) {
+      RoleLimitBottomSheet.show(context);
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

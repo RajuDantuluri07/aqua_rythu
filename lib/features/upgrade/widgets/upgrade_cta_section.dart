@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aqua_rythu/core/models/subscription_model.dart';
+import 'package:aqua_rythu/core/models/subscription_plans.dart';
 import '../subscription_provider.dart';
 
 class UpgradeCTASection extends ConsumerWidget {
@@ -100,7 +100,7 @@ class UpgradeCTASection extends ConsumerWidget {
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              ref.read(subscriptionProvider.notifier).initiatePayment(PlanType.PRO);
+              ref.read(subscriptionProvider.notifier).initiatePayment(SubscriptionPlans.fullCrop);
             },
             child: const Text('Proceed to Payment'),
           ),
