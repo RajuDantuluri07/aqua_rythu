@@ -1,5 +1,7 @@
 import '../../../features/tray/enums/tray_status.dart';
 import '../../../features/tray/tray_model.dart';
+import '../../../features/pond/enums/seed_type.dart';
+import '../../../features/pond/enums/tray_requirement.dart';
 import '../../core/services/subscription_gate.dart';
 
 /// Result returned by [TrayDecisionEngine.evaluate].
@@ -112,6 +114,7 @@ class TrayDecisionEngine {
   static TrayDecisionResult evaluate({
     required List<TrayLog> allTrayLogs,
     required int doc,
+    required SeedType seedType,
   }) {
     // PRO gate: tray-based correction is a paid feature
     // (FeatureIds.trayBasedCorrection). FREE users keep logging trays for
@@ -126,16 +129,71 @@ class TrayDecisionEngine {
       );
     }
 
-    // Tray data is STORED for DOC 15–29 but corrections activate at DOC ≥ 30.
-    if (doc <= 29) {
+    // Use seed-type specific tray requirements
+    TrayRequirement trayRequirement;
+    if (seedType == SeedType.nurseryBig) {
+      // Nursery: Show tray stats from day 1, optional all days (nursery ends at DOC 10)
+      trayRequirement = TrayRequirement.optional;
+    } else {
+      // Hatchery seed: Day 1-15 not required, Day 16-25 optional, Day 26+ mandatory
+      if (doc <= 15) {
+        trayRequirement = TrayRequirement.notRequired;
+      } else if (doc <= 25) {
+        trayRequirement = TrayRequirement.optional;
+      } else {
+        trayRequirement = TrayRequirement.mandatory;
+      }
+    }
+
+    // If trays are not required yet, maintain feed
+    if (trayRequirement == TrayRequirement.notRequired) {
+      return const TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        avgScore: 0,
+        roundsUsed: 0,
+        reason: 'Following base feed schedule (trays not required yet)',
+      );
+    }
+
+    // Check if feed adjustments should start based on seed type and DOC
+    bool canStartAdjustments = false;
+    String adjustmentReason = '';
+
+    if (seedType == SeedType.nurseryBig) {
+      // Nursery: Feed suggestions start from day 3
+      canStartAdjustments = doc >= 3;
+      adjustmentReason = doc >= 3
+          ? 'Tray-based feed adjustments active (started from day 3)'
+          : 'Following base feed schedule (tray adjustments start from day 3)';
+    } else {
+      // Hatchery: Feed suggestions start from day 15
+      canStartAdjustments = doc >= 15;
+      adjustmentReason = doc >= 15
+          ? 'Tray-based feed adjustments active (started from day 15)'
+          : 'Following base feed schedule (tray adjustments start from day 15)';
+    }
+
+    // If trays are optional but adjustments haven't started yet, maintain feed
+    if (trayRequirement == TrayRequirement.optional && !canStartAdjustments) {
       return TrayDecisionResult(
         action: 'MAINTAIN',
         percentage: 0,
         avgScore: 0,
         roundsUsed: 0,
-        reason: doc < 15
-            ? 'Following base feed schedule'
-            : 'Following blind schedule until DOC 29 (tray data recorded)',
+        reason: adjustmentReason,
+      );
+    }
+
+    // If trays are optional and adjustments can start, but no tray data yet
+    if (trayRequirement == TrayRequirement.optional && canStartAdjustments) {
+      return const TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        avgScore: 0,
+        roundsUsed: 0,
+        reason:
+            'Tray adjustments ready - start logging trays for feed suggestions',
       );
     }
 
@@ -143,12 +201,26 @@ class TrayDecisionEngine {
         allTrayLogs.where((l) => !l.isSkipped && l.trays.isNotEmpty).toList();
 
     if (validLogs.isEmpty) {
-      return const TrayDecisionResult(
+      return TrayDecisionResult(
         action: 'MAINTAIN',
         percentage: 0,
         avgScore: 0,
         roundsUsed: 0,
-        reason: 'No tray data yet — follow schedule',
+        reason:
+            trayRequirement == TrayRequirement.mandatory && !canStartAdjustments
+                ? adjustmentReason
+                : 'No tray data yet — follow schedule',
+      );
+    }
+
+    // For mandatory trays, check if adjustments have started
+    if (trayRequirement == TrayRequirement.mandatory && !canStartAdjustments) {
+      return TrayDecisionResult(
+        action: 'MAINTAIN',
+        percentage: 0,
+        avgScore: 0,
+        roundsUsed: 0,
+        reason: adjustmentReason,
       );
     }
 

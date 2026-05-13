@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_plan_constants.dart';
 import '../feed/feed_engine_v2.dart';
+import '../feed/blind_feeding_engine.dart';
 import '../../../features/pond/enums/seed_type.dart';
 import '../../../features/pond/enums/stocking_type.dart';
 import '../../../core/utils/logger.dart';
@@ -27,6 +28,10 @@ Future<void> generateFeedPlan({
   if (startDoc > endDoc) return;
   final clampedEnd = endDoc.clamp(startDoc, 120);
 
+  // Nursery phase ends at DOC 10 — prevent plan generation beyond that
+  final docCap = stockingType == 'nursery' ? 10 : clampedEnd;
+  final finalEnd = clampedEnd.clamp(startDoc, docCap);
+
   // Acquire lock to prevent concurrent feed plan generation for the same pond
   final lockKey = '${pondId}_${startDoc}_$endDoc';
   if (_feedPlanLocks.contains(lockKey)) {
@@ -38,12 +43,12 @@ Future<void> generateFeedPlan({
   _feedPlanLocks.add(lockKey);
   try {
     AppLogger.info(
-        'Generating feed plan: pond $pondId DOC $startDoc–$clampedEnd '
+        'Generating feed plan: pond $pondId DOC $startDoc–$finalEnd '
         'type=$stockingType density=$stockingCount');
 
     final batch = <Map<String, dynamic>>[];
 
-    for (int doc = startDoc; doc <= clampedEnd; doc++) {
+    for (int doc = startDoc; doc <= finalEnd; doc++) {
       // Always generate for all docs in range - upsert will update existing or insert new
       final stockingTypeEnum = stockingType == 'hatchery'
           ? StockingType.hatchery
@@ -76,6 +81,39 @@ Future<void> generateFeedPlan({
     }
 
     if (batch.isNotEmpty) {
+      // BUG #8 FIX: Validate the generated schedule against BlindFeedingEngine
+      // before writing. A bug in the DOC ramp or split formula would silently
+      // produce wrong values for every row in the plan.
+      if (finalEnd >= 30 && startDoc <= 30) {
+        final expectedDoc30 = BlindFeedingEngine.calculateBlindFeed(
+          doc: 30,
+          seedCount: stockingCount,
+          seedType: stockingType,
+        );
+        final generatedDoc30Total = batch
+            .where((row) => row['doc'] == 30)
+            .fold<double>(
+                0.0, (sum, row) => sum + (row['planned_amount'] as double));
+
+        if (expectedDoc30 > 0) {
+          final variance = (generatedDoc30Total - expectedDoc30).abs();
+          final pct = (variance / expectedDoc30) * 100;
+          if (pct > 5.0) {
+            AppLogger.warn(
+              'Feed schedule DOC 30 validation: expected=${expectedDoc30.toStringAsFixed(2)}kg '
+              'generated=${generatedDoc30Total.toStringAsFixed(2)}kg '
+              'variance=${pct.toStringAsFixed(1)}% — check DOC ramp formula',
+            );
+          } else {
+            AppLogger.info(
+              'Feed schedule DOC 30 validation passed: '
+              '${generatedDoc30Total.toStringAsFixed(2)}kg '
+              '(expected ${expectedDoc30.toStringAsFixed(2)}kg)',
+            );
+          }
+        }
+      }
+
       try {
         // Upsert to update existing rows with correct seed-type amounts or insert new
         await supabase.from('feed_rounds').upsert(batch,
@@ -116,19 +154,8 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
   _feedPlanLocks.add(lockKey);
   try {
     final tomorrow = currentDoc + 1;
-    // Never pre-generate beyond the blind/tray-habit phase.
-    // Fix #4: DOC ≥ 31 → smart feeding; amounts are computed live, not stored.
-    if (tomorrow > 30) return;
 
-    final existing = await supabase
-        .from('feed_rounds')
-        .select('id')
-        .eq('pond_id', pondId)
-        .eq('doc', tomorrow)
-        .limit(1);
-
-    if (existing.isNotEmpty) return;
-
+    // Fetch pond to determine stocking type (nursery vs hatchery)
     final pond = await supabase
         .from('ponds')
         .select('seed_count, stocking_date, area, stocking_type')
@@ -140,8 +167,23 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
       return;
     }
 
-    // Fix #4: cap look-ahead at DOC 30 (end of tray-habit/blind phase).
-    final lookAheadEnd = (currentDoc + 7).clamp(tomorrow, 30);
+    final stockingType = (pond['stocking_type'] as String?) ?? 'nursery';
+    final docCap = stockingType == 'nursery' ? 10 : 30;
+
+    // Never pre-generate beyond the phase ceiling (DOC 10 for nursery, DOC 30 for hatchery).
+    if (tomorrow > docCap) return;
+
+    final existing = await supabase
+        .from('feed_rounds')
+        .select('id')
+        .eq('pond_id', pondId)
+        .eq('doc', tomorrow)
+        .limit(1);
+
+    if (existing.isNotEmpty) return;
+
+    // Cap look-ahead at the phase ceiling.
+    final lookAheadEnd = (currentDoc + 7).clamp(tomorrow, docCap);
 
     await generateFeedPlan(
       pondId: pondId,
@@ -150,7 +192,7 @@ Future<void> ensureFutureFeedExists(String pondId, int currentDoc) async {
       stockingCount: (pond['seed_count'] as int?) ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
       stockingDate: DateTime.parse(pond['stocking_date'] as String),
-      stockingType: (pond['stocking_type'] as String?) ?? 'nursery',
+      stockingType: stockingType,
     );
 
     AppLogger.info(

@@ -6,6 +6,7 @@
 // Safe growth curve with direct calculation (no loops for efficiency)
 
 import 'package:aqua_rythu/core/utils/logger.dart';
+import '../../features/pond/enums/seed_type.dart';
 
 class BlindFeedingEngine {
   static const String version = 'v1.0.0';
@@ -37,6 +38,7 @@ class BlindFeedingEngine {
   ///
   /// [doc]       Day of Culture (1-based, must be 1-30)
   /// [seedCount] Live stocking count (shrimp)
+  /// [seedType]  Type of seed (nursery or hatchery)
   ///
   /// Returns: Feed amount in kg, rounded to 2 decimal places
   ///
@@ -45,6 +47,7 @@ class BlindFeedingEngine {
   static double calculateBlindFeed({
     required int doc,
     required int seedCount,
+    required String seedType,
   }) {
     // ── GUARDRAIL 1: DOC > 30 → STOP ──────────────────────────────────────
     if (doc > 30) {
@@ -78,9 +81,27 @@ class BlindFeedingEngine {
       );
     }
 
+    // ── NURSERY DOC 10 BOUNDARY ────────────────────────────────────────────
+    if (seedType.toLowerCase() == 'nursery' && safeDOC > 10) {
+      AppLogger.warn(
+        '[BlindFeedingEngine] Nursery DOC > 10 detected ($safeDOC). '
+        'Nursery phase ends at DOC 10. Switch to regular pond mode.',
+      );
+      return 0.0;
+    }
+
     // ── CALCULATION ────────────────────────────────────────────────────────
-    final increment = _calculateCumulativeIncrement(safeDOC);
-    final feedPerLakh = _baseFeed + increment;
+    double feedPerLakh;
+
+    if (seedType.toLowerCase() == 'nursery') {
+      // Nursery feed: Use nursery table values (higher feed for bigger shrimp)
+      feedPerLakh = _getNurseryFeedPerLakh(safeDOC);
+    } else {
+      // Hatchery feed: Use incremental formula (smaller shrimp)
+      final increment = _calculateCumulativeIncrement(safeDOC);
+      feedPerLakh = _baseFeed + increment;
+    }
+
     final scaledFeed = feedPerLakh * (seedCount / 100000);
 
     // ── GUARDRAIL 4: Feed < 0 → Clamp to 0 ────────────────────────────────
@@ -90,14 +111,33 @@ class BlindFeedingEngine {
     return finalFeed;
   }
 
-  /// Calculate number of meals per day based on DOC
+  /// Calculate number of meals per day based on DOC and seed type
   ///
-  /// Rules (from spec):
+  /// Nursery Seed Rules:
+  /// - DOC 1   → 2 meals
+  /// - DOC ≥ 2   → 4 meals
+  ///
+  /// Hatchery Seed Rules:
+  /// - DOC ≤ 3   → 2 meals
+  /// - DOC > 3   → 4 meals
+  ///
+  /// Legacy rules (for backward compatibility when seedType not specified):
   /// - DOC ≤ 7   → 2 meals
   /// - DOC ≤ 21  → 3 meals
   /// - DOC > 21  → 4 meals
-  /// - DOC > 90  → 4-5 meals (default to 4 for blind phase)
-  static int getMealsPerDay(int doc) {
+  static int getMealsPerDay(int doc, {SeedType? seedType}) {
+    if (seedType != null) {
+      // Seed-type specific rules
+      if (seedType == SeedType.nurseryBig) {
+        // Nursery: Day 1 = 2 feeds, Day 2+ = 4 feeds
+        return doc == 1 ? 2 : 4;
+      } else {
+        // Hatchery: Day 1-3 = 2 feeds, Day 4+ = 4 feeds
+        return doc <= 3 ? 2 : 4;
+      }
+    }
+
+    // Legacy rules for backward compatibility
     if (doc <= 7) {
       return 2;
     } else if (doc <= 21) {
@@ -113,13 +153,13 @@ class BlindFeedingEngine {
   static List<double> splitMeals({
     required double dailyFeed,
     required int doc,
+    SeedType? seedType,
   }) {
-    final mealsCount = getMealsPerDay(doc);
+    final mealsCount = getMealsPerDay(doc, seedType: seedType);
     final perMeal = dailyFeed / mealsCount;
 
     // Round per-meal amount to 1 decimal place for practical feeding
-    final roundedPerMeal =
-        double.parse(perMeal.toStringAsFixed(1));
+    final roundedPerMeal = double.parse(perMeal.toStringAsFixed(1));
 
     return List<double>.filled(mealsCount, roundedPerMeal);
   }
@@ -186,19 +226,40 @@ class BlindFeedingEngine {
     };
   }
 
+  /// Get nursery feed per 100k based on predefined table.
+  ///
+  /// Nursery phase ends at DOC 10. Returns feed per day for DOC 1–10.
+  /// For DOC > 10, returns 13.0 (caps at max nursery feed) — but
+  /// calculateBlindFeed should have already blocked DOC > 10 nursery.
+  static double _getNurseryFeedPerLakh(int doc) {
+    if (doc <= 1) return 4.0;   // d1
+    if (doc <= 2) return 5.0;   // d2
+    if (doc <= 3) return 6.0;   // d3
+    if (doc <= 4) return 7.0;   // d4
+    if (doc <= 5) return 8.0;   // d5
+    if (doc <= 6) return 9.0;   // d6
+    if (doc <= 7) return 10.0;  // d7
+    if (doc <= 8) return 11.0;  // d8
+    if (doc <= 9) return 12.0;  // d9
+    if (doc <= 10) return 13.0; // d10
+    return 13.0;                // cap at d10 value for any doc > 10
+  }
+
   /// Get sample output table for documentation/testing
   /// DOC 1-30 with 100k seed: shows expected feed progression
   static Map<int, double> getSampleOutputTable() {
     const sampleSeedCount = 100000;
     return {
       for (int doc = 1; doc <= 30; doc++)
-        doc: calculateBlindFeed(doc: doc, seedCount: sampleSeedCount)
+        doc: calculateBlindFeed(
+            doc: doc, seedCount: sampleSeedCount, seedType: 'hatchery')
     };
   }
 
   /// Print sample output for verification (DOC 1-30, 1 lakh seed)
   static void printSampleOutput() {
-    AppLogger.info('=== BLIND FEEDING ENGINE - SAMPLE OUTPUT (1 LAKH SEED) ===');
+    AppLogger.info(
+        '=== BLIND FEEDING ENGINE - SAMPLE OUTPUT (1 LAKH SEED) ===');
     AppLogger.info('DOC\t| Feed (kg)');
     AppLogger.info('----\t| ---------');
 

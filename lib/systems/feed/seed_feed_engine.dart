@@ -75,14 +75,15 @@ class SeedFeedEngine {
   /// Returns smart adjustment factor based on seed type and DOC stage.
   ///
   /// Hatchery early phase (DOC < 15): conservative — reduces by 5%.
-  /// Nursery early phase (DOC < 10): growth push — increases by 5%.
+  /// Nursery DOC 1–2: no adjustment (blind feeding, tray tracking only).
+  /// Nursery DOC 3–10: growth push — increases by 5%.
   /// All other combinations: no adjustment.
   static double getSmartFactor({
     required SeedType seedType,
     required int doc,
   }) {
     if (seedType == SeedType.hatcherySmall && doc < 15) return -0.05;
-    if (seedType == SeedType.nurseryBig && doc < 10) return 0.05;
+    if (seedType == SeedType.nurseryBig && doc >= 3 && doc <= 10) return 0.05;
     return 0.0;
   }
 

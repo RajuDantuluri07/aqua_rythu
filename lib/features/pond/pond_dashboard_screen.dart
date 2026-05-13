@@ -1,5 +1,6 @@
 // ignore_for_file: unused_element
 import 'package:aqua_rythu/core/services/farm_service.dart';
+import 'package:aqua_rythu/core/services/feed_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
@@ -12,6 +13,7 @@ import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
 import '../../features/tray/tray_provider.dart';
 import '../tray/tray_model.dart';
 import '../../features/tray/enums/tray_status.dart';
+import 'enums/seed_type.dart';
 import '../farm/farm_provider.dart';
 import '../harvest/harvest_provider.dart';
 import '../feed/feed_history_provider.dart';
@@ -29,7 +31,6 @@ import 'package:aqua_rythu/core/theme/app_theme.dart';
 import 'package:aqua_rythu/systems/planning/feed_plan_constants.dart';
 import 'package:aqua_rythu/systems/tray/tray_decision_engine.dart';
 import 'package:aqua_rythu/systems/pond/pond_value_engine.dart';
-import 'package:aqua_rythu/systems/feed/feed_timing_helper.dart';
 import 'package:aqua_rythu/systems/feed/engine_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aqua_rythu/core/language/language_switcher.dart';
@@ -66,8 +67,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   late AnimationController _pulseController;
   bool _showFeedScheduleTip = false;
   int _debugTapCount = 0;
-  // T13 — tracks which round just completed to show feedback prompt once
-  int _lastFeedbackRound = -1;
   // Flag to prevent repeated anchor feed dialog popup
   bool _anchorFeedDialogShown = false;
 
@@ -349,25 +348,34 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
   }
 
-  /// Returns feed round display data for scheduled feed rounds.
-  /// A scheduled round with 0 kg is still shown so "Do not feed" can be
-  /// displayed when the engine stops feeding for tray or environment stress.
-  /// Time labels come from getFeedConfig using the round index.
-  List<Map<String, dynamic>> _getFeedRounds(
-      int doc, Map<int, double> roundFeedAmounts,
+  /// Returns feed round display cards for scheduled feed rounds.
+  /// Uses FeedTimelineCard to show rich round data (amount, status, tray, etc.)
+  List<Widget> _buildTimeline(int doc, Map<int, double> roundFeedAmounts,
       [Pond? pond]) {
     final config = getFeedConfig(doc);
 
     if (roundFeedAmounts.isEmpty) {
-      // No DB data yet — show 4 rounds by default
+      // No DB data yet — show 4 placeholder rounds
       const defaultActive = 4;
       return List.generate(
-          defaultActive,
-          (i) => {
-                'round': i + 1,
-                'time': config.timingsDisplay[i],
-                'key': 'R${i + 1}',
-              });
+        defaultActive,
+        (i) => FeedTimelineCard(
+          round: i + 1,
+          time: config.timingsDisplay[i],
+          recommendedFeedKg: 0,
+          finalFeedKg: 0,
+          isManuallyEdited: false,
+          state: FeedRoundState.upcoming,
+          isPendingTray: false,
+          trayStatuses: const [],
+          supplements: const [],
+          onMarkDone: null,
+          onLogTray: null,
+          onEdit: null,
+          isNext: i == 0,
+          isSmartFeed: false,
+        ),
+      );
     }
 
     // Show only rounds with an active configured split and a valid time.
@@ -376,7 +384,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       return idx >= 0 && idx < config.splits.length && config.splits[idx] > 0;
     }).toList();
 
-    final result = <Map<String, dynamic>>[];
+    final result = <Widget>[];
     for (final r in activeRounds) {
       final idx = r - 1;
       if (idx < 0 || idx >= config.timingsDisplay.length) continue;
@@ -384,7 +392,42 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       if (time.startsWith('--')) {
         continue; // skip rounds with no scheduled time for this DOC
       }
-      result.add({'round': r, 'time': time, 'key': 'R$r'});
+
+      final amount = roundFeedAmounts[r] ?? 0.0;
+      final pondId = pond?.id ?? '';
+
+      // Callback to mark this round as done
+      Future<void> onMarkDone() async {
+        final feedService = FeedService();
+        await feedService.saveFeedRound(
+          pondId: pondId,
+          doc: doc,
+          round: r,
+          amount: amount,
+          isManual: false,
+        );
+        // Refresh the dashboard state after marking done
+        ref.invalidate(pondDashboardProvider);
+      }
+
+      result.add(
+        FeedTimelineCard(
+          round: r,
+          time: time,
+          recommendedFeedKg: amount,
+          finalFeedKg: amount,
+          isManuallyEdited: false,
+          state: FeedRoundState.upcoming,
+          isPendingTray: false,
+          trayStatuses: const [],
+          supplements: const [],
+          onMarkDone: onMarkDone,
+          onLogTray: null,
+          onEdit: null,
+          isNext: false,
+          isSmartFeed: doc > 30,
+        ),
+      );
     }
     return result;
   }
@@ -850,13 +893,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
     final isCompleted = currentPond.status == PondStatus.completed;
 
-    final allSupplements = ref.watch(supplementProvider);
-    final activePlansToday = allSupplements.where((plan) {
-      return plan.appliesToPond(selectedPond) &&
-          plan.isActiveOnDate(DateTime.now()) &&
-          !plan.isPaused;
-    }).toList();
-
     /// ✅ TRAY DATA
     final trayLogs = ref.watch(trayProvider(selectedPond));
 
@@ -981,16 +1017,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final double abwTrend =
         (currentAbw > 0 && prevAbw > 0) ? (currentAbw - prevAbw) : 0;
 
-    final supplementLogs = ref.watch(supplementLogProvider);
-    final now = DateTime.now();
-    final todaySupplementLogs = supplementLogs
-        .where((l) =>
-            l.pondId == selectedPond &&
-            l.timestamp.year == now.year &&
-            l.timestamp.month == now.month &&
-            l.timestamp.day == now.day)
-        .toList();
-
     // Both planned and consumed come from provider state (single source of truth)
     final double plannedFeed =
         dashboardState.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
@@ -1004,10 +1030,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     // FREE users always see blind-feed UI (manual input) regardless of DOC.
     // DOC <= 30: blind feed for everyone
     // DOC > 30 + PRO: smart feed (+ tray factor + env factor + FCR)
-    // DOC > 30 + FREE: blind feed / manual input (no smart recommendations)
-    final isSmartFeedEnabled =
-        isPro && (currentPond.isSmartFeedEnabled || (currentDoc > 30));
-
     // ── DOC-adaptive mode ────────────────────────────────────────────────────
     final String mode;
     if (currentDoc == 1) {
@@ -1072,21 +1094,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final int completedRoundsCount = dashboardState.roundFeedStatus.values
         .where((s) => s == 'completed')
         .length;
-
-    // SSOT for live countdown — passed directly to FeedHeroCard.
-    final DateTime? nextFeedAt;
-
-    // Validate inputs before calling helper
-    if (dashboardState.lastFeedTime != null && completedRoundsCount >= 0) {
-      // Get feed interval based on DOC (simplified logic)
-      final feedIntervalMinutes = _getFeedIntervalMinutes(currentDoc);
-      nextFeedAt = FeedTimingHelper.nextFeedAt(
-        lastFeedTime: dashboardState.lastFeedTime!,
-        feedIntervalMinutes: feedIntervalMinutes,
-      );
-    } else {
-      nextFeedAt = null;
-    }
 
     // ── Seed-based feed explanation ───────────────────────────────────────────
     final double trayLeftover = traySignal == 'full'
@@ -1298,6 +1305,35 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 ],
               ),
 
+              // Nursery migration banner (when DOC > 10)
+              if (currentPond.seedType == SeedType.nurseryBig && currentDoc > 10) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange.shade700, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Nursery phase complete (DOC $currentDoc). Transfer shrimp or switch to regular pond mode.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 8),
 
               // ── ALERT STRIP — highest priority status (not shown when all done) ──
@@ -1430,59 +1466,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 else
                   Column(
                     children: [
-                      // ── Active rounds (current + upcoming) + water supplements ──
+                      // ── Active rounds (current + upcoming) ──
                       ..._buildTimeline(
-                        today: today,
-                        currentDoc: currentDoc,
-                        pondName: currentPond.name,
-                        pondArea: currentPond.area,
-                        todayTrayMap: todayTrayMap,
-                        dashboardState: dashboardState,
-                        trayDone: trayDone,
-                        activePlansToday: activePlansToday,
-                        todaySupplementLogs: todaySupplementLogs,
-                        selectedPond: selectedPond,
-                        smartFeedOutput: null,
-                        currentPond: currentPond,
-                        isSmartFeedEnabled: isSmartFeedEnabled,
-                        isPro: isPro,
-                        valueDelta: pondValue.delta,
-                        showDoneRoundsOnly: false,
-                        nextFeedAt: nextFeedAt,
-                        // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
-                        insight: vm.insight?.message,
-                        completedRounds: completedRoundsCount,
-                        totalRounds: currentDoc <= 7 ? 2 : 4,
-                        feedMode: feedModeFromDoc(currentDoc),
-                        lastFeedbackRound: _lastFeedbackRound,
-                        onFeedbackSubmit: (round, isAccurate) {
-                          setState(() => _lastFeedbackRound = -1);
-                          // TODO: persist FeedFeedback to DB
-                          debugPrint(
-                              '[FeedFeedback] R$round accurate=$isAccurate doc=$currentDoc pond=$selectedPond');
-                        },
+                        currentDoc,
+                        dashboardState.roundFeedAmounts,
+                        currentPond,
                       ),
-
-                      const SizedBox(height: 12),
-                      const SizedBox(height: 8),
-                      ..._buildTimeline(
-                        today: today,
-                        currentDoc: currentDoc,
-                        pondName: currentPond.name,
-                        pondArea: currentPond.area,
-                        todayTrayMap: todayTrayMap,
-                        dashboardState: dashboardState,
-                        trayDone: trayDone,
-                        activePlansToday: activePlansToday,
-                        todaySupplementLogs: todaySupplementLogs,
-                        selectedPond: selectedPond,
-                        smartFeedOutput: null,
-                        currentPond: currentPond,
-                        isSmartFeedEnabled: isSmartFeedEnabled,
-                        isPro: isPro,
-                        valueDelta: pondValue.delta,
-                        showDoneRoundsOnly: true,
-                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 const SizedBox(height: 16),
@@ -1632,398 +1622,28 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     );
   }
 
-  List<Widget> _buildTimeline({
-    required DateTime today,
-    required int currentDoc,
-    required String pondName,
-    required double pondArea,
-    required Map<int, TrayLog> todayTrayMap,
-    required PondDashboardState dashboardState,
-    required Map<int, bool> trayDone,
-    required List<Supplement> activePlansToday,
-    required List<SupplementLog> todaySupplementLogs,
-    required String selectedPond,
-    required dynamic smartFeedOutput, // SmartFeedOutput type not found
-    required Pond? currentPond,
-    required bool isSmartFeedEnabled,
-    required bool isPro,
-    required double valueDelta,
-    bool showDoneRoundsOnly = false,
-    DateTime? nextFeedAt,
-    // T7/T8/T9/T10/T11/T13 — intelligence + safety layer params
-    String? insight,
-    int completedRounds = 0,
-    int totalRounds = 0,
-    double? confidenceScore,
-    FeedMode feedMode = FeedMode.guided,
-    int lastFeedbackRound = -1,
-    void Function(int round, bool isAccurate)? onFeedbackSubmit,
-  }) {
-    final feedRoundsData = _getFeedRounds(
-        currentDoc, dashboardState.roundFeedAmounts, currentPond);
-    final List<Map<String, dynamic>> timelineItems = [];
+  // Check if CTA should be enabled for this round (sequential logic)
+  bool _shouldEnableMarkDone(
+      int round, bool isDone, bool isCurrent, Map<int, bool> feedDoneMap) {
+    // Only enable CTA for specific rounds based on completion status
+    if (isDone) return false; // Done rounds don't need CTA
 
-    // Add Feed Rounds
-    for (var data in feedRoundsData) {
-      final timeStr = data['time'] as String;
-      DateTime sortTime;
-      try {
-        final dt = DateFormat("hh:mm a").parse(timeStr);
-        sortTime =
-            DateTime(today.year, today.month, today.day, dt.hour, dt.minute);
-      } catch (_) {
-        sortTime = DateTime(today.year, today.month, today.day, 23, 59);
-      }
-      timelineItems.add({...data, 'type': 'feed', 'sortTime': sortTime});
+    if (isCurrent) return true; // Current active round always has CTA
+
+    // For upcoming rounds: only enable round 2 after round 1 is done
+    final completedRounds = feedDoneMap.keys.where((r) => r <= round).toList();
+
+    if (round == 2) {
+      return completedRounds
+          .contains(1); // Enable 2nd round only after 1st done
     }
 
-    final waterPlans = activePlansToday
-        .where((plan) => plan.type == SupplementType.waterMix)
-        .toList();
-
-    for (final plan in waterPlans) {
-      final existingLogs = todaySupplementLogs
-          .where((log) =>
-              log.supplementType == SupplementType.waterMix &&
-              log.supplementId == plan.id)
-          .toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-      final scheduledAt = _waterPlanScheduleForDay(plan, today);
-      final latestLog = existingLogs.isNotEmpty ? existingLogs.first : null;
-
-      timelineItems.add({
-        'type': 'water',
-        'plan': plan,
-        'log': latestLog,
-        'time': latestLog?.scheduledTime ?? _formatWaterTime(scheduledAt),
-        'sortTime': latestLog?.scheduledAt ?? scheduledAt,
-      });
+    if (round >= 3) {
+      // For rounds 3 and 4, enable only after ALL previous rounds are done
+      return completedRounds.length == (round - 1);
     }
 
-    for (final log in todaySupplementLogs) {
-      if (log.supplementType != SupplementType.waterMix) {
-        continue;
-      }
-      final alreadyRepresented =
-          waterPlans.any((plan) => plan.id == log.supplementId);
-      if (alreadyRepresented) {
-        continue;
-      }
-      final sortTime = log.timestamp;
-      timelineItems.add({
-        'type': 'water',
-        'log': log,
-        'time': DateFormat("hh:mm a").format(sortTime),
-        'sortTime': sortTime,
-      });
-    }
-
-    timelineItems.sort((a, b) =>
-        (a['sortTime'] as DateTime).compareTo(b['sortTime'] as DateTime));
-
-    return timelineItems
-        .map<Widget?>((itemData) {
-          final bool isFeed = itemData['type'] == 'feed';
-
-          // Filter by mode: showDoneRoundsOnly shows only done feed rounds,
-          // otherwise shows active rounds + water supplements (skips done feed)
-          if (!isFeed && showDoneRoundsOnly) return null;
-
-          Widget card;
-
-          if (isFeed) {
-            // ── Feed round card (unified for all DOCs) ─────────────────────
-            final Map<int, bool> feedDoneMap = {
-              for (final e in dashboardState.roundFeedStatus.entries)
-                e.key: e.value == 'completed',
-            };
-            final round = itemData['round'] as int;
-            final time = itemData['time'] as String;
-            final timeKey = itemData['key'] as String;
-            final double qty = dashboardState.roundFeedAmounts[round] ?? 0.0;
-            final thisRoundLog = todayTrayMap[round];
-
-            final roundState = _getSimpleRoundState(
-              doc: currentDoc,
-              round: round,
-              totalRounds: _activeFeedRoundCount(
-                currentDoc,
-                dashboardState.roundFeedAmounts,
-              ),
-              feedDone: feedDoneMap,
-              trayDone: trayDone,
-              isPro: isPro,
-            );
-
-            final bool isDone = roundState['isDone'] as bool;
-            final bool isCurrent = roundState['isCurrent'] as bool;
-            final bool isTrayLogged = roundState['isTrayLogged'] as bool;
-            // A tray log exists but it was auto-skipped (farmer moved on without logging)
-            final bool isTraySkipped =
-                isTrayLogged && (todayTrayMap[round]?.isSkipped ?? false);
-            // DOC 15–29: tray optional for everyone.
-            // DOC ≥ 30 PRO: tray mandatory (handled by _isLocked/_getCurrentRound).
-            // DOC ≥ 30 FREE: tray shown but never blocks progression.
-            // isPendingTray = tray not yet handled at all (neither logged nor skipped)
-            final bool isPendingTray =
-                isDone && currentDoc >= 15 && !isTrayLogged;
-
-            // Filter: skip non-done rounds in done-only mode.
-            if (showDoneRoundsOnly && !isDone) return null;
-            // In active mode: only skip done rounds that have NO pending tray action.
-            // If tray is pending or skipped, keep the card visible so farmer can log it.
-            if (!showDoneRoundsOnly &&
-                isDone &&
-                !isPendingTray &&
-                !isTraySkipped) return null;
-
-            final FeedRoundState cardState = isDone
-                ? FeedRoundState.done
-                : isCurrent
-                    ? FeedRoundState.current
-                    : FeedRoundState.upcoming;
-
-            // First upcoming round after current = "NEXT"
-            final int currentRound = feedDoneMap.entries
-                .where((e) => !e.value)
-                .map((e) => e.key)
-                .fold<int>(0, (m, r) => m == 0 ? r : (r < m ? r : m));
-            final bool isNext = cardState == FeedRoundState.upcoming &&
-                round == currentRound + 1;
-
-            // Supplements: applied for done rounds, planned for others
-            final appliedSupplements =
-                _getAppliedFeedSupplements(round, todaySupplementLogs);
-            final List<String> supplements = appliedSupplements.isNotEmpty
-                ? appliedSupplements
-                    .map((s) =>
-                        "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
-                    .toList()
-                : _getPlannedFeedSupplements(activePlansToday, timeKey, qty)
-                    .map((s) =>
-                        "${s.name.toUpperCase()} ${s.quantity.toStringAsFixed(1)}${s.unit}")
-                    .toList();
-
-            final double finalFeedKg =
-                dashboardState.roundFinalFeedAmounts[round] ?? qty;
-            final bool isManuallyEdited =
-                dashboardState.roundIsManuallyEdited[round] ?? false;
-
-            // T10 — Safety clamp: cap recommendation to ±20/25% of last feed
-            final double lastKg = round > 1
-                ? (dashboardState.roundFeedAmounts[round - 1] ?? 0.0)
-                : 0.0;
-            final double safeQty = (lastKg > 0 && qty > 0)
-                ? qty.clamp(lastKg * 0.75, lastKg * 1.2)
-                : qty;
-            final bool isSafetyClamped =
-                lastKg > 0 && (safeQty - qty).abs() > 0.01;
-
-            card = FeedTimelineCard(
-              round: round,
-              time: time,
-              recommendedFeedKg: safeQty,
-              finalFeedKg: finalFeedKg,
-              isManuallyEdited: isManuallyEdited,
-              state: cardState,
-              isPendingTray: isPendingTray,
-              isTraySkipped: isTraySkipped,
-              trayStatuses:
-                  thisRoundLog?.isSkipped == true ? null : thisRoundLog?.trays,
-              supplements: supplements,
-              isSmartFeed: isSmartFeedEnabled,
-              lastFeedKg: lastKg > 0 ? lastKg : null,
-              leftoverPercent: thisRoundLog?.leftoverPercent,
-              correctionPercent: 0, // TODO: calculate
-              // Hero timer SSOT — card owns the live countdown internally.
-              // Only supplied for the current (active) round; null for done/upcoming.
-              nextFeedAt: isCurrent ? nextFeedAt : null,
-              onEdit: isCurrent
-                  ? (double newQty) {
-                      ref.read(pondDashboardProvider.notifier).editRoundAmount(
-                            round,
-                            newQty,
-                            persistToPlan: currentDoc > 30,
-                          );
-                    }
-                  : null,
-              // MARK AS FED: available for any undone round, DOC 1–150 only.
-              onMarkDone: !isDone &&
-                      currentDoc <= 150 &&
-                      dashboardState.roundFeedAmounts.containsKey(round)
-                  ? () async {
-                      // T13 — show feedback prompt on the done card after this round
-                      setState(() => _lastFeedbackRound = round);
-                      final actualQty = finalFeedKg;
-                      if (actualQty > 0) {
-                        _logFeedSupplementApplication(
-                          pondId: selectedPond,
-                          pondName: pondName,
-                          round: round,
-                          feedQty: actualQty,
-                          activePlansToday: activePlansToday,
-                        );
-                      }
-                      // markFeedDone updates status in DB → loadTodayFeed → Riverpod rebuild
-                      // Card then transitions: current → done (+ LOG TRAY if DOC >= 15)
-                      bool saved = false;
-                      try {
-                        await ref
-                            .read(pondDashboardProvider.notifier)
-                            .markFeedDone(
-                              round,
-                              actualQty: actualQty,
-                            );
-                        saved = true;
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e is ArgumentError
-                                    ? (e.message?.toString() ??
-                                        'Feed amount missing. Please refresh.')
-                                    : 'Feed not saved. Please retry.',
-                              ),
-                              backgroundColor: Colors.red,
-                              duration: const Duration(seconds: 4),
-                              action: SnackBarAction(
-                                label: 'Retry',
-                                textColor: Colors.white,
-                                onPressed: () async {
-                                  await ref
-                                      .read(pondDashboardProvider.notifier)
-                                      .markFeedDone(
-                                        round,
-                                        actualQty: actualQty,
-                                      );
-                                },
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                      if (!mounted || !saved) return;
-                      // Success feedback only shown after confirmed DB save
-                      _showSuccessPopup(
-                        context: context,
-                        title: 'Feed Logged',
-                        message:
-                            'Round $round: ${actualQty.toStringAsFixed(2)} kg',
-                      );
-                      final completedAfter = round;
-                      final motivationMsg =
-                          _feedMotivationMessage(completedAfter);
-                      final valueLabel = _formatCurrency(valueDelta);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(
-                          valueDelta >= 1
-                              ? '$motivationMsg  •  +$valueLabel added to pond value'
-                              : motivationMsg,
-                        ),
-                        backgroundColor: const Color(0xFF16A34A),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 3),
-                      ));
-                    }
-                  : null,
-              // LOG TRAY: pending = never logged, skipped = auto-skipped (show "Update Now")
-              onLogTray: (isPendingTray || isTraySkipped)
-                  ? () async {
-                      final result = await openTrayWithResult(round, false);
-                      if (result != null && mounted) {
-                        // ✅ SUCCESS POPUP: Show tray logged confirmation
-                        _showSuccessPopup(
-                          context: context,
-                          title: 'Tray Logged',
-                          message: 'Round $round: Status recorded',
-                        );
-                      }
-                    }
-                  : null,
-              isNext: isNext,
-              // T7/T8/T9/T10/T11/T13 — intelligence + safety layer
-              insight: isCurrent ? insight : null,
-              completedRounds: completedRounds,
-              totalRounds: totalRounds,
-              confidenceScore: isCurrent ? confidenceScore : null,
-              isSafetyClamped: isCurrent && isSafetyClamped,
-              feedMode: feedMode,
-              showFeedbackPrompt: isDone && round == lastFeedbackRound,
-              onFeedback: isDone
-                  ? (bool isAccurate) =>
-                      onFeedbackSubmit?.call(round, isAccurate)
-                  : null,
-              decision: isCurrent ? dashboardState.decision : null,
-              recommendationInstruction:
-                  isCurrent ? dashboardState.recommendation?.instruction : null,
-              isCurrent: isCurrent,
-              // TASK 8: pass anchor so card can show "Base Feed / Adjusted Feed" split
-              anchorFeedKg: (isCurrent && currentDoc >= 31)
-                  ? currentPond?.anchorFeed
-                  : null,
-            );
-
-            // External warning strip removed — FeedTimelineCard now owns the timer
-            // and warning UX internally via its 3-state layout (Too Early / Window
-            // Open / Overdue). The nextFeedAt DateTime drives all of this.
-          } else {
-            final log = itemData['log'] as SupplementLog?;
-            final plan = itemData['plan'] as Supplement?;
-            final isApplied = log != null;
-
-            final scheduledAt = plan != null
-                ? _waterPlanScheduleForDay(plan, today)
-                : (log?.scheduledAt ?? log?.timestamp ?? today);
-            final items = log?.appliedItems ??
-                (plan != null
-                    ? plan.calculateAppliedItems(pondArea: pondArea)
-                    : <CalculatedItem>[]);
-
-            card = _WaterRoundCard(
-              time: itemData['time'],
-              title: log?.supplementName ?? plan?.name ?? "Water Mix",
-              items: items,
-              isApplied: isApplied,
-              onMarkDone: plan == null || isApplied
-                  ? null
-                  : () {
-                      if (pondArea <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text("Pond area must be greater than zero"),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        return;
-                      }
-                      final didLog = _logWaterSupplementApplication(
-                        pondId: dashboardState.selectedPond,
-                        pondName: pondName,
-                        pondArea: pondArea,
-                        plan: plan,
-                        scheduledAt: scheduledAt,
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            didLog
-                                ? "Water supplement marked as applied"
-                                : "Unable to apply water supplement",
-                          ),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-            );
-          }
-
-          return card;
-        })
-        .whereType<Widget>()
-        .toList();
+    return false; // Default: don't enable CTA
   }
 
   // ── Estimated survival rate based on DOC ──────────────────────────
@@ -2230,6 +1850,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     required double plannedFeed,
     required double consumedFeed,
     required String mode,
+    required Pond pond,
   }) {
     // ── mode-based display strings ──────────────────────────────────────
     final String cardTitle;
@@ -2261,6 +1882,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final trayDecision = TrayDecisionEngine.evaluate(
       allTrayLogs: dedupedLogs,
       doc: currentDoc,
+      seedType: pond.seedType,
     );
 
     final String action = trayDecision.action;

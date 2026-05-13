@@ -104,13 +104,15 @@ class PondService {
 
     final stockingType = (pond['stocking_type'] as String?) ?? 'nursery';
 
-    // Generate ONLY the blind feeding phase (DOC 1–25).
-    // DOC 26–29 (transitional) are added by ensureFutureFeedExists rolling recovery.
-    // DOC ≥ 30 (smart mode) has no pre-generated schedule — amounts are computed live.
+    // Generate blind feeding phase:
+    // - Nursery: DOC 1–10 only (nursery phase ends at DOC 10)
+    // - Hatchery: DOC 1–25 (DOC 26–29 added by rolling recovery)
+    // - DOC ≥ 30: no pre-generated schedule for either type
+    final endDoc = stockingType == 'nursery' ? 10 : 25;
     await generateFeedPlan(
       pondId: pondId,
       startDoc: 1,
-      endDoc: 25,
+      endDoc: endDoc,
       stockingCount: pond['seed_count'] ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
       stockingDate: DateTime.parse(pond['stocking_date']).toUtc(),

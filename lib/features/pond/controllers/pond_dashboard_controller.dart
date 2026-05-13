@@ -456,10 +456,11 @@ class PondDashboardController {
       AppLogger.info(
           'Controller: Regenerating blind schedule for pond=$pondId DOC=$doc type=$stockingType');
 
+      final endDocCap = stockingType == 'nursery' ? 10 : 29;
       await generateFeedPlan(
         pondId: pondId,
         startDoc: 1,
-        endDoc: doc.clamp(1, 29),
+        endDoc: doc.clamp(1, endDocCap),
         stockingCount: seedCount,
         pondArea: pondArea,
         stockingDate: stockingDate,

@@ -8,7 +8,7 @@ class FeedPlan {
   const FeedPlan(this.docStart, this.docEnd, this.feedKgPer100k);
 }
 
-// DOC 1–20 feed table for nursery (big shrimp) - updated to match user specs
+// DOC 1–10 feed table for nursery (big shrimp) - nursery max DOC is 10
 const List<FeedPlan> nurseryFeedTable = [
   FeedPlan(1, 1, 4.0),   // d1: 4kgs
   FeedPlan(2, 2, 5.0),   // d2: 5kgs
@@ -20,7 +20,6 @@ const List<FeedPlan> nurseryFeedTable = [
   FeedPlan(8, 8, 11.0),  // d8: 11kgs
   FeedPlan(9, 9, 12.0),  // d9: 12kgs
   FeedPlan(10, 10, 13.0), // d10: 13kgs
-  FeedPlan(11, 20, 13.0), // d11-20: maintain 13kgs
 ];
 
 // Hatchery feed calculation based on incremental formula

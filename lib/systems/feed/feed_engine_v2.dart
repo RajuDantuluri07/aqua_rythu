@@ -77,8 +77,8 @@ class FeedBaseRate {
       return doc <= 10 ? TrayRequirement.optional : TrayRequirement.mandatory;
     }
 
-    if (doc <= 14) return TrayRequirement.notRequired;
-    if (doc <= 24) return TrayRequirement.optional;
+    if (doc <= 15) return TrayRequirement.notRequired;
+    if (doc <= 25) return TrayRequirement.optional;
     return TrayRequirement.mandatory;
   }
 
@@ -254,7 +254,7 @@ class FeedEngineV2 {
     required int doc,
   }) {
     if (seedType == SeedType.hatcherySmall && doc < 15) return -0.05;
-    if (seedType == SeedType.nurseryBig && doc < 10) return 0.05;
+    if (seedType == SeedType.nurseryBig && doc >= 3 && doc <= 10) return 0.05;
     return 0.0;
   }
 

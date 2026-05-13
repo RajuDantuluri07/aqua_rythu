@@ -24,6 +24,7 @@ class BasicFeedBreakdownCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(context),
+          _buildPhaseBadge(),
           const Divider(height: 1, indent: Spacing.lg, endIndent: Spacing.lg, color: AppColors.border),
           _buildBasicBreakdown(context),
           _buildFinalRow(context),
@@ -69,6 +70,59 @@ class BasicFeedBreakdownCard extends StatelessWidget {
     );
   }
 
+  Widget _buildPhaseBadge() {
+    final isNursery = explanation.seedType == SeedType.nurseryBig;
+    final doc = explanation.doc;
+
+    String phaseLabel;
+    Color phaseColor;
+
+    if (isNursery) {
+      if (doc <= 2) {
+        phaseLabel = 'EARLY BLIND FEEDING';
+        phaseColor = const Color(0xFFFFA500);
+      } else if (doc <= 10) {
+        phaseLabel = 'SMART FEED ACTIVE';
+        phaseColor = const Color(0xFF4CAF50);
+      } else {
+        phaseLabel = 'PHASE COMPLETE';
+        phaseColor = const Color(0xFF999999);
+      }
+    } else {
+      if (doc <= 15) {
+        phaseLabel = 'FIXED FEED PHASE';
+        phaseColor = const Color(0xFF2196F3);
+      } else if (doc <= 25) {
+        phaseLabel = 'OPTIONAL TRAY PHASE';
+        phaseColor = const Color(0xFFFFA500);
+      } else {
+        phaseLabel = 'MANDATORY TRAY PHASE';
+        phaseColor = const Color(0xFFE53935);
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Spacing.lg, 0, Spacing.lg, 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: phaseColor.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: phaseColor.withOpacity(0.3)),
+        ),
+        child: Text(
+          phaseLabel,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: phaseColor,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBasicBreakdown(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.sm),
@@ -110,7 +164,7 @@ class BasicFeedBreakdownCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20),
+          const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20),
           const SizedBox(width: Spacing.sm),
           Text(
             'Final Feed Today',
