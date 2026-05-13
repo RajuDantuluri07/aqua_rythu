@@ -11,6 +11,51 @@ final supabase = Supabase.instance.client;
 // Global lock set to prevent concurrent feed plan generation for the same pond
 final Set<String> _feedPlanLocks = <String>{};
 
+/// Create a FeedConfig with equal splits for the given number of rounds
+FeedConfig _createFeedConfig(int numRounds) {
+  final splitValue = 1.0 / numRounds;
+  final splits = List<double>.filled(numRounds, splitValue);
+
+  // Define timings for different round counts
+  final timings24h = _getTimings24h(numRounds);
+  final timingsDisplay = _getTimingsDisplay(numRounds);
+
+  return FeedConfig(
+    rounds: numRounds,
+    splits: splits,
+    timings24h: timings24h,
+    timingsDisplay: timingsDisplay,
+  );
+}
+
+/// Get 24-hour timings for specified number of rounds
+List<String> _getTimings24h(int numRounds) {
+  switch (numRounds) {
+    case 2:
+      return ["06:00", "16:00"];
+    case 3:
+      return ["06:00", "12:00", "18:00"];
+    case 4:
+      return ["06:00", "11:00", "16:00", "21:00"];
+    default:
+      return ["06:00", "11:00", "16:00", "21:00"];
+  }
+}
+
+/// Get display timings for specified number of rounds
+List<String> _getTimingsDisplay(int numRounds) {
+  switch (numRounds) {
+    case 2:
+      return ["06:00 AM", "04:00 PM"];
+    case 3:
+      return ["06:00 AM", "12:00 PM", "06:00 PM"];
+    case 4:
+      return ["06:00 AM", "11:00 AM", "04:00 PM", "09:00 PM"];
+    default:
+      return ["06:00 AM", "11:00 AM", "04:00 PM", "09:00 PM"];
+  }
+}
+
 /// Generates a feeding schedule for a range of DOCs (1–120).
 ///
 /// Uses seed-type-specific DOC tables for blind-phase plan generation.
@@ -64,9 +109,17 @@ Future<void> generateFeedPlan({
       final totalFeed = feedResult.totalFeedKg;
 
       final feedType = getFeedType(doc);
-      final config = getFeedConfig(doc);
 
-      for (int round = 1; round <= 4; round++) {
+      // Determine number of feeds for this DOC and seed type
+      final seedTypeEnum = stockingType == 'hatchery'
+          ? SeedType.hatcherySmall
+          : SeedType.nurseryBig;
+      final numRounds = BlindFeedingEngine.getMealsPerDay(doc, seedType: seedTypeEnum);
+
+      // Create dynamic config based on actual number of rounds
+      final config = _createFeedConfig(numRounds);
+
+      for (int round = 1; round <= numRounds; round++) {
         final roundFeed = config.quantityForRound(round - 1, totalFeed);
         batch.add({
           'pond_id': pondId,
