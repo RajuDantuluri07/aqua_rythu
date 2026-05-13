@@ -401,11 +401,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       return idx >= 0 && idx < config.splits.length && config.splits[idx] > 0;
     }).toList();
 
+    // Filter out rounds with zero or negative feed (do not feed rounds).
+    // These should not be displayed to the farmer.
+    final visibleRounds = activeRounds.where((r) {
+      final amount = roundFeedAmounts[r] ?? 0.0;
+      return amount > 0;
+    }).toList();
+
     // Find the first incomplete round (the one that should be "current").
     // Only this round will have a button enabled; all others are disabled/inactive.
     // Once this round is marked done, the next incomplete round becomes current.
     int? nextIncompleteRound;
-    for (final r in activeRounds) {
+    for (final r in visibleRounds) {
       final status = roundFeedStatus[r] ?? 'pending';
       if (status != 'completed') {
         nextIncompleteRound = r;
@@ -414,7 +421,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
 
     final result = <Widget>[];
-    for (final r in activeRounds) {
+    for (final r in visibleRounds) {
       final idx = r - 1;
       if (idx < 0 || idx >= config.timingsDisplay.length) continue;
       final time = config.timingsDisplay[idx];
@@ -503,6 +510,45 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         ),
       );
     }
+
+    // Edge case: if all rounds filtered out (all zero feed), show message
+    if (result.isEmpty && activeRounds.isNotEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "No feeding scheduled for this time",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "All feeding rounds for today have been set to zero. No action needed.",
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
     return result;
   }
 

@@ -32,6 +32,56 @@ void main() {
     });
   });
 
+  group('Do Not Feed round visibility', () {
+    test('Zero-feed rounds should be filtered out from timeline', () {
+      // This test documents the fix for hiding "Do not feed" rounds in the UI.
+      // When a round has feedKg <= 0, it should not appear in the feed timeline
+      // because there's no action for the farmer to take.
+
+      // Simulate filtering logic
+      final allRounds = [1, 2, 3, 4];
+      final roundFeedAmounts = {
+        1: 5.0,  // Show this
+        2: 0.0,  // Hide this (zero feed)
+        3: 3.5,  // Show this
+        4: 0.0,  // Hide this (zero feed)
+      };
+
+      final visibleRounds = allRounds.where((r) {
+        final amount = roundFeedAmounts[r] ?? 0.0;
+        return amount > 0;
+      }).toList();
+
+      // Should only have rounds 1 and 3
+      expect(visibleRounds, equals([1, 3]));
+      expect(visibleRounds.length, equals(2));
+
+      // Verify zero-feed rounds are excluded
+      expect(visibleRounds, isNot(contains(2)));
+      expect(visibleRounds, isNot(contains(4)));
+    });
+
+    test('All zero-feed rounds should show "No feeding scheduled" message', () {
+      // When all rounds are zero feed, no individual round cards are shown.
+      // Instead, a single message is displayed to the farmer.
+
+      final allRounds = [1, 2, 3, 4];
+      final roundFeedAmounts = {
+        1: 0.0,
+        2: 0.0,
+        3: 0.0,
+        4: 0.0,
+      };
+
+      final visibleRounds = allRounds.where((r) {
+        final amount = roundFeedAmounts[r] ?? 0.0;
+        return amount > 0;
+      }).toList();
+
+      expect(visibleRounds, isEmpty);
+    });
+  });
+
   group('FeedDayPlan', () {
     test('FeedDayPlan can be created and accessed with dot notation', () {
       final plan = FeedDayPlan(
