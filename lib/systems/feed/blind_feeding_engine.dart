@@ -118,8 +118,9 @@ class BlindFeedingEngine {
   /// - DOC ≥ 2   → 4 meals
   ///
   /// Hatchery Seed Rules:
-  /// - DOC ≤ 3   → 2 meals
-  /// - DOC > 3   → 4 meals
+  /// - DOC 1     → 2 meals
+  /// - DOC 2–6   → 3 meals
+  /// - DOC ≥ 7   → 4 meals
   ///
   /// Legacy rules (for backward compatibility when seedType not specified):
   /// - DOC ≤ 7   → 2 meals
@@ -132,8 +133,10 @@ class BlindFeedingEngine {
         // Nursery: Day 1 = 2 feeds, Day 2+ = 4 feeds
         return doc == 1 ? 2 : 4;
       } else {
-        // Hatchery: Day 1-3 = 2 feeds, Day 4+ = 4 feeds
-        return doc <= 3 ? 2 : 4;
+        // Hatchery: Day 1 = 2 feeds, Day 2-6 = 3 feeds, Day 7+ = 4 feeds
+        if (doc == 1) return 2;
+        if (doc <= 6) return 3;
+        return 4;
       }
     }
 

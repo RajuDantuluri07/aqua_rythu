@@ -69,7 +69,10 @@ class FeedBaseRate {
     if (seedType == SeedType.nurseryBig) {
       return doc == 1 ? 2 : 4;
     }
-    return doc == 1 ? 2 : 4;
+    // Hatchery: DOC 1 = 2, DOC 2-6 = 3, DOC 7+ = 4
+    if (doc == 1) return 2;
+    if (doc <= 6) return 3;
+    return 4;
   }
 
   static TrayRequirement _defaultTrayRequirement(SeedType seedType, int doc) {
