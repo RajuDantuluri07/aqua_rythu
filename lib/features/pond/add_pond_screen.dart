@@ -8,6 +8,7 @@ import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import '../../routes/app_routes.dart';
 import 'enums/seed_type.dart';
 import 'package:aqua_rythu/features/upgrade/widgets/pond_limit_bottom_sheet.dart';
+import '../../core/providers/product_provider.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -268,6 +269,70 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     );
   }
 
+  Widget _buildFeedBrandDropdown() {
+    final feedBrandsAsync = ref.watch(feedBrandsProvider);
+
+    return feedBrandsAsync.when(
+      loading: () => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.white,
+        ),
+        child: const SizedBox(
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (e, st) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.red.shade300),
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.red.shade50,
+        ),
+        child: Text(
+          'Error loading feed brands',
+          style: TextStyle(color: Colors.red.shade700),
+        ),
+      ),
+      data: (brands) {
+        return DropdownButtonFormField<String>(
+          value: _selectedFeedBrandId,
+          decoration: InputDecoration(
+            labelText: "Feed Brand",
+            hintText: "Select a feed brand",
+            prefixIcon: Icon(Icons.store_rounded,
+                color: Theme.of(context).primaryColor),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  BorderSide(color: Theme.of(context).primaryColor, width: 2),
+            ),
+          ),
+          items: brands
+              .map((brand) => DropdownMenuItem(
+                    value: brand.id,
+                    child: Text(brand.name),
+                  ))
+              .toList(),
+          onChanged: (value) {
+            setState(() => _selectedFeedBrandId = value);
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -421,6 +486,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                     ),
                     const SizedBox(height: 20),
                     _buildSeedTypeSelector(),
+                    const SizedBox(height: 20),
+                    _buildFeedBrandDropdown(),
                     const SizedBox(height: 20),
                     InkWell(
                       onTap: () => _selectDate(context),
