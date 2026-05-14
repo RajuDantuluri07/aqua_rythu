@@ -1735,40 +1735,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       child: CircularProgressIndicator(),
                     ),
                   )
-                else if (dashboardState.roundFeedAmounts.isEmpty &&
-                    currentDoc < 30)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      child: Column(
-                        children: [
-                          Icon(Icons.restaurant_menu_outlined,
-                              size: 48, color: Colors.grey[400]),
-                          const SizedBox(height: 12),
-                          Text(
-                            AppLocalizations.of(context).t('no_feed_plan'),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Start feeding to see insights',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
                 else
                   Column(
                     children: [
                       // ── Active rounds (current + upcoming) ──
+                      // Shows placeholder cards while loading, or actual cards once data is available
                       ..._buildTimeline(
                         currentDoc,
                         dashboardState.roundFeedAmounts,
