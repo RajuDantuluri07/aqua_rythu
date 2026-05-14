@@ -2143,13 +2143,18 @@ class _PondStat extends StatelessWidget {
 
 // ─── Upgrade nudge ────────────────────────────────────────────────────────────
 
-class _UpgradeNudge extends StatelessWidget {
+class _UpgradeNudge extends ConsumerWidget {
   final VoidCallback onTap;
 
   const _UpgradeNudge({required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gate = ref.watch(featureGateProvider);
+    if (gate.isPro) {
+      return const SizedBox.shrink();
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(

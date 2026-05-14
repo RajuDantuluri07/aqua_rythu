@@ -3,14 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/models/supplement_schedule.dart';
+import '../../core/providers/product_provider.dart';
 import '../../core/theme/app_theme.dart';
 import 'screens/add_supplement_screen.dart';
 import 'supplement_provider.dart';
 
 class SupplementMixScreen extends ConsumerStatefulWidget {
   final String pondId;
+  final String? farmId;
 
-  const SupplementMixScreen({super.key, required this.pondId});
+  const SupplementMixScreen({
+    super.key,
+    required this.pondId,
+    this.farmId,
+  });
 
   @override
   ConsumerState<SupplementMixScreen> createState() => _SupplementMixScreenState();
@@ -100,6 +107,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     final filteredHistory = _filterType == null
         ? logs
         : logs.where((log) => log.supplementType == _filterType).toList();
+    final schedulesAsync = ref.watch(supplementSchedulesProvider(widget.pondId));
 
     return Scaffold(
       backgroundColor: AppColors.cardBg,
@@ -139,6 +147,83 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
                   )),
             ],
             AppSpacing.hXl,
+            _sectionHeader("SUPPLEMENT SCHEDULES"),
+            schedulesAsync.when(
+              data: (schedules) {
+                if (schedules.isEmpty) {
+                  return _emptyState("No supplement schedules.");
+                }
+
+                final activeSchedules = schedules
+                    .where((s) => s.isActive && s.isActiveOnDate(today))
+                    .toList();
+
+                final upcomingSchedules = schedules
+                    .where((s) => s.isActive && s.startDate.isAfter(today))
+                    .toList();
+
+                final pastSchedules = schedules
+                    .where((s) => s.endDate.isBefore(today))
+                    .toList();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Active Today
+                    if (activeSchedules.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12, top: 8, left: 4),
+                        child: Text(
+                          "Active Today",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      ...activeSchedules
+                          .map((schedule) =>
+                              _ScheduleCard(schedule: schedule, pondId: widget.pondId)),
+                    ] else ...[
+                      _emptyState("No active schedules for today."),
+                    ],
+
+                    // Upcoming
+                    if (upcomingSchedules.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12, top: 8, left: 4),
+                        child: Text(
+                          "Upcoming",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      ...upcomingSchedules
+                          .map((schedule) =>
+                              _ScheduleCard(schedule: schedule, pondId: widget.pondId)),
+                    ],
+
+                    // Past Schedules (collapsible)
+                    if (pastSchedules.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _PastSchedulesAccordion(
+                        schedules: pastSchedules,
+                        pondId: widget.pondId,
+                      ),
+                    ],
+                  ],
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, st) =>
+                  _emptyState("Error loading schedules"),
+            ),
+            AppSpacing.hXl,
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -164,7 +249,12 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => AddSupplementScreen(pondId: widget.pondId)),
+          MaterialPageRoute(
+            builder: (_) => AddSupplementScreen(
+              pondId: widget.pondId,
+              farmId: widget.farmId,
+            ),
+          ),
         ),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("ADD NEW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -222,6 +312,75 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
             color: isSelected ? Colors.white : Colors.grey.shade600,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PastSchedulesAccordion extends StatefulWidget {
+  final List<SupplementSchedule> schedules;
+  final String pondId;
+
+  const _PastSchedulesAccordion({
+    required this.schedules,
+    required this.pondId,
+  });
+
+  @override
+  State<_PastSchedulesAccordion> createState() => _PastSchedulesAccordionState();
+}
+
+class _PastSchedulesAccordionState extends State<_PastSchedulesAccordion> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    _isExpanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Past Schedules (${widget.schedules.length})",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_isExpanded) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: widget.schedules
+                    .map((schedule) =>
+                        _ScheduleCard(schedule: schedule, pondId: widget.pondId))
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -584,6 +743,108 @@ class _ApplicationLogRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ScheduleCard extends StatelessWidget {
+  final SupplementSchedule schedule;
+  final String pondId;
+
+  const _ScheduleCard({
+    required this.schedule,
+    required this.pondId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isFeed = schedule.applicationType == 'feed_mix';
+    final accent = isFeed ? Colors.indigo : Colors.teal;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: accent.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      schedule.productName ?? schedule.categoryName ?? "Supplement",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "${DateFormat('dd MMM').format(schedule.startDate)} - ${DateFormat('dd MMM').format(schedule.endDate)}",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  isFeed ? "FEED" : "WATER",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (isFeed && schedule.selectedFeedRounds.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              children: schedule.selectedFeedRounds
+                  .map(
+                    (round) => Chip(
+                      label: Text(
+                        round,
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: accent.withOpacity(0.1),
+                      labelStyle: TextStyle(color: accent),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+          if (schedule.notes != null && schedule.notes!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              schedule.notes!,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

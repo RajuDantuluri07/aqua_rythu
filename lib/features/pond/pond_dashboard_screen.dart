@@ -3,6 +3,11 @@ import 'package:aqua_rythu/core/services/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
 import '../supplements/supplement_provider.dart';
+import '../../core/models/supplement_schedule.dart';
+import '../../core/models/supplement_schedule_log.dart';
+import '../../core/models/feed_brand.dart';
+import '../../core/providers/product_provider.dart';
+import '../../core/repositories/schedule_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,6 +73,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   int _debugTapCount = 0;
   // Flag to prevent repeated anchor feed dialog popup
   bool _anchorFeedDialogShown = false;
+  final _scheduleRepo = ScheduleRepository();
 
   @override
   void initState() {
@@ -350,8 +356,159 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   /// Returns feed round display cards for scheduled feed rounds.
   /// Uses FeedTimelineCard to show rich round data (amount, status, tray, etc.)
   /// Only the next incomplete round can be marked done; others are disabled.
-  List<Widget> _buildTimeline(int doc, Map<int, double> roundFeedAmounts,
-      [Pond? pond, Map<int, bool> trayDone = const {}]) {
+  Future<void> _markApplied(SupplementSchedule schedule, String round) async {
+    try {
+      final log = SupplementScheduleLog(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        supplementScheduleId: schedule.id,
+        appliedDate: DateTime.now(),
+        feedRound: schedule.applicationType == 'feed_mix' ? round : null,
+        status: 'applied',
+        remarks: null,
+        createdAt: DateTime.now(),
+      );
+      await _scheduleRepo.insertLog(log);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${schedule.productName ?? schedule.categoryName} marked as applied',
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildTodayApplications(List<SupplementSchedule> schedules) {
+    final feedSupplements = schedules
+        .where((s) => s.applicationType == 'feed_mix')
+        .toList();
+    final waterSupplements = schedules
+        .where((s) => s.applicationType == 'water_mix')
+        .toList();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (feedSupplements.isNotEmpty) ...[
+            Text(
+              'Feed Supplements',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: feedSupplements
+                  .map((s) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFF3B82F6).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Text(
+                      s.productName ?? s.categoryName ?? 'Supplement',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF3B82F6),
+                      ),
+                    ),
+                  ))
+                  .toList(),
+            ),
+          ],
+          if (feedSupplements.isNotEmpty && waterSupplements.isNotEmpty)
+            const SizedBox(height: 12),
+          if (waterSupplements.isNotEmpty) ...[
+            Text(
+              'Water Treatments',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: waterSupplements
+                  .map((s) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Text(
+                      s.productName ?? s.categoryName ?? 'Treatment',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF8B5CF6),
+                      ),
+                    ),
+                  ))
+                  .toList(),
+            ),
+          ],
+          if (feedSupplements.isEmpty && waterSupplements.isEmpty)
+            Text(
+              'No active supplements today',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade500,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildTimeline(
+    int doc,
+    Map<int, double> roundFeedAmounts,
+    List<SupplementSchedule> todaySchedules, [
+    Pond? pond,
+    Map<int, bool> trayDone = const {},
+  ]) {
     final config = getFeedConfig(doc);
     final dashboardState = ref.watch(pondDashboardProvider);
     final roundFeedStatus = dashboardState.roundFeedStatus;
@@ -386,6 +543,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           isPendingTray: false,
           trayStatuses: const [],
           supplements: const [],
+          scheduleSupplements: const [],
+          onMarkApplied: null,
           onMarkDone: i == 0 ? () async {} : null,
           onLogTray: null,
           onEdit: null,
@@ -491,6 +650,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       // Get individual tray statuses for this round (all 4 trays)
       final trayStatusesForRound = trayStatusesPerRound[r] ?? const <TrayStatus>[];
 
+      // Filter schedules for this feed round
+      final roundLabel = 'R$r';
+      final roundSchedules = todaySchedules
+          .where((s) =>
+              s.applicationType == 'feed_mix' &&
+              s.selectedFeedRounds.contains(roundLabel))
+          .toList();
+
       result.add(
         FeedTimelineCard(
           round: r,
@@ -502,6 +669,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           isPendingTray: showTrayButton && !(trayDone[r] ?? false),
           trayStatuses: trayStatusesForRound,
           supplements: const [],
+          scheduleSupplements: roundSchedules,
+          onMarkApplied: (schedule) => _markApplied(schedule, roundLabel),
           onMarkDone: onMarkDone,
           onLogTray: onLogTray,
           onEdit: null,
@@ -800,6 +969,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final today = ref.watch(todayProvider);
     final oneWeekAgo = ref.watch(oneWeekAgoProvider);
     final isPro = ref.watch(subscriptionProvider).isPro;
+
+    // Watch supplement schedules for today
+    final schedulesAsync = ref.watch(activeSupplementSchedulesProvider(selectedPond));
+    final todaySchedules = schedulesAsync.asData?.value ?? [];
+    final activeTodaySchedules = todaySchedules
+        .where((s) => s.isActiveOnDate(DateTime.now()))
+        .toList();
 
     // Notify user when feed plan was silently regenerated (auto-recovery)
     ref.listen<PondDashboardState>(pondDashboardProvider, (previous, next) {
@@ -1425,6 +1601,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 ],
               ),
 
+              // Feed Company Display
+              if (currentPond.feedBrandId != null) ...[
+                const SizedBox(height: 10),
+                _buildFeedCompanyInfo(currentPond.feedBrandId!, ref),
+              ],
+
               // Nursery migration banner (when DOC > 10)
               if (currentPond.seedType == SeedType.nurseryBig && currentDoc > 10) ...[
                 const SizedBox(height: 10),
@@ -1590,6 +1772,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                       ..._buildTimeline(
                         currentDoc,
                         dashboardState.roundFeedAmounts,
+                        activeTodaySchedules,
                         currentPond,
                         trayDone,
                       ),
@@ -1597,6 +1780,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                     ],
                   ),
                 const SizedBox(height: 16),
+
+                /// ── TODAY'S APPLICATIONS (Supplements) ──────────────────────
+                if (activeTodaySchedules.isNotEmpty) ...[
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "TODAY'S APPLICATIONS",
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF64748B),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildTodayApplications(activeTodaySchedules),
+                  const SizedBox(height: 20),
+                ],
 
                 /// ── QUICK ACTIONS (Feed/Supp + Tank Ops) ─────────────────────
                 const Align(
@@ -1957,6 +2159,72 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildFeedCompanyInfo(String feedBrandId, WidgetRef ref) {
+    final brandsAsync = ref.watch(feedBrandsProvider);
+
+    return brandsAsync.when(
+      loading: () => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: const SizedBox(
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (e, st) => const SizedBox.shrink(),
+      data: (brands) {
+        FeedBrand? brand;
+        try {
+          brand = brands.firstWhere((b) => b.id == feedBrandId);
+        } catch (e) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.store_rounded, color: Colors.blue.shade700, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Feed Company',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      brand.name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

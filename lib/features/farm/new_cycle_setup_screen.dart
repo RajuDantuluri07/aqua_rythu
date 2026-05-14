@@ -10,6 +10,7 @@ import '../supplements/supplement_provider.dart';
 import '../pond/pond_dashboard_provider.dart';
 import '../growth/growth_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/providers/product_provider.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import '../../core/utils/logger.dart';
 
@@ -28,6 +29,7 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
   final _plSizeCtrl = TextEditingController(text: "10");
   int _selectedTrays = 4; // Default to 4
   DateTime _stockingDate = DateTime.now();
+  String? _selectedFeedBrandId;
 
   @override
   void dispose() {
@@ -67,6 +69,7 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
         seedCount: seedCount,
         plSize: plSize,
         numTrays: _selectedTrays,
+        feedBrandId: _selectedFeedBrandId,
       );
     } catch (e) {
       AppLogger.error('New cycle DB reset failed', e);
@@ -195,6 +198,16 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
 
               const SizedBox(height: 20),
 
+              // FEED COMPANY SELECTION
+              Text("Feed Company",
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700)),
+              const SizedBox(height: 8),
+              _buildFeedBrandDropdown(),
+
+              const SizedBox(height: 20),
+
               // TRAY SELECTION DROPDOWN
               Text("Number of Trays",
                   style: TextStyle(
@@ -280,6 +293,65 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
           validator: (val) => val == null || val.isEmpty ? "Required" : null,
         ),
       ],
+    );
+  }
+
+  Widget _buildFeedBrandDropdown() {
+    final feedBrandsAsync = ref.watch(feedBrandsProvider);
+
+    return feedBrandsAsync.when(
+      loading: () => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.white,
+        ),
+        child: const SizedBox(
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (e, st) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.red.shade300),
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.red.shade50,
+        ),
+        child: Text(
+          'Error loading feed brands',
+          style: TextStyle(color: Colors.red.shade700),
+        ),
+      ),
+      data: (brands) {
+        return DropdownButtonFormField<String>(
+          value: _selectedFeedBrandId,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.store_rounded, color: Colors.grey),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            hintText: 'Select a feed brand',
+          ),
+          items: brands
+              .map((brand) => DropdownMenuItem(
+                    value: brand.id,
+                    child: Text(brand.name),
+                  ))
+              .toList(),
+          onChanged: (value) {
+            setState(() => _selectedFeedBrandId = value);
+          },
+          validator: (value) =>
+              value == null ? 'Please select a feed brand' : null,
+        );
+      },
     );
   }
 }

@@ -6,6 +6,8 @@ class SupplementItem {
   final String type; // "feed" or "water"
   final bool isMandatory;
   final double dosePerKg;
+  // UUID from product_master; null for legacy items entered as free text.
+  final String? productId;
 
   SupplementItem({
     String? id,
@@ -15,6 +17,7 @@ class SupplementItem {
     required this.type,
     this.isMandatory = true,
     this.dosePerKg = 0,
+    this.productId,
   }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   factory SupplementItem.fromJson(Map<String, dynamic> json) {
@@ -26,6 +29,7 @@ class SupplementItem {
       type: json['type'] ?? 'feed',
       isMandatory: json['isMandatory'] ?? true,
       dosePerKg: (json['dosePerKg'] ?? 0).toDouble(),
+      productId: json['productId'] as String?,
     );
   }
 
@@ -38,6 +42,7 @@ class SupplementItem {
       'type': type,
       'isMandatory': isMandatory,
       'dosePerKg': dosePerKg,
+      'productId': productId,
     };
   }
 
@@ -49,6 +54,7 @@ class SupplementItem {
     String? type,
     bool? isMandatory,
     double? dosePerKg,
+    String? productId,
   }) {
     return SupplementItem(
       id: id ?? this.id,
@@ -58,6 +64,7 @@ class SupplementItem {
       type: type ?? this.type,
       isMandatory: isMandatory ?? this.isMandatory,
       dosePerKg: dosePerKg ?? this.dosePerKg,
+      productId: productId ?? this.productId,
     );
   }
 }

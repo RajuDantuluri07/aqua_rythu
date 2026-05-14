@@ -38,6 +38,10 @@ class Pond {
   // Seed type: determines which DOC-based feed table to use
   final SeedType seedType;
 
+  // ── Feed Configuration ─────────────────────────────────────────────────────
+  final String? feedBrandId; // Selected feed company brand
+  final String? feedBrandName; // Display name for the brand
+
   // ── Harvest / Action Engine fields ─────────────────────────────────────────
   final int? stockCount; // current active stock (after harvests)
   final bool hasSampling; // whether at least one sample exists
@@ -77,6 +81,8 @@ class Pond {
     this.lastHarvestQty,
     this.aerationType = 'medium',
     this.trayScore,
+    this.feedBrandId,
+    this.feedBrandName,
   }) : seedType = seedType ?? SeedTypeX.fromPlSize(plSize);
 
   /// Returns how many feed rounds apply for the given DOC, respecting
@@ -115,6 +121,8 @@ class Pond {
     double? lastHarvestQty,
     String? aerationType,
     String? trayScore,
+    String? feedBrandId,
+    String? feedBrandName,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -143,6 +151,8 @@ class Pond {
       lastHarvestQty: lastHarvestQty ?? this.lastHarvestQty,
       aerationType: aerationType ?? this.aerationType,
       trayScore: trayScore ?? this.trayScore,
+      feedBrandId: feedBrandId ?? this.feedBrandId,
+      feedBrandName: feedBrandName ?? this.feedBrandName,
     );
   }
 

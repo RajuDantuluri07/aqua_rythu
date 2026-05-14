@@ -142,7 +142,8 @@ class PondService {
             is_smart_feed_enabled,
             anchor_feed,
             is_anchor_initialized,
-            stocking_type
+            stocking_type,
+            feed_brand_id
           ''').eq('id', pondId).maybeSingle();
 
       if (row == null) return null;
@@ -164,6 +165,7 @@ class PondService {
         anchorFeed: (row['anchor_feed'] as num?)?.toDouble(),
         isAnchorInitialized: row['is_anchor_initialized'] ?? false,
         seedType: SeedTypeX.fromDb(row['stocking_type'] as String?),
+        feedBrandId: row['feed_brand_id'] as String?,
       );
     } catch (e) {
       AppLogger.error('Failed to fetch pond by ID: $pondId', e);
@@ -185,7 +187,8 @@ class PondService {
           num_trays,
           status,
           current_abw,
-          is_smart_feed_enabled
+          is_smart_feed_enabled,
+          feed_brand_id
         ''').eq('farm_id', farmId).order('created_at', ascending: false);
   }
 
@@ -242,6 +245,7 @@ class PondService {
     required int seedCount,
     required int plSize,
     required int numTrays,
+    String? feedBrandId,
   }) async {
     try {
       // 1. Delete all historical rows tied to this pond in parallel
@@ -257,7 +261,7 @@ class PondService {
       AppLogger.info('Cleared all cycle data for pond $pondId');
 
       // 2. Update pond with new cycle details
-      await supabase.from('ponds').update({
+      final updateData = {
         'stocking_date':
             newStockingDate.toUtc().toIso8601String().split('T')[0],
         'seed_count': seedCount,
@@ -266,7 +270,11 @@ class PondService {
         'status': 'active',
         'current_abw': null,
         'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', pondId);
+      };
+      if (feedBrandId != null) {
+        updateData['feed_brand_id'] = feedBrandId;
+      }
+      await supabase.from('ponds').update(updateData).eq('id', pondId);
 
       AppLogger.info('Pond $pondId reset to new cycle');
 

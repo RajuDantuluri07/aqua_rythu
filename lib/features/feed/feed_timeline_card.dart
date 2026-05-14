@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/constants/spacing.dart';
 import '../../systems/feed/feed_models.dart';
 import '../../features/tray/enums/tray_status.dart';
+import '../../core/models/supplement_schedule.dart';
 
 enum FeedRoundState { done, current, upcoming }
 
@@ -39,6 +40,8 @@ class FeedTimelineCard extends StatefulWidget {
   final bool isPendingTray;
   final List<TrayStatus>? trayStatuses;
   final List<String> supplements;
+  final List<SupplementSchedule> scheduleSupplements;
+  final void Function(SupplementSchedule)? onMarkApplied;
   final Future<void> Function()? onMarkDone;
   final VoidCallback? onLogTray;
   final void Function(double newQty)? onEdit;
@@ -110,6 +113,8 @@ class FeedTimelineCard extends StatefulWidget {
     this.isTraySkipped = false,
     this.trayStatuses,
     this.supplements = const [],
+    this.scheduleSupplements = const [],
+    this.onMarkApplied,
     this.onMarkDone,
     this.onLogTray,
     this.onEdit,
@@ -454,6 +459,13 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ),
           ],
 
+          // ── Active schedule supplements (feed/water) ──────────────────
+          if (widget.scheduleSupplements.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Spacing.lg, 0, Spacing.lg, Spacing.md),
+              child: _buildSupplementChips(),
+            ),
+
           // ── Tray skipped banner ──────────────────────────────────────
           if (widget.isTraySkipped) ...[
             const Divider(height: 1, color: _greenBorder),
@@ -661,6 +673,12 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             if (_shouldShowTrustSignals()) ...[
               const SizedBox(height: 10),
               _feedTrustSignals(),
+            ],
+
+            // Active schedule supplements
+            if (widget.scheduleSupplements.isNotEmpty) ...[
+              const SizedBox(height: Spacing.lg),
+              _buildSupplementChips(),
             ],
 
             // Confirm Feed Button — Enhanced for farmer accessibility
@@ -933,6 +951,37 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
       ),
     ];
+  }
+
+  // ── Build supplement schedule chips ─────────────────────────────────────────
+  Widget _buildSupplementChips() {
+    if (widget.scheduleSupplements.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(height: 16, color: Colors.grey.shade200),
+        Text(
+          "Supplements",
+          style: AppTextStyles.caption.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.4,
+          ),
+        ),
+        const SizedBox(height: Spacing.sm),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: widget.scheduleSupplements
+              .map((s) => _SupplementChip(
+                    schedule: s,
+                    onApply: widget.onMarkApplied,
+                  ))
+              .toList(),
+        ),
+      ],
+    );
   }
 
   // ── Override warning ─────────────────────────────────────────────────────
@@ -1451,7 +1500,13 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                 ),
               ],
             ),
-            
+
+            // Active schedule supplements
+            if (widget.scheduleSupplements.isNotEmpty) ...[
+              const SizedBox(height: Spacing.md),
+              _buildSupplementChips(),
+            ],
+
             // Confirm button for upcoming rounds that can be confirmed
             if (hasConfirmButton) ...[
               const SizedBox(height: Spacing.lg),
@@ -1874,6 +1929,58 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
         decoration: BoxDecoration(
             color: _slate100, borderRadius: BorderRadius.circular(10)),
         child: Icon(icon, size: 22, color: _ink),
+      ),
+    );
+  }
+}
+
+// ── Supplement schedule chip widget ────────────────────────────────────────────
+class _SupplementChip extends StatelessWidget {
+  final SupplementSchedule schedule;
+  final void Function(SupplementSchedule)? onApply;
+
+  const _SupplementChip({
+    required this.schedule,
+    this.onApply,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final productDisplay = schedule.productName ?? schedule.categoryName ?? 'Supplement';
+    final canApply = onApply != null;
+
+    return GestureDetector(
+      onTap: canApply
+          ? () {
+              HapticFeedback.lightImpact();
+              onApply!(schedule);
+            }
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withOpacity(0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              productDisplay,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF10B981),
+              ),
+            ),
+            if (canApply) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.check_circle_outline_rounded,
+                  size: 12, color: Color(0xFF10B981)),
+            ],
+          ],
+        ),
       ),
     );
   }
