@@ -27,6 +27,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   DateTime _stockingDate = DateTime.now();
   int _numTrays = 4;
   SeedType _seedType = SeedType.hatcherySmall;
+  String? _selectedFeedBrandId;
   bool _isLoading = false;
 
   @override
@@ -179,6 +180,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           plSize: plSize,
           numTrays: _numTrays,
           seedType: _seedType,
+          feedBrandId: _selectedFeedBrandId,
         );
 
         // Refresh the provider to sync the new pond from Supabase

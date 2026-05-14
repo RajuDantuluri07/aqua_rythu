@@ -21,6 +21,7 @@ class PondService {
     required int plSize,
     required int numTrays,
     SeedType? seedType,
+    String? feedBrandId,
   }) async {
     await createPondAndReturnId(
       farmId: farmId,
@@ -31,6 +32,7 @@ class PondService {
       plSize: plSize,
       numTrays: numTrays,
       seedType: seedType,
+      feedBrandId: feedBrandId,
     );
   }
 
@@ -45,6 +47,7 @@ class PondService {
     required int plSize,
     required int numTrays,
     SeedType? seedType,
+    String? feedBrandId,
   }) async {
     final user = supabase.auth.currentUser;
 
@@ -55,25 +58,31 @@ class PondService {
     try {
       final resolvedSeedType = seedType ?? SeedTypeX.fromPlSize(plSize);
 
+      final insertData = {
+        'farm_id': farmId,
+        'name': name,
+        'area': area,
+        'stocking_date': stockingDate.toIso8601String().split('T')[0],
+        'seed_count': seedCount,
+        'pl_size': plSize,
+        'num_trays': numTrays,
+        'user_id': user.id,
+        'stocking_type': resolvedSeedType.dbValue,
+        'status': 'active',
+      };
+
+      if (feedBrandId != null) {
+        insertData['feed_brand_id'] = feedBrandId;
+      }
+
       final response = await supabase
           .from('ponds')
-          .insert({
-            'farm_id': farmId,
-            'name': name,
-            'area': area,
-            'stocking_date': stockingDate.toIso8601String().split('T')[0],
-            'seed_count': seedCount,
-            'pl_size': plSize,
-            'num_trays': numTrays,
-            'user_id': user.id,
-            'stocking_type': resolvedSeedType.dbValue,
-            'status': 'active',
-          })
+          .insert(insertData)
           .select('id')
           .single();
 
       final pondId = response['id'] as String;
-      AppLogger.info("Created pond: $pondId");
+      AppLogger.info("Created pond: $pondId (brand: ${feedBrandId ?? 'none'})");
 
       // MANDATORY: Generate feed schedule immediately after pond creation
       await generateFeedSchedule(pondId);
