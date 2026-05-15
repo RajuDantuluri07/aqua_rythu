@@ -46,28 +46,10 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     final feedScheduleState = ref.watch(feedScheduleProvider);
     final currentDoc = ref.watch(docProvider(widget.pondId));
 
-    // Task 3: Add debug prints
-    AppLogger.debug(
-        "📦 Available farms: ${farmState.farms.map((f) => f.name).join(', ')}");
-    AppLogger.debug("🎯 Looking for pondId: ${widget.pondId}");
-
-    Pond? pond; // Task 1: Declare pond as nullable outside the loop
-    for (var farm in farmState.farms) {
-      try {
-        // Task 1: Assign to the nullable pond variable
-        pond = farm.ponds.firstWhere((p) => p.id == widget.pondId);
-        break;
-      } catch (e, stack) {
-        // Task 1: Log error and ensure pond is null if not found in this farm
-        AppLogger.error(
-            "❌ Pond not found in farm ${farm.name}: ${widget.pondId}",
-            e,
-            stack);
-        // If the pond is not found in the current farm, `pond` remains null (or its value from a previous iteration).
-        // The loop will continue to check other farms. If no farm contains the pond,
-        // `pond` will be null after the loop completes.
-        // No need to explicitly set `pond = null` here as `firstWhere` throws and `pond` won't be assigned.
-      }
+    Pond? pond;
+    for (final farm in farmState.farms) {
+      pond = farm.ponds.where((p) => p.id == widget.pondId).firstOrNull;
+      if (pond != null) break;
     }
 
     String docRange = "DOC N/A";
@@ -78,17 +60,16 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
       docRange = "DOC $minDoc–$maxDoc";
     }
 
-    // Task 2 & 4: Handle null safely with better UX
     if (pond == null) {
+      if (!feedScheduleState.isLoading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) Navigator.of(context).pop();
+        });
+      }
       return Scaffold(
         backgroundColor: AppColors.card,
         appBar: AppBar(title: const Text("Feed Schedule")),
-        body: Center(
-          // Show loading if feed schedule is still loading, otherwise indicate pond not found.
-          child: Text(feedScheduleState.isLoading
-              ? "Loading pond data..."
-              : "Pond data not found."),
-        ),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
     String pondName = pond.name; // Now safely access pond.name

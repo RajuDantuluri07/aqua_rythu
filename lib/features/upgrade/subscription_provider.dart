@@ -129,11 +129,11 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
   Future<void> hydrateFromBackend() async {
     try {
-      final subscription = await _ref
+      final entitlement = await _ref
           .read(subscriptionServiceProvider)
-          .getCurrentSubscription();
+          .getActiveEntitlement();
       state = state.copyWith(
-        currentPlan: (subscription?.isPro == true) ? PlanType.pro : PlanType.free,
+        currentPlan: entitlement != null ? PlanType.pro : PlanType.free,
       );
     } catch (_) {
       // Silent — user stays FREE; manual restore available.
@@ -330,9 +330,6 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     } catch (_) {}
   }
 
-  void resetToFree() {
-    state = state.copyWith(currentPlan: PlanType.free);
-  }
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────────

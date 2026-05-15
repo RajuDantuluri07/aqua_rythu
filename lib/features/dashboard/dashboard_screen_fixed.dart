@@ -8,10 +8,13 @@ import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.d
 import 'package:aqua_rythu/core/constants/app_constants.dart';
 import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
 import 'package:aqua_rythu/core/services/feed_savings_service.dart';
+import 'package:aqua_rythu/features/dashboard/providers/dashboard_metrics_provider.dart';
 import 'package:aqua_rythu/features/upgrade/subscription_provider.dart';
 import 'package:aqua_rythu/features/upgrade/upgrade_to_pro_screen.dart';
 import 'package:aqua_rythu/features/feed/feed_history_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:aqua_rythu/features/upgrade/feature_gate.dart';
+import 'package:aqua_rythu/features/upgrade/access_control_hooks.dart';
 
 // ── Design tokens ─────────────────────────────────────────────
 const _bg = Color(0xFFF5F7FA);
@@ -106,16 +109,14 @@ class DashboardScreen extends ConsumerWidget {
               .where((status) => status > 0)
               .fold(0.0, (sum, amount) => sum + amount);
 
-          // Simplified biomass and FCR from controller data
-          final double biomass = (pond.seedCount * 0.95 * abw) / 1000;
-          final double fcr = biomass > 0.1 ? todayFeed / biomass : 0.0;
+          // Biomass estimate (seed weight not subtracted — cumulative FCR
+          // requires cumulative gain data not available here; show '-' in UI)
+          final double biomass = (pond.seedCount * pondSurvivalRate(pond.doc) * abw) / 1000;
 
-          // Status based on controller feed result
+          // Status driven only by engine decision; FCR requires cumulative feed history
           String status = 'Good';
           if (feedState.feedResult?.decision.action == 'Stop Feeding') {
             status = 'Critical';
-          } else if (fcr > 1.5) {
-            status = 'Warning';
           }
 
           // Get yesterday's feed from history
@@ -132,7 +133,7 @@ class DashboardScreen extends ConsumerWidget {
             name: pond.name,
             doc: feedState.doc,
             abw: abw,
-            fcr: fcr,
+            fcr: 0.0,
             biomass: biomass,
             todayFeed: todayFeed,
             yesterdayFeed: yesterdayFeed,
@@ -193,6 +194,7 @@ class DashboardScreen extends ConsumerWidget {
         }
 
         final rows = snapshot.data!;
+        final gate = ref.watch(featureGateProvider);
 
         // ── Farm-level aggregates ─────────────────────────────────────────
         final double totalFeedFarm = rows.fold(0.0, (s, r) => s + r.todayFeed);
@@ -206,13 +208,8 @@ class DashboardScreen extends ConsumerWidget {
             ? ((feedToday - feedYesterday) / feedYesterday) * 100
             : 0.0;
 
-        final double farmFcr =
-            totalBiomass > 0.1 ? totalFeedFarm / totalBiomass : 0.0;
-        final String biomassStatus = farmFcr < 1.5
-            ? 'Within optimal range'
-            : farmFcr < 2.0
-                ? 'Monitor closely'
-                : 'Needs attention';
+        final String biomassStatus =
+            totalBiomass > 0 ? 'Estimated current weight' : 'No data';
 
         // ── Feed Savings Calculation ─────────────────────────────────────
         final pondIds = rows.map((r) => r.id).toList();
@@ -365,6 +362,7 @@ class DashboardScreen extends ConsumerWidget {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: _PondCard(
                                 row: r,
+                                canViewFcr: gate.canViewFcr,
                                 onTap: () => Navigator.pushNamed(
                                   context,
                                   AppRoutes.pondDashboard,
@@ -1013,12 +1011,14 @@ class _InsightCard extends StatelessWidget {
 // ══════════════════════════════════════════════════════
 class _PondCard extends StatelessWidget {
   final _PondRow row;
+  final bool canViewFcr;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _PondCard({
     required this.row,
+    required this.canViewFcr,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -1121,11 +1121,31 @@ class _PondCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _MetricCard(
-                    label: 'FCR',
-                    value: row.fcr > 0 ? row.fcr.toStringAsFixed(2) : '-',
-                    color: row.fcr > 1.5 ? _red : _green,
-                  ),
+                  child: canViewFcr
+                      ? _MetricCard(
+                          label: 'FCR',
+                          value: '-',
+                          color: _textSub,
+                        )
+                      : GestureDetector(
+                          onTap: () => AccessControlHooks.showUpgradeDialog(
+                              context, FeatureIds.profitTracking),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF8E1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text('FCR', style: TextStyle(fontSize: 10, color: _textSub, fontWeight: FontWeight.w600)),
+                                SizedBox(height: 2),
+                                Icon(Icons.lock_outline_rounded, size: 13, color: Color(0xFFF59E0B)),
+                              ],
+                            ),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

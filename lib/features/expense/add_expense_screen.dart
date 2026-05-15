@@ -66,6 +66,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   }
 
   Future<void> _submitExpense() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) {
       return;
     }

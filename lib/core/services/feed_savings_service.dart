@@ -21,6 +21,7 @@ class FeedSavingsResult {
 
 enum SavingsDisplayType {
   showSavings,
+  overfeed,
   partialData,
   noData,
   hide,
@@ -76,18 +77,23 @@ class FeedSavingsService {
       final hasEnoughData =
           (doc >= 20) && (trayLogsCount >= 3 || samplingAvailable);
 
-      // Calculate savings
+      // Calculate savings (positive = saved, negative = overfed)
       final expectedFeed = currentBiomassKg * _baselineFCR;
       final actualFeed = totalFeedGivenKg;
-      double feedSavedKg = expectedFeed - actualFeed;
+      final feedSavedKg = expectedFeed - actualFeed;
+      final moneySaved = feedSavedKg.abs() * feedPricePerKg;
 
-      // Never show negative savings
-      if (feedSavedKg < 0) feedSavedKg = 0;
-
-      final moneySaved = feedSavedKg * feedPricePerKg;
-
-      // Determine display logic
-      if (hasEnoughData && moneySaved > 0) {
+      if (hasEnoughData && feedSavedKg < 0) {
+        final overfeedKg = feedSavedKg.abs();
+        return FeedSavingsResult(
+          moneySaved: -moneySaved,
+          feedSavedKg: -overfeedKg,
+          hasEnoughData: true,
+          displayMessage:
+              'Overfed ${overfeedKg.toStringAsFixed(1)} kg — ₹${_formatCurrency(moneySaved)} extra cost this cycle',
+          displayType: SavingsDisplayType.overfeed,
+        );
+      } else if (hasEnoughData && feedSavedKg > 0) {
         return FeedSavingsResult(
           moneySaved: moneySaved,
           feedSavedKg: feedSavedKg,
@@ -105,13 +111,11 @@ class FeedSavingsService {
           displayType: SavingsDisplayType.partialData,
         );
       } else {
-        return FeedSavingsResult(
-          moneySaved: moneySaved,
-          feedSavedKg: feedSavedKg,
-          hasEnoughData: hasEnoughData,
-          displayType: moneySaved > 0
-              ? SavingsDisplayType.showSavings
-              : SavingsDisplayType.hide,
+        return const FeedSavingsResult(
+          moneySaved: 0,
+          feedSavedKg: 0,
+          hasEnoughData: false,
+          displayType: SavingsDisplayType.hide,
         );
       }
     } catch (e) {
@@ -178,18 +182,23 @@ class FeedSavingsService {
         );
       }
 
-      // Calculate savings
+      // Calculate savings (positive = saved, negative = overfed)
       final expectedFeed = totalBiomassKg * _baselineFCR;
       final actualFeed = totalFeedGivenKg;
-      double feedSavedKg = expectedFeed - actualFeed;
+      final feedSavedKg = expectedFeed - actualFeed;
+      final moneySaved = feedSavedKg.abs() * feedPricePerKg;
 
-      // Never show negative savings
-      if (feedSavedKg < 0) feedSavedKg = 0;
-
-      final moneySaved = feedSavedKg * feedPricePerKg;
-
-      // Determine display logic
-      if (hasEnoughData && moneySaved > 0) {
+      if (hasEnoughData && feedSavedKg < 0) {
+        final overfeedKg = feedSavedKg.abs();
+        return FeedSavingsResult(
+          moneySaved: -moneySaved,
+          feedSavedKg: -overfeedKg,
+          hasEnoughData: true,
+          displayMessage:
+              'Overfed ${overfeedKg.toStringAsFixed(1)} kg — ₹${_formatCurrency(moneySaved)} extra cost this cycle',
+          displayType: SavingsDisplayType.overfeed,
+        );
+      } else if (hasEnoughData && feedSavedKg > 0) {
         return FeedSavingsResult(
           moneySaved: moneySaved,
           feedSavedKg: feedSavedKg,
@@ -207,13 +216,11 @@ class FeedSavingsService {
           displayType: SavingsDisplayType.partialData,
         );
       } else {
-        return FeedSavingsResult(
-          moneySaved: moneySaved,
-          feedSavedKg: feedSavedKg,
-          hasEnoughData: hasEnoughData,
-          displayType: moneySaved > 0
-              ? SavingsDisplayType.showSavings
-              : SavingsDisplayType.hide,
+        return const FeedSavingsResult(
+          moneySaved: 0,
+          feedSavedKg: 0,
+          hasEnoughData: false,
+          displayType: SavingsDisplayType.hide,
         );
       }
     } catch (e) {

@@ -1,4 +1,4 @@
-const double _feedPricePerKg = 65.0;
+import 'package:aqua_rythu/core/constants/app_constants.dart';
 
 class PondCardData {
   final String pondId;
@@ -69,5 +69,5 @@ class PondCardData {
     return 'Extra: ₹${moneySaved.abs().toStringAsFixed(0)}';
   }
 
-  static double get feedPrice => _feedPricePerKg;
+  static double get feedPrice => kFeedCostPerKg;
 }

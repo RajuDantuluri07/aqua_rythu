@@ -18,6 +18,7 @@ class FCREngine {
   /// - = 1.0: No change (acceptable baseline)
   /// - < 1.0: Reduce feed (wasteful feeding)
   static double getFcrFactor(double fcr) {
+    if (fcr.isNaN || fcr.isInfinite || fcr <= 0) return 1.0;
     if (fcr <= 1.0) return 1.15;  // Exceptional efficiency: +15%
     if (fcr <= 1.2) return 1.10;  // Very good: +10%
     if (fcr <= 1.3) return 1.05;  // Good: +5%

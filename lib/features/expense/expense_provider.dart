@@ -170,3 +170,9 @@ final expenseSummaryProvider = StateNotifierProvider.family<
     return ExpenseSummaryNotifier(expenseService, cropId);
   },
 );
+
+/// Farm-level expense total — keyed by farmId, used by the dashboard metrics provider.
+final farmExpensesTotalProvider =
+    FutureProvider.family<double, String>((ref, farmId) async {
+  return ExpenseService().getTotalExpenses(farmId: farmId);
+});

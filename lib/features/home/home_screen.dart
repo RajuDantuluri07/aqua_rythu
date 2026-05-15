@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/access_denied_view.dart';
 import '../../core/constants/spacing.dart';
@@ -15,28 +14,24 @@ import '../upgrade/access_control_hooks.dart';
 import '../../widgets/app_bottom_bar.dart';
 import '../../core/language/app_localizations.dart';
 import '../../core/services/admin_security_service.dart';
-import '../../core/services/farm_price_settings_service.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/models/inventory_item.dart';
 import '../../core/models/daily_action_engine.dart';
 import '../../routes/app_routes.dart';
 import '../expense/add_expense_screen.dart';
+import '../dashboard/widgets/dashboard_metrics_grid.dart';
 
 // ─── Design tokens (remaining custom colors not in design system) ───────────
 const _teal = Color(0xFF0B4A5C);
 const _tealDeep = Color(0xFF062F3B);
 const _greenSoft = Color(0xFFE5F2EA);
-const _greenDeep = Color(0xFF14613B);
 const _greenHi = Color(0xFF2BA864);
 const _amber = Color(0xFFE8A33D);
-const _amberSoft = Color(0xFFFFF4E0);
-const _amberDeep = Color(0xFF6B4A0A);
 const _orangeSoft = Color(0xFFFCEAD9);
 const _orange = Color(0xFFC75B1E);
 const _blueSoft = Color(0xFFE3EEFB);
 const _blue = Color(0xFF2A6BD1);
 const _roseInk = Color(0xFF9B3A2F);
-const _ink3 = Color(0xFF8A949C);
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -54,10 +49,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const int _requiredTaps = 5;
 
   void _handleFarmNameTap() {
-    final adminService = AdminSecurityService();
-    final user = Supabase.instance.client.auth.currentUser;
-    if (!adminService.isAdmin(user)) return;
-
     final now = DateTime.now();
     if (_lastTapTime != null && now.difference(_lastTapTime!) > _tapResetTime) {
       _tapCount = 0;
@@ -107,11 +98,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               final passcode = passcodeController.text.trim();
               Navigator.of(dialogContext).pop();
               if (passcode.isEmpty) return;
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 final isValid =
                     await AdminSecurityService().validateAdminAccess(passcode);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  messenger.showSnackBar(SnackBar(
                     content: Text(isValid
                         ? 'Admin access granted! Session active for 15 minutes.'
                         : 'Invalid passcode'),
@@ -121,7 +113,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  messenger.showSnackBar(SnackBar(
                     content: Text('Error: $e'),
                     backgroundColor: Colors.red,
                   ));
@@ -382,33 +374,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // ─── Data helpers ──────────────────────────────────────────────────────────
 
-  double _totalFeed(List<Pond> ponds) {
-    double total = 0;
-    for (final p in ponds) {
-      final history = ref.watch(feedHistoryProvider)[p.id] ?? [];
-      for (final e in history) {
-        total += (e.total as num?)?.toDouble() ?? 0;
-      }
-    }
-    return total;
-  }
-
-  double _todayFeed(List<Pond> ponds) {
-    final today = DateTime.now();
-    double total = 0;
-    for (final p in ponds) {
-      final history = ref.watch(feedHistoryProvider)[p.id] ?? [];
-      for (final e in history) {
-        if (e.date.year == today.year &&
-            e.date.month == today.month &&
-            e.date.day == today.day) {
-          total += (e.total as num?)?.toDouble() ?? 0;
-        }
-      }
-    }
-    return total;
-  }
-
   double _pondFeedToday(Pond p) {
     final today = DateTime.now();
     double total = 0;
@@ -441,27 +406,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  ({double biomass, double? profit}) _farmBiomassProfit(
-      List<Pond> ponds, {double? feedPrice, double? sellPrice}) {
-    double biomass = 0, feed = 0;
-    for (final p in ponds) {
-      final logs = ref.watch(growthProvider(p.id));
-      if (logs.isEmpty) continue;
-      final survival = _survivalRate(p.doc);
-      final b = (p.seedCount * survival * logs.first.abw) / 1000;
-      biomass += b;
-      final h = ref.watch(feedHistoryProvider)[p.id] ?? [];
-      for (final e in h) {
-        feed += (e.total as num?)?.toDouble() ?? 0;
-      }
-    }
-    if (feedPrice == null || sellPrice == null) {
-      return (biomass: biomass, profit: null);
-    }
-    final profit = biomass * sellPrice - feed * feedPrice;
-    return (biomass: biomass, profit: profit);
-  }
-
   double _survivalRate(int doc) {
     if (doc <= 0) return 0.85;
     if (doc <= 30) return 0.90;
@@ -470,31 +414,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 0.75;
   }
 
-
-  ({int score, String label}) _healthScore(List<Pond> ponds) {
-    if (ponds.isEmpty) return (score: 100, label: 'Excellent');
-    double total = 0;
-    int count = 0;
-    for (final p in ponds) {
-      final fcr = _pondFcr(p);
-      if (fcr <= 0) continue;
-      double s = 100;
-      if (fcr > 2.0) {
-        s = 60;
-      } else if (fcr > 1.8) {
-        s = 70;
-      } else if (fcr > 1.5) {
-        s = 80;
-      } else if (fcr > 1.3) {
-        s = 90;
-      }
-      total += s;
-      count++;
-    }
-    final score = count > 0 ? (total / count).round() : 100;
-    final label = score >= 90 ? 'Excellent' : score >= 70 ? 'Good' : 'Needs Attention';
-    return (score: score, label: label);
-  }
 
   // ─── Build ─────────────────────────────────────────────────────────────────
 
@@ -547,17 +466,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    final priceSettings = ref
-        .watch(farmPriceSettingsProvider(farm.id))
-        .valueOrNull;
-    final feedPrice = priceSettings?.feedPricePerKg;
-    final sellPrice = priceSettings?.sellPricePerKg;
-
-    final totalFeed = _totalFeed(ponds);
-    final todayFeed = _todayFeed(ponds);
-    final cost = feedPrice != null ? totalFeed * feedPrice : null;
-    final bp = _farmBiomassProfit(ponds, feedPrice: feedPrice, sellPrice: sellPrice);
-    final health = _healthScore(ponds);
     final gate = ref.watch(featureGateProvider);
     final minDoc = ponds.isNotEmpty
         ? ponds.map((p) => p.doc).reduce(math.min)
@@ -577,6 +485,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     farmName: farm.name,
                     doc: minDoc,
                     pondCount: ponds.length,
+                    isPro: gate.isPro,
                     onIconSecretTap: _handleFarmNameTap,
                     onNameTap: () => FarmSwitcherSheet.show(context),
                     onUpgradeTap: () => Navigator.push(
@@ -585,18 +494,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           builder: (_) => const UpgradeToProScreen()),
                     ),
                   ),
-                  _HeroStrip(
-                    totalFeed: totalFeed,
-                    todayFeed: todayFeed,
-                    cost: cost,
-                  ),
-                  _StatsGrid(
-                    biomass: bp.biomass,
-                    profit: bp.profit,
-                    healthScore: health.score,
-                    healthLabel: health.label,
-                    isPro: gate.canViewProfit,
-                  ),
+                  DashboardMetricsGrid(farmId: farm.id),
                   _TodaysActions(ponds: ponds, ref: ref),
                   _PondsSection(
                     ponds: ponds,
@@ -658,6 +556,7 @@ class _AppBar extends StatelessWidget {
   final String farmName;
   final int doc;
   final int pondCount;
+  final bool isPro;
   final VoidCallback onNameTap;
   final VoidCallback onIconSecretTap;
   final VoidCallback onUpgradeTap;
@@ -666,6 +565,7 @@ class _AppBar extends StatelessWidget {
     required this.farmName,
     required this.doc,
     required this.pondCount,
+    required this.isPro,
     required this.onNameTap,
     required this.onIconSecretTap,
     required this.onUpgradeTap,
@@ -737,22 +637,25 @@ class _AppBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFFE8A33D),
+                color: isPro ? const Color(0xFF16A34A) : const Color(0xFFE8A33D),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.workspace_premium_rounded,
-                      size: 13, color: Colors.black),
-                  SizedBox(width: Spacing.xs),
+                  Icon(
+                    isPro ? Icons.workspace_premium_rounded : Icons.workspace_premium_rounded,
+                    size: 13,
+                    color: isPro ? Colors.white : Colors.black,
+                  ),
+                  const SizedBox(width: Spacing.xs),
                   Text(
-                    'PRO',
+                    isPro ? 'PRO ✓' : 'PRO',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                       fontFamily: 'Inter',
-                      color: Colors.black,
+                      color: isPro ? Colors.white : Colors.black,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -801,598 +704,6 @@ class _BellButton extends StatelessWidget {
       ),
     );
   }
-}
-
-// ─── Hero Strip ───────────────────────────────────────────────────────────────
-
-class _HeroStrip extends StatelessWidget {
-  final double totalFeed;
-  final double todayFeed;
-  final double? cost;
-
-  const _HeroStrip({
-    required this.totalFeed,
-    required this.todayFeed,
-    required this.cost,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final requiredFeed = totalFeed;
-    final completedFeed = todayFeed;
-    final pendingFeed = (totalFeed - todayFeed).clamp(0, double.infinity);
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.sm, Spacing.lg, 0),
-      padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0B4A5C), Color(0xFF0F6B7E)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -30,
-            top: -30,
-            child: Container(
-              width: 130,
-              height: 130,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    _greenHi.withOpacity(0.45),
-                    Colors.transparent,
-                  ],
-                  stops: const [0, 0.65],
-                  center: const Alignment(-0.4, -0.4),
-                ),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "TODAY'S FEEDING STATUS",
-                style: AppTextStyles.smallLabel.copyWith(
-                  color: Colors.white.withOpacity(0.7),
-                ),
-              ),
-              const SizedBox(height: Spacing.sm),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${requiredFeed.toStringAsFixed(1)} kg required',
-                        style: AppTextStyles.primaryValue.copyWith(
-                          color: Colors.white,
-                          letterSpacing: -0.01 * 20,
-                        ),
-                      ),
-                      const SizedBox(height: Spacing.xs),
-                      Text(
-                        '${completedFeed.toStringAsFixed(1)} kg done • ${pendingFeed.toStringAsFixed(1)} kg pending',
-                        style: AppTextStyles.secondaryText.copyWith(
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (pendingFeed > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${((completedFeed / requiredFeed) * 100).toStringAsFixed(0)}%',
-                        style: AppTextStyles.badge.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Stats Grid ───────────────────────────────────────────────────────────────
-
-class _StatsGrid extends StatelessWidget {
-  final double biomass;
-  final double? profit;
-  final int healthScore;
-  final String healthLabel;
-  final bool isPro;
-
-  const _StatsGrid({
-    required this.biomass,
-    required this.profit,
-    required this.healthScore,
-    required this.healthLabel,
-    required this.isPro,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final profitL = profit != null ? profit! / 100000 : null;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, 0),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Estimated Biomass',
-                  child: biomass == 0
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Sampling required to unlock biomass',
-                              style: AppTextStyles.secondaryText.copyWith(
-                                color: AppColors.textSecondary,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: Spacing.sm),
-                            ElevatedButton(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Sampling available in Pond Dashboard'),
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _teal,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                minimumSize: const Size(0, 32),
-                              ),
-                              child: Text(
-                                'Start Sampling',
-                                style: AppTextStyles.button.copyWith(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  biomass.toStringAsFixed(0),
-                                  style: AppTextStyles.primaryValue.copyWith(
-                                    color: AppColors.textPrimary,
-                                    letterSpacing: -0.02 * 20,
-                                  ),
-                                ),
-                                const SizedBox(width: Spacing.xs),
-                                Text(
-                                  'kg',
-                                  style: AppTextStyles.secondaryText.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: Spacing.xs),
-                            Text(
-                              'From growth samples',
-                              style: AppTextStyles.meta.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-              const SizedBox(width: Spacing.sm),
-              // Profit card — locked for FREE users; hidden until prices set
-              Expanded(
-                child: GestureDetector(
-                  onTap: isPro
-                      ? null
-                      : () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const UpgradeToProScreen()),
-                          ),
-                  child: _StatCard(
-                    label: 'Estimated Profit',
-                    child: !isPro
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.lock_outline_rounded,
-                                      size: 15, color: AppColors.textSecondary),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    '₹—',
-                                    style: AppTextStyles.primaryValue.copyWith(
-                                      color: AppColors.textSecondary,
-                                      letterSpacing: -0.02 * 20,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: Spacing.xs),
-                              Text(
-                                'Unlock profit insights',
-                                style: AppTextStyles.secondaryText.copyWith(
-                                  color: _amber,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          )
-                        : profitL == null
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '₹—',
-                                    style: AppTextStyles.primaryValue.copyWith(
-                                      color: AppColors.textSecondary,
-                                      letterSpacing: -0.02 * 20,
-                                    ),
-                                  ),
-                                  const SizedBox(height: Spacing.xs),
-                                  Text(
-                                    'Set prices in Settings',
-                                    style: AppTextStyles.secondaryText.copyWith(
-                                      color: _amber,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.baseline,
-                                    textBaseline: TextBaseline.alphabetic,
-                                    children: [
-                                      Text(
-                                        '₹${profitL.toStringAsFixed(1)}',
-                                        style: AppTextStyles.primaryValue.copyWith(
-                                          color: AppColors.textPrimary,
-                                          letterSpacing: -0.02 * 20,
-                                        ),
-                                      ),
-                                      Text(
-                                        'L',
-                                        style: AppTextStyles.secondaryText.copyWith(
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: Spacing.xs),
-                                  Text(
-                                    profitL >= 0
-                                        ? 'Based on your prices'
-                                        : 'Loss — review costs',
-                                    style: AppTextStyles.meta.copyWith(
-                                      color: profitL >= 0
-                                          ? _greenHi
-                                          : Colors.red,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Spacing.sm),
-          _FarmHealthCard(score: healthScore, label: healthLabel, isPro: isPro),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final Widget child;
-
-  const _StatCard({required this.label, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Spacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.08,
-              fontFamily: 'monospace',
-            ),
-          ),
-          const SizedBox(height: Spacing.sm),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _FarmHealthCard extends StatelessWidget {
-  final int score;
-  final String label;
-  final bool isPro;
-
-  const _FarmHealthCard({required this.score, required this.label, required this.isPro});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!isPro) {
-      return GestureDetector(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const UpgradeToProScreen()),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(Spacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: const Center(
-                  child: Icon(Icons.lock_outline_rounded, size: 16, color: _ink3),
-                ),
-              ),
-              const SizedBox(width: Spacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'FARM HEALTH STATUS',
-                      style: AppTextStyles.smallLabel.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'FCR-based score — PRO feature',
-                      style: AppTextStyles.secondaryText.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _amberSoft,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'UNLOCK',
-                  style: AppTextStyles.smallLabel.copyWith(
-                    color: _amberDeep,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final pct = score / 100;
-    const circumference = 2 * math.pi * 16;
-    final offset = circumference * (1 - pct);
-
-    return Container(
-      padding: const EdgeInsets.all(Spacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'FARM HEALTH STATUS',
-            style: AppTextStyles.caption.copyWith(
-              fontSize: 10,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.08 * 10,
-              fontFamily: 'monospace',
-            ),
-          ),
-          const SizedBox(height: Spacing.sm),
-          Row(
-            children: [
-              SizedBox(
-                width: 38,
-                height: 38,
-                child: Stack(
-                  children: [
-                    CustomPaint(
-                      size: const Size(38, 38),
-                      painter: _RingPainter(
-                        progress: pct,
-                        trackColor: _greenSoft,
-                        fillColor: _greenHi,
-                        strokeWidth: 4,
-                        circumference: circumference,
-                        dashOffset: offset,
-                      ),
-                    ),
-                    Center(
-                      child: Text(
-                        '$score',
-                        style: AppTextStyles.badge.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: _greenDeep,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Spacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: AppTextStyles.primaryValue.copyWith(
-                        color: _greenDeep,
-                        letterSpacing: -0.02 * 20,
-                      ),
-                    ),
-                    const SizedBox(height: Spacing.xs),
-                    Text(
-                      score >= 90
-                          ? 'FCR is excellent across ponds'
-                          : score >= 70
-                              ? 'FCR is good, monitor feed closely'
-                              : 'FCR needs attention — review feeding',
-                      style: AppTextStyles.secondaryText.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: score >= 90
-                      ? _greenSoft
-                      : score >= 70
-                          ? _amberSoft
-                          : const Color(0xFFFFECEC),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  label.toUpperCase(),
-                  style: AppTextStyles.smallLabel.copyWith(
-                    color: score >= 90
-                        ? _greenDeep
-                        : score >= 70
-                            ? _amberDeep
-                            : const Color(0xFF8B1A1A),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  final double progress;
-  final Color trackColor;
-  final Color fillColor;
-  final double strokeWidth;
-  final double circumference;
-  final double dashOffset;
-
-  const _RingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.fillColor,
-    required this.strokeWidth,
-    required this.circumference,
-    required this.dashOffset,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final fillPaint = Paint()
-      ..color = fillColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, trackPaint);
-    canvas.drawArc(
-      rect,
-      -math.pi / 2,
-      2 * math.pi * progress,
-      false,
-      fillPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) => old.progress != progress;
 }
 
 // ─── Section header ───────────────────────────────────────────────────────────

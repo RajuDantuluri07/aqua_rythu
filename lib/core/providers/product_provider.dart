@@ -43,6 +43,11 @@ final waterCategoriesProvider = FutureProvider<List<MasterCategory>>((ref) {
   return _categoryRepo.fetchCategoriesByType('water_mix');
 });
 
+/// All active categories regardless of application type
+final allCategoriesProvider = FutureProvider<List<MasterCategory>>((ref) {
+  return _categoryRepo.fetchAllCategories();
+});
+
 /// Products filtered to a single category name
 final productsByCategoryProvider =
     FutureProvider.family<List<ProductMaster>, String>((ref, categoryName) async {

@@ -498,7 +498,7 @@ class FeedInputBuilder {
       // Conservative survival for biomass estimate (feedback signal only, not display).
       const kSurvivalEstimate = 0.90;
       final biomassKg = (seedCount * kSurvivalEstimate * abw) / 1000;
-      if (biomassKg <= 0.1) return null;
+      if (biomassKg <= 1.0) return null;
 
       // Fetch all feed logs ascending so the last row per date wins.
       final rows = await _supabase

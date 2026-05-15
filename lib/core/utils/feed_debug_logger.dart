@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'logger.dart';
 
@@ -185,12 +186,13 @@ ${details != null ? 'details: $details' : ''}
     }
   }
 
-  /// Query database for feed logs (for testing)
+  /// Query database for feed logs (debug builds only)
   static Future<List<Map<String, dynamic>>> queryFeedLogs({
     required String pondId,
     int? doc,
     int? round,
   }) async {
+    if (!kDebugMode) return [];
     try {
       final query = Supabase.instance.client
           .from('feed_logs')
@@ -214,12 +216,13 @@ ${details != null ? 'details: $details' : ''}
     }
   }
 
-  /// Query database for feed rounds (for testing)
+  /// Query database for feed rounds (debug builds only)
   static Future<List<Map<String, dynamic>>> queryFeedRounds({
     required String pondId,
     int? doc,
     int? round,
   }) async {
+    if (!kDebugMode) return [];
     try {
       final query = Supabase.instance.client
           .from('feed_rounds')

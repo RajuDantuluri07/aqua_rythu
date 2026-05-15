@@ -58,20 +58,17 @@ VALUES ('00000000-0000-0000-0001-000000000001',
         '00000000-0000-0000-0000-000000000002', 'VictimFarm');
 
 -- Add worker, partner, supervisor to victim's farm
-INSERT INTO public.farm_members (id, farm_id, email, role, user_id, status)
+INSERT INTO public.farm_members (id, farm_id, email, role)
 VALUES
   ('00000000-0000-0000-0002-000000000003',
    '00000000-0000-0000-0001-000000000001',
-   'worker@test.internal', 'worker',
-   '00000000-0000-0000-0000-000000000003', 'active'),
+   'worker@test.internal', 'worker'),
   ('00000000-0000-0000-0002-000000000004',
    '00000000-0000-0000-0001-000000000001',
-   'partner@test.internal', 'partner',
-   '00000000-0000-0000-0000-000000000004', 'active'),
+   'partner@test.internal', 'partner'),
   ('00000000-0000-0000-0002-000000000005',
    '00000000-0000-0000-0001-000000000001',
-   'supervisor@test.internal', 'supervisor',
-   '00000000-0000-0000-0000-000000000005', 'active');
+   'supervisor@test.internal', 'supervisor');
 
 -- Create victim's pond
 INSERT INTO public.ponds (id, farm_id, user_id, name, area)
@@ -505,11 +502,10 @@ END $$;
 DO $$
 BEGIN
   BEGIN
-    INSERT INTO public.farm_members (id, farm_id, email, role, user_id, status)
+    INSERT INTO public.farm_members (id, farm_id, email, role)
     VALUES ('00000000-0000-0000-ffff-000000000007',
             '00000000-0000-0000-0001-000000000001',
-            'attacker@test.internal', 'farmer',
-            '00000000-0000-0000-0000-000000000001', 'active');
+            'attacker@test.internal', 'farmer');
     PERFORM _rls_assert('T9.2 worker cannot insert farm_member', false,
       'worker inserted farm_member with farmer role');
   EXCEPTION WHEN insufficient_privilege OR check_violation THEN

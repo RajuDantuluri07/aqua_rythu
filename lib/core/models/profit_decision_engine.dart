@@ -5,9 +5,9 @@ library;
 import 'dart:math';
 import 'growth_curve.dart';
 import 'farm_profile.dart';
+import '../constants/app_constants.dart';
 
 class ProfitDecisionEngine {
-  static const double feedCostPerKg = 35.0; // ₹35 per kg
   static const double marketPricePerKg = 300.0; // ₹300 per kg
   static const double minProfitMargin = 0.2; // 20% minimum profit margin
 
@@ -76,7 +76,7 @@ class ProfitDecisionEngine {
       if (fcrGap > 0.2) {
         // Significant FCR improvement needed
         final feedReduction = _calculateOptimalFeedReduction(pond, fcrGap);
-        final costSavings = feedReduction * feedCostPerKg;
+        final costSavings = feedReduction * kFeedCostPerKg;
 
         totalPotentialSavings += costSavings;
 
@@ -212,7 +212,7 @@ class ProfitDecisionEngine {
     double totalOtherCosts = 0;
 
     for (final pond in pondData) {
-      totalFeedCost += (pond.todayFeed ?? 0) * feedCostPerKg;
+      totalFeedCost += (pond.todayFeed ?? 0) * kFeedCostPerKg;
       totalRevenue +=
           (pond.estimatedBiomass ?? 0) * marketConditions.currentPrice;
       totalOtherCosts += _calculateOtherCosts(pond);
@@ -410,7 +410,7 @@ class ProfitDecisionEngine {
         final fcrGap = pond.currentFcr! - pond.expectedFcr!;
         if (fcrGap > 0.2) {
           final feedReduction = _calculateOptimalFeedReduction(pond, fcrGap);
-          totalBenefit += feedReduction * feedCostPerKg;
+          totalBenefit += feedReduction * kFeedCostPerKg;
         }
       }
     }

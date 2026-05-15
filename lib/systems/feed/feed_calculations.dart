@@ -47,6 +47,7 @@ double calculateTrayFactor(List<TrayStatus> trayStatuses) {
   }
 
   final total = full + empty + partial;
+  if (total == 0) return 1.0;
   final emptyRatio = empty / total;
   final fullRatio = full / total;
 

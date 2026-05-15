@@ -28,6 +28,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
 
   // State
   int _piecesPerGroup = 2;
+  bool _isSaving = false;
 
   // Computed values
   double get _weightKg => double.tryParse(_weightKgCtrl.text) ?? 0;
@@ -106,29 +107,32 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     return null;
   }
 
-  void _saveSampling(int doc) {
-    if (_formKey.currentState?.validate() ?? false) {
-      final abw = _avgWeight;
-      final pondId = widget.pondId;
+  Future<void> _saveSampling(int doc) async {
+    if (_isSaving) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-      ref.read(growthProvider(pondId).notifier).addLog(
-            SamplingLog(
-              doc: doc,
-              abw: abw,
-              date: DateTime.now(),
-            ),
-          );
+    if (!mounted) return;
+    setState(() => _isSaving = true);
 
-      SamplingService().addSampling(
+    final abw = _avgWeight;
+    final pondId = widget.pondId;
+
+    try {
+      await SamplingService().addSampling(
         pondId: pondId,
         date: DateTime.now(),
         doc: doc,
         weightKg: _weightKg,
         totalPieces: _totalPieces,
         averageBodyWeight: abw,
-      ).catchError((e) {
-        AppLogger.error('Sampling save failed for pond $pondId', e);
-      });
+      );
+
+      // Update local state only after confirmed DB write
+      ref.read(growthProvider(pondId).notifier).addLog(
+            SamplingLog(doc: doc, abw: abw, date: DateTime.now()),
+          );
+
+      if (!mounted) return;
 
       final isPro = ref.read(isProProvider);
       if (isPro) {
@@ -143,6 +147,18 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
       } else {
         _showGrowthInsightNudge(abw, doc);
       }
+    } catch (e) {
+      AppLogger.error('Sampling save failed for pond $pondId', e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Failed to save sample — please try again"),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -444,14 +460,21 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isValid ? () => _saveSampling(doc) : null,
+                  onPressed: (_isValid && !_isSaving) ? () => _saveSampling(doc) : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.success,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: AppRadius.rs),
                   ),
-                  child: const Text("UPDATE SAMPLE (OPTIONAL)",
-                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: _isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text("UPDATE SAMPLE (OPTIONAL)",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
 

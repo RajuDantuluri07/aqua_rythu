@@ -20,11 +20,16 @@ class FeedSavingsCard extends ConsumerWidget {
     final isPro = ref.watch(subscriptionProvider).isPro;
 
     // Don't show for HIDE type
-    if (savingsResult.displayType.toString() == 'hide') {
+    if (savingsResult.displayType.toString() ==
+        SavingsDisplayType.hide.toString()) {
       return const SizedBox.shrink();
     }
 
-    Color savingsColor = _getSavingsColor(savingsResult.moneySaved);
+    final isOverfeed =
+        savingsResult.displayType.toString() ==
+        SavingsDisplayType.overfeed.toString();
+    Color savingsColor =
+        isOverfeed ? const Color(0xFFF59E0B) : _getSavingsColor(savingsResult.moneySaved.abs());
 
     return Container(
       width: double.infinity,
@@ -89,19 +94,15 @@ class FeedSavingsCard extends ConsumerWidget {
               ),
             ),
 
-            // Lock icon for FREE users or arrow for PRO
-            if (savingsResult.displayType.toString() == 'showSavings' && !isPro)
-              Icon(
-                Icons.lock_rounded,
-                color: savingsColor,
-                size: 16,
-              )
-            else if (savingsResult.displayType.toString() != 'partialData')
-              Icon(
-                Icons.trending_up_rounded,
-                color: savingsColor,
-                size: 16,
-              ),
+            if (isOverfeed)
+              Icon(Icons.warning_amber_rounded, color: savingsColor, size: 16)
+            else if (savingsResult.displayType.toString() ==
+                    SavingsDisplayType.showSavings.toString() &&
+                !isPro)
+              Icon(Icons.lock_rounded, color: savingsColor, size: 16)
+            else if (savingsResult.displayType.toString() !=
+                SavingsDisplayType.partialData.toString())
+              Icon(Icons.trending_up_rounded, color: savingsColor, size: 16),
           ],
         ),
       ),
@@ -109,21 +110,21 @@ class FeedSavingsCard extends ConsumerWidget {
   }
 
   String _getDisplayText(dynamic result, bool isPro) {
-    switch (result.displayType.toString()) {
-      case 'showSavings':
-        if (isPro) {
-          return result.displayMessage ?? 'You saved ₹0 in feed so far';
-        } else {
-          // FREE users: never expose the actual rupee figure. The card is a
-          // teaser — the real number lives behind PRO.
-          return 'Unlock your feed savings — Upgrade to PRO';
-        }
-      case 'partialData':
-        return result.displayMessage ?? 'Start using trays to track savings';
-      case 'noData':
-        return result.displayMessage ?? 'No feed data logged yet';
-      case 'hide':
-        return '';
+    final type = result.displayType.toString();
+    if (type == SavingsDisplayType.overfeed.toString()) {
+      return result.displayMessage ?? 'Overfeeding detected this cycle';
+    }
+    if (type == SavingsDisplayType.showSavings.toString()) {
+      if (isPro) {
+        return result.displayMessage ?? 'You saved ₹0 in feed so far';
+      }
+      return 'Unlock your feed savings — Upgrade to PRO';
+    }
+    if (type == SavingsDisplayType.partialData.toString()) {
+      return result.displayMessage ?? 'Start using trays to track savings';
+    }
+    if (type == SavingsDisplayType.noData.toString()) {
+      return result.displayMessage ?? 'No feed data logged yet';
     }
     return '';
   }
@@ -134,15 +135,18 @@ class FeedSavingsCard extends ConsumerWidget {
   }
 
   IconData _getSavingsIcon(dynamic displayType) {
-    switch (displayType.toString()) {
-      case 'showSavings':
-        return Icons.savings_rounded;
-      case 'partialData':
-        return Icons.info_outline_rounded;
-      case 'noData':
-        return Icons.feed_outlined;
-      case 'hide':
-        return Icons.savings_rounded;
+    final type = displayType.toString();
+    if (type == SavingsDisplayType.overfeed.toString()) {
+      return Icons.warning_amber_rounded;
+    }
+    if (type == SavingsDisplayType.showSavings.toString()) {
+      return Icons.savings_rounded;
+    }
+    if (type == SavingsDisplayType.partialData.toString()) {
+      return Icons.info_outline_rounded;
+    }
+    if (type == SavingsDisplayType.noData.toString()) {
+      return Icons.feed_outlined;
     }
     return Icons.savings_rounded;
   }

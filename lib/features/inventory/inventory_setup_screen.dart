@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/models/feed_master_product.dart';
 import '../../core/models/product_master.dart';
 import '../../core/services/inventory_service.dart';
 import '../../features/farm/farm_provider.dart';
@@ -10,19 +11,20 @@ import 'inventory_provider.dart';
 
 // Inventory category descriptor
 class _Cat {
-  final String stored;   // value written to inventory_items.category
-  final String label;    // shown to user in chip
-  final String? filter;  // product_master.category filter; null = all products
-  final bool isManual;   // true = name typed by user, no product picker
+  final String stored;       // value written to inventory_items.category
+  final String label;        // shown to user in chip
+  final String? filter;      // product_master.category filter; null = all products
+  final bool isManual;       // true = name typed by user, no product picker
+  final bool isFeedPicker;   // true = pick from feed_master_products
 
   const _Cat(this.stored, this.label,
-      {this.filter, this.isManual = false});
+      {this.filter, this.isManual = false, this.isFeedPicker = false});
 
   bool get isAutoTracked => stored == 'feed';
 }
 
 const _kCats = [
-  _Cat('feed',      'Feed',       isManual: true),
+  _Cat('feed',      'Feed',       isFeedPicker: true),
   _Cat('probiotic', 'Probiotic',  filter: 'Probiotic'),
   _Cat('mineral',   'Mineral',    filter: 'Mineral'),
   _Cat('medicine',  'Supplement'),               // null filter → all products
@@ -66,8 +68,11 @@ class _InventorySetupScreenState
 
   Future<void> _save() async {
     // Validate product selection for non-manual items
-    final missingProduct =
-        _items.where((i) => !i.cat.isManual && i.selectedProduct == null);
+    final missingProduct = _items.where((i) {
+      if (i.cat.isManual) return false;
+      if (i.cat.isFeedPicker) return i.selectedFeedProduct == null;
+      return i.selectedProduct == null;
+    });
     if (missingProduct.isNotEmpty) {
       _toast('Select a product for all items', Colors.red);
       return;
@@ -292,15 +297,17 @@ class _InventorySetupScreenState
   }
 
   Widget _buildProductSelector(_ItemForm item) {
+    if (item.cat.isFeedPicker) {
+      return _buildFeedProductSelector(item);
+    }
+
     if (item.cat.isManual) {
       return TextFormField(
         controller: item.name,
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           labelText: 'Product name',
-          hintText: item.cat.stored == 'feed'
-              ? 'e.g., Avanti Starter Feed'
-              : 'e.g., Water clarifier',
-          border: const OutlineInputBorder(),
+          hintText: 'e.g., Water clarifier',
+          border: OutlineInputBorder(),
         ),
         textCapitalization: TextCapitalization.words,
         validator: (v) =>
@@ -325,6 +332,36 @@ class _InventorySetupScreenState
       );
     }
 
+    return _selectedProductTile(
+      item.selectedProduct!.displayName,
+      onTap: () => _pickProduct(item),
+    );
+  }
+
+  Widget _buildFeedProductSelector(_ItemForm item) {
+    if (item.selectedFeedProduct == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _pickFeedProduct(item),
+          icon: const Icon(Icons.search),
+          label: const Text('Select feed brand & product'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _green,
+            side: const BorderSide(color: _green),
+            padding:
+                const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          ),
+        ),
+      );
+    }
+    return _selectedProductTile(
+      item.selectedFeedProduct!.displayName,
+      onTap: () => _pickFeedProduct(item),
+    );
+  }
+
+  Widget _selectedProductTile(String name, {required VoidCallback onTap}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -338,13 +375,12 @@ class _InventorySetupScreenState
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              item.selectedProduct!.displayName,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, fontSize: 14),
+              name,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
           ),
           TextButton(
-            onPressed: () => _pickProduct(item),
+            onPressed: onTap,
             style: TextButton.styleFrom(
               foregroundColor: _green,
               padding: EdgeInsets.zero,
@@ -365,6 +401,13 @@ class _InventorySetupScreenState
     );
     if (picked != null && mounted) {
       setState(() => item.applyProduct(picked));
+    }
+  }
+
+  Future<void> _pickFeedProduct(_ItemForm item) async {
+    final picked = await showFeedProductPickerSheet(context);
+    if (picked != null && mounted) {
+      setState(() => item.applyFeedProduct(picked));
     }
   }
 
@@ -476,6 +519,7 @@ class _ItemForm {
   final TextEditingController costPerPack;
   _Cat cat;
   ProductMaster? selectedProduct;
+  FeedMasterProduct? selectedFeedProduct;
 
   _ItemForm({
     required this.name,
@@ -510,6 +554,7 @@ class _ItemForm {
   void setCategory(_Cat newCat) {
     cat = newCat;
     selectedProduct = null;
+    selectedFeedProduct = null;
     name.text = '';
     if (newCat.stored == 'feed') {
       unit.text = 'kg';
@@ -532,6 +577,18 @@ class _ItemForm {
       final ps = product.packageSize!;
       packSize.text =
           ps == ps.roundToDouble() ? ps.toInt().toString() : ps.toString();
+    }
+  }
+
+  void applyFeedProduct(FeedMasterProduct product) {
+    selectedFeedProduct = product;
+    name.text = product.displayName;
+    unit.text = 'kg';
+    packLabel.text = 'bag';
+    if (product.bagWeightKg != null && product.bagWeightKg! > 0) {
+      final bw = product.bagWeightKg!;
+      packSize.text =
+          bw == bw.roundToDouble() ? bw.toInt().toString() : bw.toString();
     }
   }
 

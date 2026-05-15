@@ -6,6 +6,20 @@ class InventoryService {
 
   InventoryService({SupabaseClient? client}) : supabase = client ?? Supabase.instance.client;
 
+  // Record a batch of product-master-linked purchase entries to inventory_entries.
+  // Each map must contain: farm_id, user_id, product_id, product_type,
+  // quantity_purchased, quantity_unit, purchase_date.
+  Future<void> createInventoryEntries(List<Map<String, dynamic>> entries) async {
+    try {
+      if (entries.isEmpty) return;
+      await supabase.from('inventory_entries').insert(entries);
+      AppLogger.info('Saved ${entries.length} inventory entries');
+    } catch (e) {
+      AppLogger.error('Failed to save inventory entries: $e');
+      rethrow;
+    }
+  }
+
   // Add initial stock for multiple items (e.g. from app setup)
   Future<void> createInventoryItems(List<Map<String, dynamic>> items) async {
     try {
@@ -17,7 +31,11 @@ class InventoryService {
           throw ArgumentError('Malformed inventory item: missing required fields');
         }
       }
-      await supabase.from('inventory_items').insert(items);
+      final inserted = await supabase.from('inventory_items').insert(items).select('id');
+      if (inserted.length != items.length) {
+        throw StateError(
+            'Inventory batch partial failure: expected ${items.length} rows, inserted ${inserted.length}');
+      }
       AppLogger.info('Created ${items.length} inventory items');
     } catch (e) {
       AppLogger.error('Failed to create inventory items: $e');

@@ -19,5 +19,8 @@ class FeatureGate {
 }
 
 final featureGateProvider = Provider<FeatureGate>((ref) {
-  return FeatureGate(isPro: ref.watch(isProProvider));
+  final sub = ref.watch(subscriptionProvider);
+  // Block all gated features until the subscription state has been confirmed
+  // by the backend — avoids showing Pro features on a stale free-default.
+  return FeatureGate(isPro: sub.isHydrated && sub.isPro);
 });

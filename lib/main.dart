@@ -105,14 +105,24 @@ class AuthGate extends ConsumerStatefulWidget {
 class _AuthGateState extends ConsumerState<AuthGate>
     with WidgetsBindingObserver {
   DateTime? _lastHydration;
+  DateTime? _lastQueueProcess;
   bool _hasSeenOnboarding = false;
   bool _onboardingChecked = false;
+  bool _showFeedSyncWarning = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkOnboarding();
+    _checkFeedSyncWarning();
+  }
+
+  Future<void> _checkFeedSyncWarning() async {
+    final hasFailed = await FeedSyncQueue().hasPermanentlyFailedOps();
+    if (mounted && hasFailed) {
+      setState(() => _showFeedSyncWarning = true);
+    }
   }
 
   Future<void> _checkOnboarding() async {
@@ -141,16 +151,29 @@ class _AuthGateState extends ConsumerState<AuthGate>
     super.dispose();
   }
 
-  // T21: Re-sync subscription state on every app resume (60 s debounce).
+  // Re-sync subscription and replay pending feed ops on every app resume.
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     if (lifecycle != AppLifecycleState.resumed) return;
     if (!ref.read(authProvider).isAuthenticated) return;
     final now = DateTime.now();
+
+    // Subscription hydration — 60 s debounce.
     if (_lastHydration == null ||
         now.difference(_lastHydration!).inSeconds > 60) {
       _lastHydration = now;
       ref.read(subscriptionProvider.notifier).hydrateFromBackend();
+    }
+
+    // Feed sync queue — replay on reconnect, 30 s debounce.
+    if (_lastQueueProcess == null ||
+        now.difference(_lastQueueProcess!).inSeconds > 30) {
+      _lastQueueProcess = now;
+      FeedSyncQueue().processQueue(FeedService()).then((_) {
+        _checkFeedSyncWarning();
+      }).catchError((e) {
+        debugPrint('FeedSyncQueue resume replay failed: $e');
+      });
     }
   }
 
@@ -171,6 +194,39 @@ class _AuthGateState extends ConsumerState<AuthGate>
     }
 
     if (authState.isAuthenticated) {
+      if (_showFeedSyncWarning) {
+        return Stack(
+          children: [
+            const HomeScreen(),
+            SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: double.infinity,
+                  color: const Color(0xFFF59E0B),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Some feed records failed to sync. Check your connection.',
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => setState(() => _showFeedSyncWarning = false),
+                        child: const Icon(Icons.close, color: Colors.white, size: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
       return const HomeScreen();
     }
 

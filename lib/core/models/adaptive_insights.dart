@@ -177,7 +177,7 @@ class AdaptiveInsightEngine {
             'Performance: ${(perf.performanceRatio * 100).toStringAsFixed(0)}%',
           ],
           generatedAt: DateTime.now(),
-          action: () => debugPrint('Critical growth action for ${pond.id}'),
+          action: null,
         ));
       }
       // Excellent growth opportunities
@@ -199,7 +199,7 @@ class AdaptiveInsightEngine {
             'Growth Score: ${perf.score.toStringAsFixed(0)}/100',
           ],
           generatedAt: DateTime.now(),
-          action: () => debugPrint('Excellent growth action for ${pond.id}'),
+          action: null,
         ));
       }
       // Growth monitoring recommendations
@@ -220,7 +220,7 @@ class AdaptiveInsightEngine {
             'Confidence: ${(confidence * 100).toStringAsFixed(0)}%',
           ],
           generatedAt: DateTime.now(),
-          action: () => debugPrint('Sampling reminder for ${pond.id}'),
+          action: null,
         ));
       }
     }
@@ -255,7 +255,7 @@ class AdaptiveInsightEngine {
             'Feed Today: ${efficiency.todayFeed.toStringAsFixed(0)}kg',
           ],
           generatedAt: DateTime.now(),
-          action: () => debugPrint('FCR optimization for ${pond.id}'),
+          action: null,
         ));
       }
       // Excellent feed efficiency
@@ -307,7 +307,7 @@ class AdaptiveInsightEngine {
             'Growth Phase: ${GrowthCurve.getGrowthPhase(pond.doc)}',
           ],
           generatedAt: DateTime.now(),
-          action: () => debugPrint('Sampling action for ${pond.id}'),
+          action: null,
         ));
       } else if (daysSinceSample > 14) {
         insights.add(AdaptiveInsight(
@@ -325,7 +325,7 @@ class AdaptiveInsightEngine {
             'Recommendation: Sample every 14 days',
           ],
           generatedAt: DateTime.now(),
-          action: () => debugPrint('Sampling reminder for ${pond.id}'),
+          action: null,
         ));
       }
     }
@@ -367,7 +367,7 @@ class AdaptiveInsightEngine {
               'Biomass: ${pond.estimatedBiomass?.toStringAsFixed(0)}kg',
             ],
             generatedAt: DateTime.now(),
-            action: () => debugPrint('Harvest planning for ${pond.id}'),
+            action: null,
           ));
         }
       }
@@ -396,7 +396,7 @@ class AdaptiveInsightEngine {
               'Predicted ABW: ${predictedAbw30.toStringAsFixed(1)}g',
             ],
             generatedAt: DateTime.now(),
-            action: () => debugPrint('Trajectory intervention for ${pond.id}'),
+            action: null,
           ));
         }
       }

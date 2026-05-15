@@ -261,6 +261,10 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
         return Icons.bolt;
       case ExpenseCategory.diesel:
         return Icons.local_gas_station;
+      case ExpenseCategory.feed:
+        return Icons.water_drop_rounded;
+      case ExpenseCategory.seed:
+        return Icons.grass_rounded;
       case ExpenseCategory.sampling:
         return Icons.science;
       case ExpenseCategory.other:
@@ -270,9 +274,12 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (!ref.watch(isProProvider)) {
-      return _ProRequired(
-        onUpgrade: () => Navigator.pushReplacement(
+    final isPro = ref.watch(isProProvider);
+    if (!isPro) {
+      return _FreeExpenseView(
+        cropId: widget.cropId,
+        farmId: widget.farmId,
+        onUpgrade: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const UpgradeToProScreen()),
         ),
@@ -500,6 +507,146 @@ class _ProRequired extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FreeExpenseView extends ConsumerWidget {
+  final String cropId;
+  final String farmId;
+  final VoidCallback onUpgrade;
+
+  const _FreeExpenseView({
+    required this.cropId,
+    required this.farmId,
+    required this.onUpgrade,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final expensesAsync = ref.watch(expensesProvider(cropId));
+    final today = DateTime.now();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Expense Summary'),
+        backgroundColor: const Color(0xFF1B5E20),
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: expensesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, __) => const Center(child: Text('Could not load expenses')),
+          data: (expenses) {
+            final todayExpenses = expenses.where((e) =>
+              e.date.year == today.year &&
+              e.date.month == today.month &&
+              e.date.day == today.day).toList();
+            final todayTotal = todayExpenses.fold<double>(0, (s, e) => s + e.amount);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "TODAY'S EXPENSES",
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '₹${todayTotal.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      if (todayExpenses.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ...todayExpenses.map((e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                ExpenseCategory.fromString(e.category.value).label,
+                                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                              ),
+                              Text(
+                                '₹${e.amount.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ] else
+                        const Text(
+                          'No expenses logged today',
+                          style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: onUpgrade,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0B4A5C),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Unlock Full Expense Analytics',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Daily, weekly & monthly breakdowns with category totals — PRO',
+                          style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Upgrade to PRO →',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF2EBD7A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

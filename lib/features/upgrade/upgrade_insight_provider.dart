@@ -85,13 +85,15 @@ class UpgradeLossInsight {
   int get correctionPercent => ((finalFactor - 1.0) * 100).round();
 
   String get riskLabel {
+    if (isSimulated) return 'UNKNOWN';
     if (moneyLoss >= 50 || overfeedPercent >= 8) return 'HIGH';
     if (moneyLoss > 0 || overfeedPercent >= 3) return 'MEDIUM';
     return 'LOW';
   }
 
   String get insightMode {
-    if (isSimulated || doc < 30) return 'Basic insight';
+    if (isSimulated) return 'Example — add tray data for real numbers';
+    if (doc < 30) return 'Early data';
     return hasTrayData ? 'Tray-backed insight' : 'Smart insight';
   }
 
@@ -108,6 +110,7 @@ class UpgradeLossInsight {
   String get extraFeedLabel => '${_oneDecimal(extraFeed)} kg';
 
   String get cropLossRangeLabel {
+    if (isSimulated) return 'Varies by farm — log tray data to see yours';
     if (!upgradeExperimentFlags.showLossProjection || moneyLoss <= 0) {
       return '₹3,000-₹10,000 per crop';
     }

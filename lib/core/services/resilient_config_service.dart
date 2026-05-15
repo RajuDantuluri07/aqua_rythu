@@ -43,7 +43,8 @@ class ResilientConfigService {
 
   DateTime? _lastFetch;
   Map<String, dynamic>? _cachedConfig;
-  bool _isInitialized = false;
+  bool _isInitialized = false;  // true once init has been attempted
+  bool _hasValidConfig = false; // true only when cache or remote gave real data
 
   // Safe default configurations
   static const Map<String, dynamic> _safeDefaults = {
@@ -78,20 +79,16 @@ class ResilientConfigService {
 
   Future<void> initialize() async {
     if (_isInitialized) return;
+    _isInitialized = true; // always set — prevents re-entrant loops
 
     try {
-      // Try to load from local cache first
       await _loadFromLocalCache();
-
-      // Then refresh from remote if needed
       await _refreshFromRemote();
-
-      _isInitialized = true;
-      AppLogger.info('ResilientConfigService initialized successfully');
+      _hasValidConfig = _cachedConfig != null && _cachedConfig!.isNotEmpty;
+      AppLogger.info('ResilientConfigService initialized (valid=$_hasValidConfig)');
     } catch (e) {
-      AppLogger.error('Failed to initialize ResilientConfigService', e);
-      // Still mark as initialized to prevent repeated attempts
-      _isInitialized = true;
+      AppLogger.error('ResilientConfigService init failed — defaults active', e);
+      _hasValidConfig = _cachedConfig != null && _cachedConfig!.isNotEmpty;
     }
   }
 
@@ -129,7 +126,8 @@ class ResilientConfigService {
       final response = await _supabase
           .from('app_config')
           .select('key, value, updated_at')
-          .order('updated_at', ascending: false);
+          .order('updated_at', ascending: false)
+          .timeout(const Duration(seconds: 8), onTimeout: () => []);
 
       if (response.isNotEmpty) {
         final config = <String, dynamic>{};
@@ -240,6 +238,7 @@ class ResilientConfigService {
   Future<Map<String, dynamic>> getHealthStatus() async {
     return {
       'is_initialized': _isInitialized,
+      'has_valid_config': _hasValidConfig,
       'last_fetch': _lastFetch?.toIso8601String(),
       'cache_size': _cachedConfig?.length ?? 0,
       'is_cache_fresh': await isConfigFresh(),

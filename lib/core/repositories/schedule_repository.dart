@@ -40,22 +40,19 @@ class ScheduleRepository {
   }
 
   Future<SupplementSchedule?> insertSchedule(SupplementSchedule schedule) async {
-    try {
-      final now = DateTime.now();
-      final data = schedule.toJson();
-      data['created_at'] = now.toIso8601String();
-      data['updated_at'] = now.toIso8601String();
+    final now = DateTime.now();
+    final data = schedule.toJson()
+      ..remove('id')
+      ..['created_at'] = now.toIso8601String()
+      ..['updated_at'] = now.toIso8601String();
 
-      final response = await _supabase
-          .from('supplement_schedules')
-          .insert(data)
-          .select()
-          .single();
+    final response = await _supabase
+        .from('supplement_schedules')
+        .insert(data)
+        .select()
+        .single();
 
-      return SupplementSchedule.fromJson(response);
-    } catch (_) {
-      return null;
-    }
+    return SupplementSchedule.fromJson(response);
   }
 
   Future<SupplementSchedule?> updateSchedule(SupplementSchedule schedule) async {
@@ -101,8 +98,9 @@ class ScheduleRepository {
   Future<SupplementScheduleLog?> insertLog(SupplementScheduleLog log) async {
     try {
       final now = DateTime.now();
-      final data = log.toJson();
-      data['created_at'] = now.toIso8601String();
+      final data = log.toJson()
+        ..remove('id')
+        ..['created_at'] = now.toIso8601String();
 
       final response = await _supabase
           .from('supplement_schedule_logs')

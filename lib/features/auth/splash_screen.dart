@@ -5,49 +5,31 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: SizedBox(
-        width: double.infinity,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // App Logo
-            Hero(
-              tag: 'app_logo',
-              child: Image.asset(
-                'assets/images/logo.png',
-                height: 120,
-                errorBuilder: (context, error, stackTrace) => Icon(
-                  Icons.water_drop_rounded,
-                  size: 80,
-                  color: theme.primaryColor,
+      backgroundColor: Colors.white,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/splash.png',
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => const ColoredBox(
+              color: Colors.white,
+            ),
+          ),
+          Positioned(
+            bottom: 48,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Colors.white.withOpacity(0.8),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            // App Branding
-            Text(
-              "AquaRythu",
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.primaryColor,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Smart Shrimp Farming",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(height: 64),
-            const CircularProgressIndicator.adaptive(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

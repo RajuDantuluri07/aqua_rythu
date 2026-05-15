@@ -60,17 +60,15 @@ serve(async (req) => {
   const paymentId = payment.id as string
   const orderId = payment.order_id as string
   const amount = payment.amount as number         // paise
-  const userId = (payment.notes as Record<string, string>)?.user_id ?? ''
-
   if (!paymentId || !orderId) {
     return new Response('Missing payment_id or order_id', { status: 400 })
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-  // T29: Log webhook received immediately
+  // Log webhook received — userId not yet resolved (notes are untrusted)
   await logPayment(supabase, {
-    userId,
+    userId: '',
     orderId,
     paymentId,
     status: 'webhook_received',
@@ -86,7 +84,7 @@ serve(async (req) => {
 
   if (!order) {
     await logPayment(supabase, {
-      userId,
+      userId: '',
       orderId,
       paymentId,
       status: 'failed',

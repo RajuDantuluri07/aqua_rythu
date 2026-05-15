@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/inventory_item.dart';
 import '../../core/services/inventory_service.dart';
 import '../../features/farm/farm_provider.dart';
+import 'add_inventory_screen.dart';
 import 'add_stock_screen.dart';
 import 'inventory_provider.dart';
-import 'inventory_setup_screen.dart';
 
 class InventoryDashboardScreen extends ConsumerStatefulWidget {
   const InventoryDashboardScreen({super.key});
@@ -37,7 +37,7 @@ class _InventoryDashboardScreenState
 
   void _navigateToSetup(String farmId) {
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const InventorySetupScreen()))
+        .push(MaterialPageRoute(builder: (_) => const AddInventoryScreen()))
         .then((_) => ref.invalidate(inventoryProvider(farmId)));
   }
 

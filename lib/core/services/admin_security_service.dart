@@ -14,32 +14,12 @@ class AdminSecurityService {
 
   bool get isAdminAuthorized => _isAdminAuthorized;
 
-  // Temporary admin logic based on email
-  bool isAdmin(User? user) {
-    if (user == null) return false;
-
-    const adminEmail = "naveendantuluri1@gmail.com";
-    final isAdminUser = user.email == adminEmail;
-
-    return isAdminUser;
-  }
-
   Future<bool> validateAdminAccess(String passcode) async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
 
-      // Debug log for auth state
-      AppLogger.debug(
-          'Auth state check - User: ${user?.id ?? "null"}');
-
       if (user == null) {
         AppLogger.warn('Admin access denied: No authenticated user');
-        return false;
-      }
-
-      // Check if user is admin based on email
-      if (!isAdmin(user)) {
-        AppLogger.warn('Admin access denied: User not authorized');
         return false;
       }
 

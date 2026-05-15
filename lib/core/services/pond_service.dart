@@ -257,15 +257,8 @@ class PondService {
     String? feedBrandId,
   }) async {
     try {
-      // 1. Delete all historical rows sequentially so a failure in one step
-      // does not leave other tables partially cleared while still appearing
-      // successful to the caller.
-      await supabase.from('feed_rounds').delete().eq('pond_id', pondId);
-      await supabase.from('feed_logs').delete().eq('pond_id', pondId);
-      await supabase.from('tray_logs').delete().eq('pond_id', pondId);
-      await supabase.from('sampling_logs').delete().eq('pond_id', pondId);
-      await supabase.from('water_logs').delete().eq('pond_id', pondId);
-      await supabase.from('harvest_logs').delete().eq('pond_id', pondId);
+      // 1. Delete all historical rows in a single DB transaction via RPC.
+      await supabase.rpc('clear_pond_cycle_tables', params: {'p_pond_id': pondId});
 
       AppLogger.info('Cleared all cycle data for pond $pondId');
 
@@ -302,17 +295,7 @@ class PondService {
 
   Future<void> deletePond(String pondId) async {
     try {
-      // Delete child rows sequentially — a failure in any step stops the
-      // operation cleanly before the pond row itself is deleted.
-      await supabase.from('feed_rounds').delete().eq('pond_id', pondId);
-      await supabase.from('feed_logs').delete().eq('pond_id', pondId);
-      await supabase.from('tray_logs').delete().eq('pond_id', pondId);
-      await supabase.from('sampling_logs').delete().eq('pond_id', pondId);
-      await supabase.from('water_logs').delete().eq('pond_id', pondId);
-      await supabase.from('harvest_logs').delete().eq('pond_id', pondId);
-
-      await supabase.from('ponds').delete().eq('id', pondId);
-
+      await supabase.rpc('delete_pond_cascade', params: {'p_pond_id': pondId});
       AppLogger.info("Pond deleted from DB: $pondId");
     } catch (e) {
       throw Exception('Failed to delete pond: $e');

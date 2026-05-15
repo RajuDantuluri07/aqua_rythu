@@ -35,7 +35,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   String _selectedUnit = "g/kg";
   ProductMaster? _selectedProduct;
-  String? _selectedCategory;
 
   SupplementType _selectedType = SupplementType.feedMix;
   final List<String> _selectedRounds = [];
@@ -50,9 +49,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   void initState() {
     super.initState();
     final supplement = widget.supplement;
-    if (supplement == null) {
-      return;
-    }
+    if (supplement == null) return;
 
     _selectedType = supplement.type;
     _selectedRounds
@@ -76,24 +73,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   }
 
   Future<void> _pickProduct() async {
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Select a category first")),
-      );
-      return;
-    }
-
-    final picked = await showProductPickerSheet(
-      context,
-      categoryFilter: _selectedCategory,
-    );
+    final picked = await showProductPickerSheet(context);
     if (picked != null) {
       setState(() {
         _selectedProduct = picked;
-        if (picked.unitType != null) {
-          _selectedUnit =
-              _selectedType == SupplementType.feedMix ? 'g/kg' : 'ml/liters';
-        }
+        _selectedUnit = _selectedType == SupplementType.feedMix ? 'g/kg' : 'ml/liters';
       });
     }
   }
@@ -118,7 +102,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     setState(() {
       _items.add(
         SupplementItem(
-          name: product.displayName,
+          name: product.productName,
           quantity: dose,
           unit: _selectedUnit,
           type: _selectedType == SupplementType.feedMix ? 'feed' : 'water',
@@ -140,20 +124,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null) {
-      onPicked(picked);
-    }
+    if (picked != null) onPicked(picked);
   }
 
   Future<void> _savePlan() async {
     if (_isSaving) return;
-
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Select a category")),
-      );
-      return;
-    }
 
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -181,12 +156,12 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     try {
       final now = DateTime.now();
       final schedule = SupplementSchedule(
-        id: widget.supplement?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        id: widget.supplement?.id ?? '',
         pondId: widget.pondId,
         farmId: widget.farmId,
         productId: _items.isNotEmpty ? _items.first.productId : null,
         productName: _items.isNotEmpty ? _items.first.name : null,
-        categoryName: _selectedCategory,
+        categoryName: _items.isNotEmpty ? _selectedProduct?.category : null,
         categoryId: null,
         applicationType: _selectedType == SupplementType.feedMix ? 'feed_mix' : 'water_mix',
         startDate: _startDate,
@@ -204,12 +179,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
       final result = await _scheduleRepo.insertSchedule(schedule);
 
       if (!mounted) return;
-
       setState(() => _isSaving = false);
 
       if (result != null) {
         ref.invalidate(supplementSchedulesProvider(widget.pondId));
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -236,14 +209,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categoriesAsync = _selectedType == SupplementType.feedMix
-        ? ref.watch(feedCategoriesProvider)
-        : ref.watch(waterCategoriesProvider);
-
-    if (_selectedCategory != null) {
-      ref.watch(productsByCategoryProvider(_selectedCategory!));
-    }
-
     return Scaffold(
       backgroundColor: AppColors.card,
       appBar: AppBar(
@@ -255,6 +220,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.base),
           children: [
+            // Type toggle
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade200,
@@ -263,54 +229,13 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               padding: const EdgeInsets.all(4),
               child: Row(
                 children: [
-                  _typeOption(
-                    SupplementType.feedMix,
-                    "Feed Supplement",
-                  ),
-                  _typeOption(
-                    SupplementType.waterMix,
-                    "Water Treatment",
-                  ),
+                  _typeOption(SupplementType.feedMix, "Feed Supplement"),
+                  _typeOption(SupplementType.waterMix, "Water Treatment"),
                 ],
               ),
             ),
             AppSpacing.hBase,
-            const Text("Category", style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            categoriesAsync.when(
-              data: (categories) {
-                if (categories.isEmpty) {
-                  return const Text(
-                    "No categories available",
-                    style: TextStyle(color: Colors.grey),
-                  );
-                }
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: categories.map((cat) {
-                    return ChoiceChip(
-                      label: Text(cat.displayName),
-                      selected: _selectedCategory == cat.name,
-                      onSelected: (_) {
-                        setState(() {
-                          _selectedCategory = cat.name;
-                          _selectedProduct = null;
-                          _items.clear();
-                          _itemDoseController.clear();
-                        });
-                      },
-                    );
-                  }).toList(),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, st) => const Text(
-                "Error loading categories",
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-            AppSpacing.hBase,
+            // Product picker
             const Text("Product", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             InkWell(
@@ -324,7 +249,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   fillColor: Colors.grey.shade100,
                 ),
                 child: Text(
-                  _selectedProduct?.displayName ?? "Tap to select product",
+                  _selectedProduct?.productName ?? "Tap to select product",
                   style: TextStyle(
                     color: _selectedProduct != null
                         ? Colors.black87
@@ -340,8 +265,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   flex: 3,
                   child: TextField(
                     controller: _itemDoseController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(hintText: "Dose"),
                   ),
                 ),
@@ -370,8 +294,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
             ..._items.map((item) => Card(
                   child: ListTile(
                     dense: true,
-                    title:
-                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    title: Text(item.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text("${item.quantity} ${item.unit}"),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -380,6 +304,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   ),
                 )),
             AppSpacing.hBase,
+            // Date range
             const Text("Start Date & End Date",
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
@@ -389,7 +314,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   child: InkWell(
                     onTap: () => _pickDate(
                       current: _startDate,
-                      onPicked: (date) => setState(() => _startDate = date),
+                      onPicked: (d) => setState(() => _startDate = d),
                     ),
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: "Start Date"),
@@ -402,7 +327,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   child: InkWell(
                     onTap: () => _pickDate(
                       current: _endDate,
-                      onPicked: (date) => setState(() => _endDate = date),
+                      onPicked: (d) => setState(() => _endDate = d),
                     ),
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: "End Date"),
@@ -412,9 +337,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 ),
               ],
             ),
+            // Feed rounds (feed mix only)
             if (_selectedType == SupplementType.feedMix) ...[
               AppSpacing.hBase,
-              const Text("Feed Rounds", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Feed Rounds",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -437,7 +364,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             ],
             AppSpacing.hBase,
-            const Text("Notes (Optional)", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Notes (Optional)",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             TextField(
               controller: _notesController,
@@ -485,7 +413,6 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
             _items.clear();
             _selectedRounds.clear();
             _selectedProduct = null;
-            _selectedCategory = null;
             _itemDoseController.clear();
             _selectedUnit = "g/kg";
           });

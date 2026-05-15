@@ -129,6 +129,13 @@ class FeedSyncQueue {
     return ops.where((o) => o.status == FeedOpStatus.pending).length;
   }
 
+  /// True if any operations exhausted all retries and need manual attention.
+  Future<bool> hasPermanentlyFailedOps() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ops = await _loadAll(prefs);
+    return ops.any((o) => o.status == FeedOpStatus.failed);
+  }
+
   /// Returns all operations for inspection (e.g., admin/debug screen).
   Future<List<FeedPendingOperation>> all() async {
     final prefs = await SharedPreferences.getInstance();
