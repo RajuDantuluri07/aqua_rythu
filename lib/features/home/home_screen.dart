@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/access_denied_view.dart';
 import '../../core/constants/spacing.dart';
 import '../farm/farm_provider.dart';
 import '../farm/farm_switcher_sheet.dart';
@@ -505,6 +506,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final ponds = (farm?.ponds ?? []).cast<Pond>()
         .where((p) => p.status == PondStatus.active)
         .toList();
+
+    if (farmState.accessDenied) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: Text(AppLocalizations.of(context).t('home')),
+          backgroundColor: AppColors.background,
+          elevation: 0,
+        ),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+        body: AccessDeniedView(
+          message: 'Unable to load your farm data. '
+              'Please contact support if this persists.',
+          onRetry: () =>
+              ref.read(farmProvider.notifier).loadFarms(),
+        ),
+      );
+    }
 
     if (farm == null) {
       return Scaffold(

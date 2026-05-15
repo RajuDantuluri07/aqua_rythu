@@ -9,10 +9,6 @@ import '../farm/farm_provider.dart';
 import '../farm/farms_list_sheet.dart';
 import 'user_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
-import '../upgrade/subscription_provider.dart';
-import '../dashboard/farm_dashboard_provider.dart';
-import '../feed/feed_history_provider.dart';
-import '../../core/services/subscription_gate.dart';
 import '../admin/payment_debug_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -51,7 +47,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             // ── PROFILE HEADER ──────────────────────────────────────────
             GestureDetector(
               onTap: () {
-                if (!kReleaseMode) {
+                if (kDebugMode) {
                   setState(() {
                     _profileHeaderTapCount++;
                     if (_profileHeaderTapCount >= 5) {
@@ -515,7 +511,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showDebugMenu() {
-    if (kReleaseMode) return;
+    if (!kDebugMode) return;
 
     showModalBottomSheet(
       context: context,
@@ -546,57 +542,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 color: Color(0xFF1B8A4C),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Current: ${SubscriptionGate.hasDebugOverride ? "DEBUG ${SubscriptionGate.isPro ? "PRO" : "FREE"}" : "REAL ${SubscriptionGate.isPro ? "PRO" : "FREE"}"}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-              ),
-            ),
             const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.star, color: Color(0xFF1B8A4C)),
-              title: const Text('Set as PRO (Debug)'),
-              subtitle: const Text('Override to PRO for testing'),
-              onTap: () async {
-                SubscriptionGate.setDebugOverride(true);
-                await SubscriptionGate.persistDebugChoice('pro');
-                _refreshProviders();
-                if (sheetContext.mounted) {
-                  Navigator.of(sheetContext).pop();
-                }
-                _showDebugSnackBar('DEBUG: Set to PRO');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.lock, color: Colors.grey),
-              title: const Text('Set as FREE (Debug)'),
-              subtitle: const Text('Override to FREE for testing'),
-              onTap: () async {
-                SubscriptionGate.setDebugOverride(false);
-                await SubscriptionGate.persistDebugChoice('free');
-                _refreshProviders();
-                if (sheetContext.mounted) {
-                  Navigator.of(sheetContext).pop();
-                }
-                _showDebugSnackBar('DEBUG: Set to FREE');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.restore, color: Colors.orange),
-              title: const Text('Reset (Real State)'),
-              subtitle: const Text('Clear debug override'),
-              onTap: () async {
-                SubscriptionGate.resetDebug();
-                await SubscriptionGate.persistDebugChoice('none');
-                _refreshProviders();
-                if (sheetContext.mounted) {
-                  Navigator.of(sheetContext).pop();
-                }
-                _showDebugSnackBar('DEBUG: Reset to real subscription');
-              },
-            ),
             ListTile(
               leading: const Icon(Icons.receipt_long_rounded,
                   color: Colors.indigo),
@@ -619,21 +565,5 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _refreshProviders() {
-    // Force refresh of all subscription-dependent providers
-    ref.invalidate(subscriptionProvider);
-    ref.invalidate(farmDashboardProvider);
-    ref.invalidate(feedHistoryProvider);
-  }
-
-  void _showDebugSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF1B8A4C),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
 }
 

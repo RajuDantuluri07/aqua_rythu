@@ -13,12 +13,21 @@ import '../features/home/home_screen.dart';
 import 'features/auth/auth_provider.dart';
 import 'features/upgrade/subscription_provider.dart';
 import 'core/config/app_config.dart';
+import 'core/config/runtime_validator.dart';
 import 'core/language/language_provider.dart';
 import 'core/language/app_localizations.dart';
-import 'core/services/subscription_gate.dart';
+import 'core/services/feed_sync_queue.dart';
+import 'core/services/feed_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Fail fast if required env vars are missing — before touching any network.
+  final configErrors = RuntimeValidator.validate();
+  if (configErrors.isNotEmpty) {
+    runApp(FatalConfigErrorScreen(errors: configErrors));
+    return;
+  }
 
   // Global Flutter error handler for debugging crashes
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -43,12 +52,12 @@ void main() async {
     debugPrint('SharedPreferences initialization failed: $e');
   }
 
-  // Hydrate debug subscription override (for QA testing in debug builds)
-  try {
-    await SubscriptionGate.hydrateDebugOverride();
-  } catch (e) {
-    debugPrint('SubscriptionGate debug override hydration failed: $e');
-  }
+  // Phase 3+6: Replay any feed operations that failed to sync before the last
+  // app exit (offline, crash, network drop). Runs in the background — does not
+  // block app startup. The same operation_id guarantees DB-level deduplication.
+  FeedSyncQueue().processQueue(FeedService()).catchError((e) {
+    debugPrint('FeedSyncQueue startup replay failed: $e');
+  });
 
   runApp(
     const ProviderScope(

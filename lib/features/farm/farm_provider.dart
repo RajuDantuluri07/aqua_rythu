@@ -6,6 +6,7 @@ import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/utils/doc_utils.dart';
+import 'package:aqua_rythu/core/utils/supabase_errors.dart';
 import '../pond/enums/seed_type.dart';
 
 enum PondStatus { active, completed }
@@ -200,10 +201,12 @@ class Farm {
 class FarmState {
   final List<Farm> farms;
   final String selectedId;
+  final bool accessDenied;
 
   FarmState({
     required this.farms,
     required this.selectedId,
+    this.accessDenied = false,
   });
 
   Farm? get currentFarm {
@@ -218,10 +221,12 @@ class FarmState {
   FarmState copyWith({
     List<Farm>? farms,
     String? selectedId,
+    bool? accessDenied,
   }) {
     return FarmState(
       farms: farms ?? this.farms,
       selectedId: selectedId ?? this.selectedId,
+      accessDenied: accessDenied ?? this.accessDenied,
     );
   }
 }
@@ -317,6 +322,9 @@ class FarmNotifier extends StateNotifier<FarmState> {
       );
     } catch (e) {
       AppLogger.error("Error loading farms", e);
+      if (isRlsDenied(e)) {
+        state = state.copyWith(accessDenied: true);
+      }
     }
   }
 

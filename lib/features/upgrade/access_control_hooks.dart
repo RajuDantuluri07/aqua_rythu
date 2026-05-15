@@ -9,7 +9,7 @@ class AccessControlHooks {
     final subscriptionState = ref.read(subscriptionProvider);
     final feature = PlanFeatures.getFeatureById(featureId);
 
-    if (feature == null) return true; // Unknown features allowed by default
+    if (feature == null) return false; // Unknown features denied by default
 
     // FREE users can access free features
     if (!feature.isProFeature) return true;

@@ -1,6 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/feed_debug_logger.dart';
+import '../../core/utils/uuid_generator.dart';
+import '../../core/models/feed_pending_operation.dart';
+import '../../core/services/feed_sync_queue.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/tray_service.dart';
 import '../../features/tray/enums/tray_status.dart';
@@ -411,7 +414,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
     AppLogger.info('FEED SAVE: pond=$pondId round=$round doc=$doc qty=$actualQty');
 
-    // Prevent concurrent feed marking for the SAME round (double-tap guard).
+    // Phase 4: Prevent concurrent feed marking for the SAME round (double-tap guard).
     if (!_tryAcquireLock(lockKey)) {
       AppLogger.warn(
           'Feed marking already in progress for round $round in pond $pondId');
@@ -457,33 +460,70 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // Use actual quantity if provided, otherwise use the final (possibly edited) amount.
       final qty = actualQty ?? state.roundFinalFeedAmounts[round] ?? plannedQty;
 
+      // Phase 5: Guard against corrupted engine output before any DB call.
+      if (qty.isNaN || qty.isInfinite) {
+        throw ArgumentError(
+            'Feed quantity is ${qty.isNaN ? "NaN" : "Infinite"} for '
+            'round $round in pond $pondId — engine produced invalid output.');
+      }
       if (qty < 0) {
         throw ArgumentError(
-            'Invalid feed quantity $qty for round $round in pond $pondId');
+            'Negative feed quantity ${qty.toStringAsFixed(3)}kg '
+            'for round $round in pond $pondId.');
+      }
+      // Note: the 50 kg upper bound is also enforced inside FeedService._validateFeedAmount.
+      // The check here gives a clearer error message in the UI context.
+      if (qty > 50.0) {
+        throw ArgumentError(
+            'Feed quantity ${qty.toStringAsFixed(1)}kg exceeds 50 kg per round '
+            'for pond=$pondId doc=$doc round=$round. '
+            'Possible engine calculation error.');
       }
 
-      // Allow zero-kg rounds to be confirmed as "Do not feed".
-      // This is a valid action for rounds where the engine recommends no feed.
-      // REMOVED: in-memory duplicate check on `state.roundFeedStatus`.
-      // That check was causing silent failures: if DB had a round marked
-      // 'completed' in feed_rounds but NO matching feed_log (stale/corrupt state),
-      // the function returned without saving anything while the UI showed success.
-      // The RPC's own idempotency guard handles true duplicates correctly.
+      // Phase 1: Generate a deterministic operation_id BEFORE the first DB attempt.
+      // This UUID travels with the operation through retries and the offline queue.
+      // The DB RPC checks it on entry — if already present, no writes occur.
+      final operationId = generateUuidV4();
 
       AppLogger.info(
-          'FEED SAVE: direct insert pond=$pondId doc=$doc round=$round qty=${qty.toStringAsFixed(3)}kg');
+          'FEED SAVE: pond=$pondId doc=$doc round=$round '
+          'qty=${qty.toStringAsFixed(3)}kg operationId=$operationId');
 
       // Calculate expected feed for today (needed for history logging).
       final expectedFeedToday =
           state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
 
-      await FeedService().saveFeedEntry(
-        pondId: pondId,
-        doc: doc,
-        feedKg: qty,
-        selectedRound: round,
-        isPro: state.recommendation != null,
-      );
+      // Phase 3+6: Attempt DB write; enqueue for offline retry on failure.
+      try {
+        await FeedService().saveFeedEntry(
+          pondId: pondId,
+          doc: doc,
+          feedKg: qty,
+          selectedRound: round,
+          isPro: state.recommendation != null,
+          operationId: operationId,
+        );
+      } catch (e) {
+        // Network/server failure — preserve the operation locally so it can
+        // be replayed when connectivity is restored. The same operationId
+        // guarantees the DB deduplicates any successful replay.
+        AppLogger.warn(
+            'FEED SAVE: DB write failed, enqueueing for offline retry '
+            '(pond=$pondId doc=$doc r=$round opId=$operationId): $e');
+        await FeedSyncQueue().enqueue(FeedPendingOperation(
+          operationId: operationId,
+          pondId: pondId,
+          doc: doc,
+          round: round,
+          feedKg: qty,
+          baseFeed: qty,
+          createdAt: DateTime.now(),
+          queuedAt: DateTime.now(),
+        ));
+        // Still update local UI state so the farmer sees "completed" immediately.
+        // The sync queue will reconcile with the server in the background.
+      }
+
       final actualDbFeedSaved = qty;
       _controller.invalidateDoc(pondId, doc);
 

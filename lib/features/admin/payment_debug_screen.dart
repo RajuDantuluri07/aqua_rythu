@@ -71,7 +71,7 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
   @override
   Widget build(BuildContext context) {
     // Only render in debug builds — belt-and-suspenders beyond the route guard.
-    if (kReleaseMode) {
+    if (!kDebugMode) {
       return const Scaffold(
         body: Center(child: Text('Not available')),
       );

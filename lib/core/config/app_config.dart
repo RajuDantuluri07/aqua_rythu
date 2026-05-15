@@ -11,13 +11,4 @@ class AppConfig {
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static const razorpayKeyId = String.fromEnvironment('RAZORPAY_KEY_ID');
   static const bool isDebugMode = kDebugMode;
-
-  /// Fails fast at startup if keys are missing — better than a silent
-  /// network error deep in the app.
-  static void validate() {
-    assert(supabaseUrl.isNotEmpty,
-        'SUPABASE_URL is not set. Pass --dart-define=SUPABASE_URL=...');
-    assert(supabaseAnonKey.isNotEmpty,
-        'SUPABASE_ANON_KEY is not set. Pass --dart-define=SUPABASE_ANON_KEY=...');
-  }
 }

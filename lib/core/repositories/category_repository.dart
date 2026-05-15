@@ -10,16 +10,14 @@ class CategoryRepository {
       final response = await _supabase
           .from('master_categories')
           .select()
-          .or(
-            'default_application_type.eq.$applicationType,default_application_type.eq.both',
-          )
+          .inFilter('default_application_type', [applicationType, 'both'])
           .eq('active', true)
           .order('sort_order');
 
       return (response as List)
           .map((json) => MasterCategory.fromJson(json as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+    } catch (e) {
       return [];
     }
   }

@@ -4,8 +4,13 @@ import '../../features/tray/enums/tray_status.dart';
 import '../../features/feed/feed_schedule_provider.dart';
 import '../utils/logger.dart';
 import 'inventory_service.dart';
+import 'feed_sync_queue.dart';
 
-class FeedService {
+// Maximum realistic feed per round (kg). Amounts above this are rejected
+// as data errors before hitting the DB.
+const double _kMaxFeedKgPerRound = 50.0;
+
+class FeedService implements FeedCompletionSink {
   final supabase = Supabase.instance.client;
   final _inventoryService = InventoryService();
 
@@ -457,6 +462,7 @@ class FeedService {
     required double feedKg,
     required int? selectedRound,
     required bool isPro,
+    String? operationId,
   }) async {
     if (doc > 150) {
       throw Exception('Crop completed');
@@ -477,6 +483,33 @@ class FeedService {
       // value instead of writing app-only columns that do not exist in DB.
       baseFeed: feedKg,
       createdAt: DateTime.now(),
+      operationId: operationId,
+    );
+  }
+
+  /// Phase 1: Idempotent feed completion — implements [FeedCompletionSink].
+  ///
+  /// Called by [FeedSyncQueue] when replaying queued offline operations.
+  /// The [operationId] is the same UUID generated before the first attempt,
+  /// so the DB deduplicates any replay that already landed.
+  @override
+  Future<void> completeFeedRoundIdempotent({
+    required String pondId,
+    required int doc,
+    required int round,
+    required double amount,
+    required double baseFeed,
+    required DateTime createdAt,
+    required String operationId,
+  }) async {
+    await _completeFeedRoundWithLog(
+      pondId: pondId,
+      doc: doc,
+      round: round,
+      amount: amount,
+      baseFeed: baseFeed,
+      createdAt: createdAt,
+      operationId: operationId,
     );
   }
 
@@ -487,7 +520,11 @@ class FeedService {
     required double amount,
     required double baseFeed,
     required DateTime createdAt,
+    String? operationId,
   }) async {
+    // Phase 5: Validate before touching DB — reject corrupted engine output.
+    _validateFeedAmount(amount, pondId: pondId, doc: doc, round: round);
+
     await _withRetry(
         'completeFeedRoundWithLog(pond=$pondId doc=$doc round=$round)',
         () async {
@@ -499,6 +536,7 @@ class FeedService {
         'p_feed_amount': amount,
         'p_base_feed': baseFeed,
         'p_created_at': createdAt.toIso8601String(),
+        if (operationId != null) 'p_operation_id': operationId,
       });
 
       // Current migrations return JSONB. Some older databases returned BOOLEAN.
@@ -527,7 +565,49 @@ class FeedService {
         throw Exception(
             'Feed was not saved for pond $pondId DOC $doc round $round: ${result['error'] ?? 'unknown database error'}');
       }
+
+      // Log idempotency outcome for debugging (not an error).
+      if (result['operationDuplicate'] == true) {
+        AppLogger.info(
+            'completeFeedRound: operation_id duplicate detected — '
+            'feed already written, no DB change (pond=$pondId doc=$doc r=$round)');
+      } else if (result['alreadyCompleted'] == true) {
+        AppLogger.info(
+            'completeFeedRound: round already completed — '
+            'feed_logs repaired (pond=$pondId doc=$doc r=$round)');
+      }
     });
+  }
+
+  // Phase 5: Feed amount validation — rejects NaN, Infinity, negative, and
+  // values above the physiologically plausible maximum per round.
+  static void _validateFeedAmount(
+    double amount, {
+    required String pondId,
+    required int doc,
+    required int round,
+  }) {
+    if (amount.isNaN) {
+      throw ArgumentError(
+          'Feed amount is NaN for pond=$pondId doc=$doc round=$round. '
+          'Engine produced invalid output — check feed computation pipeline.');
+    }
+    if (amount.isInfinite) {
+      throw ArgumentError(
+          'Feed amount is Infinite for pond=$pondId doc=$doc round=$round. '
+          'Division by zero in feed engine — check survival/density inputs.');
+    }
+    if (amount < 0) {
+      throw ArgumentError(
+          'Negative feed amount ${amount.toStringAsFixed(3)}kg '
+          'for pond=$pondId doc=$doc round=$round.');
+    }
+    if (amount > _kMaxFeedKgPerRound) {
+      throw ArgumentError(
+          'Feed amount ${amount.toStringAsFixed(1)}kg exceeds maximum '
+          '${_kMaxFeedKgPerRound}kg per round for pond=$pondId doc=$doc round=$round. '
+          'Possible unit error in engine calculation.');
+    }
   }
 
 }
