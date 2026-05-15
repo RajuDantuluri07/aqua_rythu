@@ -81,7 +81,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     // Task 2 & 4: Handle null safely with better UX
     if (pond == null) {
       return Scaffold(
-        backgroundColor: AppColors.cardBg,
+        backgroundColor: AppColors.card,
         appBar: AppBar(title: const Text("Feed Schedule")),
         body: Center(
           // Show loading if feed schedule is still loading, otherwise indicate pond not found.
@@ -93,7 +93,7 @@ class _FeedScheduleScreenState extends ConsumerState<FeedScheduleScreen> {
     }
     String pondName = pond.name; // Now safely access pond.name
     return Scaffold(
-      backgroundColor: AppColors.cardBg,
+      backgroundColor: AppColors.card,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
@@ -403,7 +403,7 @@ class _HeaderCell extends StatelessWidget {
       label,
       textAlign: align,
       style: TextStyle(
-        color: isWhite ? Colors.white : AppColors.textTertiary,
+        color: isWhite ? Colors.white : AppColors.textSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.3,

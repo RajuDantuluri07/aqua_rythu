@@ -26,17 +26,31 @@ class TrayService {
     }
 
     try {
+      // Deduplicate: skip if a tray log already exists for this round today.
+      final today = log.time.toIso8601String().split('T')[0];
+      final existing = await _supabase
+          .from('tray_logs')
+          .select('id')
+          .eq('pond_id', log.pondId)
+          .eq('doc', log.doc)
+          .eq('round_number', log.round)
+          .eq('date', today)
+          .limit(1);
+      if (existing.isNotEmpty) {
+        AppLogger.warn(
+            'Duplicate tray log skipped: pond ${log.pondId} DOC ${log.doc} R${log.round}');
+        return;
+      }
+
       await _supabase.from('tray_logs').insert({
         'pond_id': log.pondId,
-        'date': log.time.toIso8601String().split('T')[0],
+        'date': today,
         'doc': log.doc,
         'round_number': log.round,
         'tray_statuses': log.trays.map((e) => e.name).toList(),
         'observations': log.observations,
       });
 
-      // Trigger feed adjustment via service after tray is persisted
-      // Note: This is a placeholder - actual implementation may vary
       AppLogger.info('Tray log saved for pond ${log.pondId} at DOC ${log.doc}');
     } catch (e, stack) {
       AppLogger.error(

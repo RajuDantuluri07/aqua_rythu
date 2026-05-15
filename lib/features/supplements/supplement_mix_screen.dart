@@ -65,7 +65,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
                 onPressed: () => Navigator.pop(dialogContext, true),
                 child: const Text(
                   "Stop Plan",
-                  style: TextStyle(color: AppColors.error),
+                  style: TextStyle(color: AppColors.danger),
                 ),
               ),
             ],
@@ -110,7 +110,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     final schedulesAsync = ref.watch(supplementSchedulesProvider(widget.pondId));
 
     return Scaffold(
-      backgroundColor: AppColors.cardBg,
+      backgroundColor: AppColors.card,
       appBar: AppBar(
         title: const Text("Supplement Mix", style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,

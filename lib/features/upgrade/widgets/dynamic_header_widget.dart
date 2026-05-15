@@ -20,16 +20,6 @@ class DynamicHeaderWidget extends ConsumerWidget {
       // Extract DOC from pond data using the getter
       doc = firstPond.doc;
 
-      // For demonstration, create mock smart value data when DOC > 30 (when smart feed activates)
-      if (doc > 30) {
-        // In real implementation, this would come from actual feed engine calculations
-        smartValueData = SmartValueData(
-          savingsAmount: 120 + (doc % 50), // Variable savings based on DOC
-          reductionPercent: 5 + (doc % 10), // Variable reduction 5-14%
-          confidenceLevel: 'high',
-          reason: 'Tray analysis shows leftover feed',
-        );
-      }
     }
 
     final headerMessage =

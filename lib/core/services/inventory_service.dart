@@ -122,6 +122,20 @@ class InventoryService {
     }
   }
 
+  Future<void> recordFeedConsumption(String farmId, double feedKg) async {
+    final feedItem = await getFeedItemForFarm(farmId);
+    if (feedItem == null) return;
+    final itemId = feedItem['id'] as String;
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    await supabase.from('inventory_consumption').insert({
+      'item_id': itemId,
+      'source': 'feed_auto',
+      'quantity_used': feedKg,
+      'date': today,
+    });
+    AppLogger.info('Deducted ${feedKg}kg from inventory for farm $farmId');
+  }
+
   // Add stock to inventory and record purchase.
   // Pass either (quantity + pricePerUnit) for raw, or (packs + costPerPack) for pack-based.
   Future<void> addStock({
@@ -189,12 +203,13 @@ class InventoryService {
   Future<double> getTodayUsage(String itemId) async {
     try {
       final today = DateTime.now();
+      final todayStr = today.toIso8601String().split('T')[0];
       final result = await supabase
           .from('inventory_consumption')
           .select('quantity_used')
           .eq('item_id', itemId)
           .eq('source', 'feed_auto')
-          .gte('date', today.toIso8601String().split('T')[0]);
+          .eq('date', todayStr);
 
       double totalUsage = 0.0;
       for (final row in result) {

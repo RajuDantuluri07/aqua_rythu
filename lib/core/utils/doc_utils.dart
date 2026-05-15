@@ -37,8 +37,8 @@ int? calculateDocFromStockingDate(
 
   final doc = todayUtc.difference(stockingUtc).inDays + 1;
 
-  // Handle edge cases
-  if (doc <= 0) return 1; // Future date or same day
+  if (doc < 0) return 1; // Future stocking date — treat same as DOC 1
+  if (doc == 0) return 1;   // Same-day stocking = DOC 1
   return doc;
 }
 

@@ -1,13 +1,13 @@
 enum PlanType {
-  FREE,
-  PRO,
+  free,
+  pro,
 }
 
 enum SubscriptionStatus {
-  ACTIVE,
-  EXPIRED,
-  CANCELLED,
-  PENDING,
+  active,
+  expired,
+  cancelled,
+  pending,
 }
 
 class Subscription {
@@ -41,13 +41,13 @@ class Subscription {
       userId: json['user_id'] as String,
       planType: PlanType.values.firstWhere(
         (e) => e.name.toLowerCase() == (json['plan'] as String?)?.toLowerCase(),
-        orElse: () => PlanType.FREE,
+        orElse: () => PlanType.free,
       ),
       activatedAt: json['activated_at'] != null ? DateTime.parse(json['activated_at'] as String) : null,
       expiresAt: json['expires_at'] != null ? DateTime.parse(json['expires_at'] as String) : null,
       status: SubscriptionStatus.values.firstWhere(
         (e) => e.name.toLowerCase() == (json['status'] as String?)?.toLowerCase(),
-        orElse: () => SubscriptionStatus.PENDING,
+        orElse: () => SubscriptionStatus.pending,
       ),
       paymentStatus: json['payment_status'] as String?,
       razorpaySubscriptionId: json['razorpay_subscription_id'] as String?,
@@ -71,10 +71,10 @@ class Subscription {
     };
   }
 
-  bool get isActive => status == SubscriptionStatus.ACTIVE &&
+  bool get isActive => status == SubscriptionStatus.active &&
       (expiresAt == null || expiresAt!.isAfter(DateTime.now()));
 
-  bool get isPro => planType == PlanType.PRO && isActive;
+  bool get isPro => planType == PlanType.pro && isActive;
 
   Subscription copyWith({
     String? id,

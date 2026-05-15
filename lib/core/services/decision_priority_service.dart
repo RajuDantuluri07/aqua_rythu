@@ -7,7 +7,7 @@ import '../models/real_world_anchors.dart';
 import '../utils/logger.dart';
 
 /// Minimum confidence required for moderate actions
-const double MIN_CONFIDENCE_FOR_MODERATE_ACTION = 0.6;
+const double minConfidenceForModerateAction = 0.6;
 
 class DecisionPriorityService {
   static DecisionPriorityService? _instance;
@@ -26,7 +26,7 @@ class DecisionPriorityService {
     if (!anchors.isStable) {
       return PrioritizedDecision(
         decision: _createStabilityDecision(anchors),
-        priority: PriorityLevel.stability_first,
+        priority: PriorityLevel.stabilityFirst,
         reasoning: 'Farm stability requires attention before any optimizations',
         canImplement: false,
         implementationBlocks: ['Farm stability below threshold'],
@@ -34,11 +34,11 @@ class DecisionPriorityService {
     }
 
     // Priority 2: Low confidence mode - only monitoring decisions
-    if (anchors.confidenceLevel == ConfidenceLevel.very_low ||
+    if (anchors.confidenceLevel == ConfidenceLevel.veryLow ||
         anchors.confidenceLevel == ConfidenceLevel.low) {
       return PrioritizedDecision(
         decision: _createLowConfidenceDecision(anchors, safeDecision),
-        priority: PriorityLevel.monitoring_only,
+        priority: PriorityLevel.monitoringOnly,
         reasoning: 'Low confidence in data - monitoring only mode activated',
         canImplement: true,
         implementationBlocks: [],
@@ -50,7 +50,7 @@ class DecisionPriorityService {
     if (criticalIssues.isNotEmpty) {
       return PrioritizedDecision(
         decision: _createSafetyDecision(criticalIssues, anchors),
-        priority: PriorityLevel.critical_safety,
+        priority: PriorityLevel.criticalSafety,
         reasoning:
             'Critical safety issues detected - immediate attention required',
         canImplement: true,
@@ -62,7 +62,7 @@ class DecisionPriorityService {
     if (!history.canMakeMoreDecisions) {
       return PrioritizedDecision(
         decision: _createDecisionFatigueDecision(history),
-        priority: PriorityLevel.decision_fatigue,
+        priority: PriorityLevel.decisionFatigue,
         reasoning:
             'Maximum decisions reached for today - prevent decision fatigue',
         canImplement: false,
@@ -101,7 +101,7 @@ class DecisionPriorityService {
     // Check water quality indicators
     if (anchors.environmentalStressScore > 0.8) {
       issues.add(const SafetyIssue(
-        type: SafetyIssueType.water_quality,
+        type: SafetyIssueType.waterQuality,
         severity: SafetySeverity.critical,
         description: 'High environmental stress detected',
         immediateAction: 'Test water parameters immediately',
@@ -123,7 +123,7 @@ class DecisionPriorityService {
     // Check data freshness
     if (anchors.daysSinceLastSample > 21) {
       issues.add(SafetyIssue(
-        type: SafetyIssueType.data_freshness,
+        type: SafetyIssueType.dataFreshness,
         severity: SafetySeverity.high,
         description:
             'Sampling data very old (${anchors.daysSinceLastSample} days)',
@@ -135,7 +135,7 @@ class DecisionPriorityService {
     // Check tray response
     if (anchors.trayResponseScore < 0.5) {
       issues.add(SafetyIssue(
-        type: SafetyIssueType.feeding_response,
+        type: SafetyIssueType.feedingResponse,
         severity: SafetySeverity.high,
         description:
             'Very poor tray response (${(anchors.trayResponseScore * 100).toStringAsFixed(0)}%)',
@@ -151,7 +151,7 @@ class DecisionPriorityService {
   static SafePrimaryDecision? _validateEconomicDecision(
       SafePrimaryDecision decision, FarmAnchors anchors) {
     // Check confidence threshold
-    if (decision.confidenceRange.min < MIN_CONFIDENCE_FOR_MODERATE_ACTION) {
+    if (decision.confidenceRange.min < minConfidenceForModerateAction) {
       AppLogger.info(
           'Decision confidence too low: ${decision.confidenceRange.min}');
       return null;
@@ -193,17 +193,17 @@ class DecisionPriorityService {
 
     // High value + high confidence = high priority
     if (value > 10000 && confidence > 0.8) {
-      return PriorityLevel.high_value;
+      return PriorityLevel.highValue;
     }
 
     // Medium value + good confidence = medium priority
     if (value > 5000 && confidence > 0.6) {
-      return PriorityLevel.medium_value;
+      return PriorityLevel.mediumValue;
     }
 
     // Low value or low confidence = low priority
     if (value > 1000 && confidence > 0.5) {
-      return PriorityLevel.low_value;
+      return PriorityLevel.lowValue;
     }
 
     return PriorityLevel.maintenance;
@@ -361,19 +361,19 @@ class PrioritizedDecision {
   /// Get priority text
   String get priorityText {
     switch (priority) {
-      case PriorityLevel.critical_safety:
+      case PriorityLevel.criticalSafety:
         return 'Critical Safety';
-      case PriorityLevel.stability_first:
+      case PriorityLevel.stabilityFirst:
         return 'Stability First';
-      case PriorityLevel.high_value:
+      case PriorityLevel.highValue:
         return 'High Value';
-      case PriorityLevel.medium_value:
+      case PriorityLevel.mediumValue:
         return 'Medium Value';
-      case PriorityLevel.low_value:
+      case PriorityLevel.lowValue:
         return 'Low Value';
-      case PriorityLevel.monitoring_only:
+      case PriorityLevel.monitoringOnly:
         return 'Monitoring Only';
-      case PriorityLevel.decision_fatigue:
+      case PriorityLevel.decisionFatigue:
         return 'Decision Fatigue';
       case PriorityLevel.maintenance:
         return 'Maintenance';
@@ -383,19 +383,19 @@ class PrioritizedDecision {
   /// Get priority color
   String get priorityColor {
     switch (priority) {
-      case PriorityLevel.critical_safety:
+      case PriorityLevel.criticalSafety:
         return '#E53935';
-      case PriorityLevel.stability_first:
+      case PriorityLevel.stabilityFirst:
         return '#FF8F00';
-      case PriorityLevel.high_value:
+      case PriorityLevel.highValue:
         return '#006A3A';
-      case PriorityLevel.medium_value:
+      case PriorityLevel.mediumValue:
         return '#006A3A';
-      case PriorityLevel.low_value:
+      case PriorityLevel.lowValue:
         return '#006A3A';
-      case PriorityLevel.monitoring_only:
+      case PriorityLevel.monitoringOnly:
         return '#FFC107';
-      case PriorityLevel.decision_fatigue:
+      case PriorityLevel.decisionFatigue:
         return '#9E9E9E';
       case PriorityLevel.maintenance:
         return '#9E9E9E';
@@ -404,8 +404,8 @@ class PrioritizedDecision {
 
   /// Check if decision requires immediate action
   bool get requiresImmediateAction {
-    return priority == PriorityLevel.critical_safety ||
-        priority == PriorityLevel.stability_first ||
+    return priority == PriorityLevel.criticalSafety ||
+        priority == PriorityLevel.stabilityFirst ||
         decision.urgency == DecisionUrgency.urgent;
   }
 
@@ -415,7 +415,7 @@ class PrioritizedDecision {
       return ImplementationStatus.blocked;
     }
     if (implementationBlocks.isNotEmpty) {
-      return ImplementationStatus.partially_blocked;
+      return ImplementationStatus.partiallyBlocked;
     }
     return ImplementationStatus.ready;
   }
@@ -438,22 +438,22 @@ class SafetyIssue {
 }
 
 enum PriorityLevel {
-  critical_safety, // Immediate safety issues
-  stability_first, // Farm stability problems
-  high_value, // High economic value with safety
-  medium_value, // Medium economic value with safety
-  low_value, // Low economic value with safety
-  monitoring_only, // Low confidence - monitoring only
-  decision_fatigue, // Too many decisions today
+  criticalSafety, // Immediate safety issues
+  stabilityFirst, // Farm stability problems
+  highValue, // High economic value with safety
+  mediumValue, // Medium economic value with safety
+  lowValue, // Low economic value with safety
+  monitoringOnly, // Low confidence - monitoring only
+  decisionFatigue, // Too many decisions today
   maintenance, // Routine maintenance
 }
 
 enum SafetyIssueType {
-  water_quality,
+  waterQuality,
   mortality,
-  data_freshness,
-  feeding_response,
-  environmental_stress,
+  dataFreshness,
+  feedingResponse,
+  environmentalStress,
 }
 
 enum SafetySeverity {
@@ -465,6 +465,6 @@ enum SafetySeverity {
 
 enum ImplementationStatus {
   ready,
-  partially_blocked,
+  partiallyBlocked,
   blocked,
 }

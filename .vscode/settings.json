@@ -1,3 +1,6 @@
 {
-    "cmake.sourceDirectory": "/Users/sunny/Documents/aqua_rythu/linux"
+    "cmake.sourceDirectory": "/Users/sunny/Documents/aqua_rythu/linux",
+    "files.exclude": {
+        "**/documents": true
+    }
 }

@@ -9,7 +9,8 @@ import 'features/profile/farm_settings_provider.dart';
 import 'features/profile/user_provider.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/splash_screen.dart';
-import '../features/home/home_screen.dart';
+import 'features/auth/onboarding_screen.dart';
+import 'features/home/home_screen.dart';
 import 'features/auth/auth_provider.dart';
 import 'features/upgrade/subscription_provider.dart';
 import 'core/config/app_config.dart';
@@ -104,11 +105,34 @@ class AuthGate extends ConsumerStatefulWidget {
 class _AuthGateState extends ConsumerState<AuthGate>
     with WidgetsBindingObserver {
   DateTime? _lastHydration;
+  bool _hasSeenOnboarding = false;
+  bool _onboardingChecked = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    try {
+      final seen = await hasSeenOnboarding();
+      if (mounted) {
+        setState(() {
+          _hasSeenOnboarding = seen;
+          _onboardingChecked = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Onboarding check failed: $e');
+      if (mounted) {
+        setState(() {
+          _hasSeenOnboarding = false; // Show onboarding on error — safer for new users
+          _onboardingChecked = true;
+        });
+      }
+    }
   }
 
   @override
@@ -141,15 +165,18 @@ class _AuthGateState extends ConsumerState<AuthGate>
       }
     });
 
-    // Show splash until the initial session check completes.
-    // This prevents the login screen from flickering on cold start
-    // when a valid session already exists.
-    if (authState.isCheckingSession) {
+    // Show splash until both the session check and onboarding flag are ready.
+    if (authState.isCheckingSession || !_onboardingChecked) {
       return const SplashScreen();
     }
 
     if (authState.isAuthenticated) {
       return const HomeScreen();
+    }
+
+    // First-time users see the onboarding carousel before login.
+    if (!_hasSeenOnboarding) {
+      return const OnboardingScreen();
     }
 
     return const LoginScreen();

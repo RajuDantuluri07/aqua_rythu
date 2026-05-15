@@ -115,7 +115,7 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.cardBg,
+      backgroundColor: AppColors.card,
       appBar: AppBar(
         title: const Text("Start New Cycle"),
         backgroundColor: Colors.white,

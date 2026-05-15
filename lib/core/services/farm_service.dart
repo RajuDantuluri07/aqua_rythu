@@ -82,10 +82,28 @@ class FarmService {
       throw Exception('User not logged in');
     }
 
-    // First delete all ponds associated with this farm
-    await supabase.from('ponds').delete().eq('farm_id', farmId);
+    // Fetch all pond IDs for this farm so their children can be cleaned up.
+    final pondRows = await supabase
+        .from('ponds')
+        .select('id')
+        .eq('farm_id', farmId);
 
-    // Then delete the farm
+    // Delete child data for every pond sequentially before removing the ponds.
+    for (final pond in pondRows) {
+      final pondId = pond['id'] as String;
+      await supabase.from('feed_rounds').delete().eq('pond_id', pondId);
+      await supabase.from('feed_logs').delete().eq('pond_id', pondId);
+      await supabase.from('tray_logs').delete().eq('pond_id', pondId);
+      await supabase.from('sampling_logs').delete().eq('pond_id', pondId);
+      await supabase.from('water_logs').delete().eq('pond_id', pondId);
+      await supabase.from('harvest_logs').delete().eq('pond_id', pondId);
+    }
+
+    // Delete farm-level expenses (not tied to a specific pond).
+    await supabase.from('expenses').delete().eq('farm_id', farmId);
+
+    // Now it is safe to delete the ponds and then the farm.
+    await supabase.from('ponds').delete().eq('farm_id', farmId);
     await supabase
         .from('farms')
         .delete()

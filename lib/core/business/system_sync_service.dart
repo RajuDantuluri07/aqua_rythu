@@ -211,18 +211,19 @@ class SystemSyncService {
 
       final consumptionResult = await _inventoryService.supabase
           .from('inventory_consumption')
-          .select('quantity_used, pond_id, date')
+          .select('quantity_used')
           .eq('item_id', itemId)
           .eq('date', todayStart)
           .eq('source', 'feed_auto');
 
-      // Sum up consumption for this specific pond
+      // Sum up all auto-tracked consumption for today.
+      // NOTE: inventory_consumption rows written by InventoryService.recordFeedConsumption
+      // do not store pond_id — they are farm-level records. Sum all rows for the
+      // day rather than filtering by pondId.
       double actualDeduction = 0.0;
       for (final record in consumptionResult) {
-        if (record['pond_id'] == pondId) {
-          actualDeduction +=
-              (record['quantity_used'] as num?)?.toDouble() ?? 0.0;
-        }
+        actualDeduction +=
+            (record['quantity_used'] as num?)?.toDouble() ?? 0.0;
       }
 
       // Validate match within tolerance (0.1kg for floating point comparison)
@@ -240,7 +241,7 @@ class SystemSyncService {
           'Inventory deduction validated: ${actualDeduction.toStringAsFixed(2)}kg matches expected ${expectedDeduction.toStringAsFixed(2)}kg');
     } catch (e) {
       AppLogger.error('Inventory deduction validation failed: $e');
-      throw Exception('Inventory validation error: $e');
+      rethrow;
     }
   }
 
@@ -254,9 +255,26 @@ class SystemSyncService {
     try {
       AppLogger.info('Starting system reconciliation');
 
-      // Get feed data
-      final feedLogs = await _feedService
-          .fetchFeedLogs(''); // Get all feed logs for the period
+      // Fetch all pond IDs for this farm, then collect feed logs for each.
+      final pondRows = await _inventoryService.supabase
+          .from('ponds')
+          .select('id')
+          .eq('farm_id', farmId);
+      final pondIds =
+          pondRows.map<String>((r) => r['id'] as String).toList();
+
+      final allFeedLogs = <Map<String, dynamic>>[];
+      for (final pondId in pondIds) {
+        final logs = await _feedService.fetchFeedLogs(pondId);
+        allFeedLogs.addAll(logs);
+      }
+
+      // Filter to the requested date range.
+      final feedLogs = allFeedLogs.where((log) {
+        final ts = DateTime.tryParse(log['created_at'] as String? ?? '');
+        if (ts == null) return false;
+        return !ts.isBefore(startDate) && !ts.isAfter(endDate);
+      }).toList();
 
       // Get inventory data
       final inventoryStock = await _inventoryService.getInventoryStock(farmId);

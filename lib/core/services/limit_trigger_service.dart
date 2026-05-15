@@ -92,7 +92,6 @@ class LimitTriggerService {
       "plan": plan,
     }}');
     
-    // TODO: Send to analytics service
   }
 
   /// Log upgrade click from trigger
@@ -102,6 +101,5 @@ class LimitTriggerService {
       "trigger_type": type.toString().split('.').last,
     }}');
     
-    // TODO: Send to analytics service
   }
 }

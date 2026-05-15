@@ -7,9 +7,9 @@ import 'growth_curve.dart';
 import 'farm_profile.dart';
 
 class ProfitDecisionEngine {
-  static const double FEED_COST_PER_KG = 35.0; // ₹35 per kg
-  static const double MARKET_PRICE_PER_KG = 300.0; // ₹300 per kg
-  static const double MIN_PROFIT_MARGIN = 0.2; // 20% minimum profit margin
+  static const double feedCostPerKg = 35.0; // ₹35 per kg
+  static const double marketPricePerKg = 300.0; // ₹300 per kg
+  static const double minProfitMargin = 0.2; // 20% minimum profit margin
 
   /// Generate comprehensive profit decisions for the farm
   static ProfitDecision generateProfitDecision({
@@ -76,7 +76,7 @@ class ProfitDecisionEngine {
       if (fcrGap > 0.2) {
         // Significant FCR improvement needed
         final feedReduction = _calculateOptimalFeedReduction(pond, fcrGap);
-        final costSavings = feedReduction * FEED_COST_PER_KG;
+        final costSavings = feedReduction * feedCostPerKg;
 
         totalPotentialSavings += costSavings;
 
@@ -212,7 +212,7 @@ class ProfitDecisionEngine {
     double totalOtherCosts = 0;
 
     for (final pond in pondData) {
-      totalFeedCost += (pond.todayFeed ?? 0) * FEED_COST_PER_KG;
+      totalFeedCost += (pond.todayFeed ?? 0) * feedCostPerKg;
       totalRevenue +=
           (pond.estimatedBiomass ?? 0) * marketConditions.currentPrice;
       totalOtherCosts += _calculateOtherCosts(pond);
@@ -222,7 +222,7 @@ class ProfitDecisionEngine {
     final profitMargin = totalRevenue > 0 ? currentProfit / totalRevenue : 0;
 
     // Analyze cost optimization opportunities
-    if (profitMargin < MIN_PROFIT_MARGIN) {
+    if (profitMargin < minProfitMargin) {
       // Need to improve profitability
       final feedOptimization = _calculateFeedOptimizationBenefit(pondData);
       final harvestOptimization =
@@ -252,22 +252,22 @@ class ProfitDecisionEngine {
       'totalOtherCosts': totalOtherCosts,
       'currentProfit': currentProfit,
       'profitMargin': profitMargin,
-      'targetMargin': MIN_PROFIT_MARGIN,
+      'targetMargin': minProfitMargin,
       'totalNetBenefit': totalNetBenefit,
     };
 
     final priority = profitMargin < 0.1
         ? DecisionPriority.urgent
-        : profitMargin < MIN_PROFIT_MARGIN
+        : profitMargin < minProfitMargin
             ? DecisionPriority.high
             : DecisionPriority.low;
 
     return ProfitRecommendation(
       type: ProfitDecisionType.costBenefit,
       title: 'Cost-Benefit Analysis',
-      description: profitMargin >= MIN_PROFIT_MARGIN
+      description: profitMargin >= minProfitMargin
           ? 'Profit margin ${(profitMargin * 100).toStringAsFixed(1)}% is healthy. Maintain current operations.'
-          : 'Profit margin ${(profitMargin * 100).toStringAsFixed(1)}% below target ${(MIN_PROFIT_MARGIN * 100).toStringAsFixed(0)}%. Optimization needed.',
+          : 'Profit margin ${(profitMargin * 100).toStringAsFixed(1)}% below target ${(minProfitMargin * 100).toStringAsFixed(0)}%. Optimization needed.',
       potentialSavings: totalNetBenefit,
       confidence: _calculateCostBenefitConfidence(pondData),
       priority: priority,
@@ -410,7 +410,7 @@ class ProfitDecisionEngine {
         final fcrGap = pond.currentFcr! - pond.expectedFcr!;
         if (fcrGap > 0.2) {
           final feedReduction = _calculateOptimalFeedReduction(pond, fcrGap);
-          totalBenefit += feedReduction * FEED_COST_PER_KG;
+          totalBenefit += feedReduction * feedCostPerKg;
         }
       }
     }

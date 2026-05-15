@@ -1,6 +1,4 @@
 import '../../../core/constants/expected_abw_table.dart';
-import '../feed/engine_constants.dart';
-
 /// Pure Dart — no Flutter dependencies.
 /// Calculates the estimated pond harvest value as a range (min/max)
 /// with a daily delta and a confidence score.
@@ -27,8 +25,7 @@ class PondValue {
 
 class PondValueEngine {
   // Default market price per kg for L. vannamei.
-  // Pulled from FeedEngineConstants so both engines share one tunable value.
-  static final double _defaultPricePerKg = FeedEngineConstants.harvestPricePerKg;
+  static const double _defaultPricePerKg = 150.0; // harvestPricePerKg default fallback
 
   /// Calculate pond value.
   ///

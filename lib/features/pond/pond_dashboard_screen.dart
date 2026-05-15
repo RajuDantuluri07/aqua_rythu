@@ -529,29 +529,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
 
     if (roundFeedAmounts.isEmpty) {
-      // No DB data yet — show 4 placeholder rounds
-      const defaultActive = 4;
-      return List.generate(
-        defaultActive,
-        (i) => FeedTimelineCard(
-          round: i + 1,
-          time: config.timingsDisplay[i],
-          recommendedFeedKg: 0,
-          finalFeedKg: 0,
-          isManuallyEdited: false,
-          state: i == 0 ? FeedRoundState.current : FeedRoundState.upcoming,
-          isPendingTray: false,
-          trayStatuses: const [],
-          supplements: const [],
-          scheduleSupplements: const [],
-          onMarkApplied: null,
-          onMarkDone: i == 0 ? () async {} : null,
-          onLogTray: null,
-          onEdit: null,
-          isNext: i == 0,
-          isSmartFeed: false,
-        ),
-      );
+      return [_buildNoFeedPlanCard(selectedPond)];
     }
 
     // Show only rounds with an active configured split and a valid time.
@@ -719,6 +697,58 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
 
     return result;
+  }
+
+  Widget _buildNoFeedPlanCard(String pondId) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.calendar_today_outlined,
+              size: 48,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No feed plan for today',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Set up your feed schedule to start logging rounds',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => FeedScheduleScreen(pondId: pondId),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Generate Feed Plan'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   int _activeFeedRoundCount(int doc, Map<int, double> roundFeedAmounts) {

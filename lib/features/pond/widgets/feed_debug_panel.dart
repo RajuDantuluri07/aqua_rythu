@@ -283,6 +283,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
   }
 
   Future<void> _verifyDBTruth(String pondId, int doc) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // Fetch fresh data from DB
       final feedRounds = await FeedDebugLogger.queryFeedRounds(
@@ -311,7 +312,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
       }
 
       if (mismatches.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('✅ DB Truth Check: All values match!'),
             backgroundColor: Colors.green,
@@ -319,7 +320,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content:
                 Text('❌ DB Truth Check: ${mismatches.length} mismatches found'),
@@ -334,7 +335,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('DB Truth Check failed: $e'),
           backgroundColor: Colors.red,

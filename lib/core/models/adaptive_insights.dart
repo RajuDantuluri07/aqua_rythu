@@ -117,8 +117,8 @@ enum InsightSource {
 }
 
 class AdaptiveInsightEngine {
-  static const double MIN_CONFIDENCE_THRESHOLD = 0.4;
-  static const double HIGH_CONFIDENCE_THRESHOLD = 0.8;
+  static const double minConfidenceThreshold = 0.4;
+  static const double highConfidenceThreshold = 0.8;
 
   /// Generate adaptive insights based on comprehensive farm analysis
   static List<AdaptiveInsight> generateInsights(FarmAnalysisData data) {
@@ -145,7 +145,7 @@ class AdaptiveInsightEngine {
 
     // Filter low confidence insights
     return insights
-        .where((i) => i.combinedConfidence >= MIN_CONFIDENCE_THRESHOLD)
+        .where((i) => i.combinedConfidence >= minConfidenceThreshold)
         .toList();
   }
 

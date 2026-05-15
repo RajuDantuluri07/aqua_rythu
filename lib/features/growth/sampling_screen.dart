@@ -424,14 +424,14 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                 padding: EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 14, color: AppColors.textTertiary),
+                    Icon(Icons.info_outline, size: 14, color: AppColors.textSecondary),
                     SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         "Optional: Update shrimp weight for better accuracy",
                         style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.textTertiary,
+                            color: AppColors.textSecondary,
                             fontStyle: FontStyle.italic),
                       ),
                     ),
@@ -606,13 +606,13 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: const Row(
         children: [
-          Icon(Icons.info_outline, size: 14, color: AppColors.textTertiary),
+          Icon(Icons.info_outline, size: 14, color: AppColors.textSecondary),
           SizedBox(width: 6),
           Text(
             "Count prawns (you can count 2 or more at once)",
             style: TextStyle(
                 fontSize: 11,
-                color: AppColors.textTertiary,
+                color: AppColors.textSecondary,
                 fontStyle: FontStyle.italic),
           ),
         ],
@@ -752,21 +752,21 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           Expanded(
               flex: 1,
               child: Text("DOC",
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           Expanded(
               flex: 2,
               child: Text("AVG.WT",
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           Expanded(
               flex: 2,
               child: Text("PIECES",
@@ -774,7 +774,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
         ],
       ),
     );

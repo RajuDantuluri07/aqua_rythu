@@ -27,7 +27,7 @@ class FeedHistoryScreen extends ConsumerWidget {
         : null;
 
     return Scaffold(
-      backgroundColor: AppColors.cardBg,
+      backgroundColor: AppColors.card,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -57,7 +57,7 @@ class FeedHistoryScreen extends ConsumerWidget {
               icon: const Icon(Icons.file_download_outlined, size: 20)),
         ],
         elevation: 0.5,
-        backgroundColor: AppColors.cardBg,
+        backgroundColor: AppColors.card,
         centerTitle: true,
       ),
       body: Column(
@@ -67,7 +67,7 @@ class FeedHistoryScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.base, vertical: AppSpacing.m),
             decoration: const BoxDecoration(
-              color: AppColors.cardBg,
+              color: AppColors.card,
               border: Border(bottom: BorderSide(color: AppColors.border)),
             ),
             child: Row(

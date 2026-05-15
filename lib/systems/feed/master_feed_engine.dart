@@ -41,7 +41,6 @@ import '../../../features/feed/models/feed_input.dart';
 import '../../../features/feed/models/correction_result.dart';
 import '../../../features/feed/models/feed_debug_info.dart';
 import '../../../features/feed/models/orchestrator_result.dart';
-import 'engine_constants.dart';
 import 'feed_calculations.dart';
 import 'feed_models.dart';
 import 'feed_base_resolver.dart';
@@ -230,8 +229,8 @@ class MasterFeedEngine {
     final double adjustedBase = base * (safeDensity / 100000);
 
     // ── Step 3: Safety clamp (±30%) ───────────────────────────────────────
-    final double minFeed = adjustedBase * FeedEngineConstants.minFeedFactor;
-    final double maxFeed = adjustedBase * FeedEngineConstants.maxFeedFactor;
+    final double minFeed = adjustedBase * 0.70; // minFeedFactor default fallback
+    final double maxFeed = adjustedBase * 1.30; // maxFeedFactor default fallback
     double final_ = adjustedBase.clamp(minFeed, maxFeed);
 
     // ── Step 3b: Density-proportional hard cap ───────────────────────────
@@ -449,7 +448,7 @@ class MasterFeedEngine {
 
     // ── STEP 4: Safety Clamp (allow true stop, cap unrealistic spikes) ─────
     const minFeed = 0.0;
-    final maxFeed = baseFeedKg * FeedEngineConstants.maxFeedFactor;
+    final maxFeed = baseFeedKg * 1.30; // maxFeedFactor default fallback
     if (feed.isNaN || feed.isInfinite || feed < minFeed) {
       feed = minFeed;
     }
@@ -684,40 +683,6 @@ class MasterFeedEngine {
   /// - ABW-based growth signal
   /// - Water quality factors
   /// - DOC-based conservatism
-  static double _simpleTrayFactor(List<TrayStatus>? trays) {
-    if (trays == null || trays.isEmpty) {
-      return 1.0; // Default — no tray data
-    }
-
-    int full = 0;
-    int empty = 0;
-
-    for (final status in trays) {
-      switch (status) {
-        case TrayStatus.heavy:
-          full++;
-          break;
-        case TrayStatus.empty:
-          empty++;
-          break;
-        case TrayStatus.light:
-          // Neutral — don't count
-          break;
-        case TrayStatus.medium:
-          // Neutral — don't count
-          break;
-      }
-    }
-
-    if (full > empty) {
-      return 0.92; // More full trays — reduce feeding (less aggressive)
-    } else if (empty > full) {
-      return 1.05; // More empty trays — increase feeding (less aggressive)
-    } else {
-      return 1.0; // Balanced — no adjustment
-    }
-  }
-
   /// Build list of factor reasons for UI display
   static List<String> _buildFactorReasons(double trayFactor, double envFactor,
       double leftoverPercent, bool useBlindFeeding, List<String> envReasons) {
@@ -808,25 +773,6 @@ class MasterFeedEngine {
     return (envFactor < 1.0 || trayFactor < 1.0)
         ? 'Low confidence due to stress'
         : 'Normal feeding confidence';
-  }
-
-  /// Build factor explanations for UI display
-  static Map<String, String> _buildFactorExplanations(double trayFactor) {
-    final explanations = <String, String>{};
-
-    if (trayFactor != 1.0) {
-      if (trayFactor >= 1.10) {
-        explanations['tray'] = 'Clean trays — good appetite';
-      } else if (trayFactor >= 1.05) {
-        explanations['tray'] = 'Light leftover — acceptable';
-      } else if (trayFactor <= 0.85) {
-        explanations['tray'] = 'High leftover — reduce feeding';
-      } else {
-        explanations['tray'] = 'Moderate leftover — stable';
-      }
-    }
-
-    return explanations;
   }
 
   /// Validate critical inputs that must stop feed calculation if invalid

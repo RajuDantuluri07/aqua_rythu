@@ -33,8 +33,12 @@ class FeedService implements FeedCompletionSink {
     // here; it lives only in FeedHistoryLog in-memory state.
     final actualFeedGiven = rounds.fold(0.0, (sum, r) => sum + r);
 
-    // Check inventory stock before feeding (warning only, don't block)
-    await _checkInventoryStock(pondId, actualFeedGiven);
+    // Check inventory stock before feeding (warning only — never blocks feed recording).
+    try {
+      await _checkInventoryStock(pondId, actualFeedGiven);
+    } on InsufficientStockException catch (e) {
+      AppLogger.warn('Low stock for pond $pondId: $e');
+    }
 
     await _withRetry('saveFeed(pond=$pondId doc=$doc)', () async {
       // 🔒 FIX #1: Use safe insert function to prevent duplicates
@@ -576,7 +580,28 @@ class FeedService implements FeedCompletionSink {
             'completeFeedRound: round already completed — '
             'feed_logs repaired (pond=$pondId doc=$doc r=$round)');
       }
+
+      final isDuplicate = result['operationDuplicate'] == true ||
+          result['alreadyCompleted'] == true;
+      if (!isDuplicate) {
+        _deductInventoryStock(pondId, amount);
+      }
     });
+  }
+
+  Future<void> _deductInventoryStock(String pondId, double feedKg) async {
+    try {
+      final row = await supabase
+          .from('ponds')
+          .select('farm_id')
+          .eq('id', pondId)
+          .maybeSingle();
+      final farmId = row?['farm_id'] as String?;
+      if (farmId == null) return;
+      await _inventoryService.recordFeedConsumption(farmId, feedKg);
+    } catch (e) {
+      AppLogger.error('Inventory deduction failed (non-blocking)', e);
+    }
   }
 
   // Phase 5: Feed amount validation — rejects NaN, Infinity, negative, and

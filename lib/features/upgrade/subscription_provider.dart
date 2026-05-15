@@ -95,8 +95,8 @@ class SubscriptionState {
     );
   }
 
-  bool get isPro => currentPlan == PlanType.PRO;
-  bool get isFree => currentPlan == PlanType.FREE;
+  bool get isPro => currentPlan == PlanType.pro;
+  bool get isFree => currentPlan == PlanType.free;
   bool get hasPendingVerification => pendingVerification != null;
 }
 
@@ -107,7 +107,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   final Ref _ref;
 
   SubscriptionNotifier(this._ref)
-      : super(const SubscriptionState(currentPlan: PlanType.FREE, isHydrated: false)) {
+      : super(const SubscriptionState(currentPlan: PlanType.free, isHydrated: false)) {
     SubscriptionGate.setPro(false);
     _loadPendingVerification();
     _initializeFromBackend();
@@ -133,7 +133,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
           .read(subscriptionServiceProvider)
           .getCurrentSubscription();
       state = state.copyWith(
-        currentPlan: (subscription?.isPro == true) ? PlanType.PRO : PlanType.FREE,
+        currentPlan: (subscription?.isPro == true) ? PlanType.pro : PlanType.free,
       );
     } catch (_) {
       // Silent — user stays FREE; manual restore available.
@@ -170,7 +170,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
           .read(subscriptionServiceProvider)
           .getCurrentSubscription();
       if (subscription?.isPro == true) {
-        state = state.copyWith(currentPlan: PlanType.PRO, isLoading: false);
+        state = state.copyWith(currentPlan: PlanType.pro, isLoading: false);
         return true;
       }
       state = state.copyWith(
@@ -288,7 +288,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       // Verified — clear pending and activate PRO
       await _clearPendingVerification();
       state = state.copyWith(
-        currentPlan: PlanType.PRO,
+        currentPlan: PlanType.pro,
         paymentPhase: PaymentPhase.success,
         isLoading: false,
         clearPending: true,
@@ -331,7 +331,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   }
 
   void resetToFree() {
-    state = state.copyWith(currentPlan: PlanType.FREE);
+    state = state.copyWith(currentPlan: PlanType.free);
   }
 }
 

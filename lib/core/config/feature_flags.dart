@@ -17,8 +17,8 @@ class FeatureFlags {
   // Flip to true when the screen is production-ready and QA-signed-off.
   // Subscription gating on these screens is enforced independently.
 
-  static const bool inventoryEnabled   = false;
-  static const bool expenseEnabled     = false;
+  static const bool inventoryEnabled   = true;
+  static const bool expenseEnabled     = true;
   static const bool profitEnabled      = false;
   static const bool waterEnabled       = false;
   static const bool supplementsEnabled = false;

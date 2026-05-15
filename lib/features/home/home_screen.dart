@@ -334,26 +334,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           TextButton(
             onPressed: () async {
               Navigator.of(dialogContext).pop();
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 final farmState = ref.watch(farmProvider);
                 final farmId = farmState.currentFarm?.id;
 
                 if (farmId == null) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Error: Farm not found'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Error: Farm not found'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                   return;
                 }
 
                 await ref.read(farmProvider.notifier).deletePond(farmId, pond.id);
 
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('${pond.name} deleted successfully'),
                       backgroundColor: Colors.green,
@@ -362,7 +361,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('Error: $e'),
                       backgroundColor: Colors.red,

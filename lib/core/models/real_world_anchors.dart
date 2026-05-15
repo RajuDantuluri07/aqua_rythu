@@ -4,11 +4,11 @@ library;
 
 
 class RealWorldAnchors {
-  static const double MAX_FEED_CHANGE_PERCENTAGE = 0.15; // 15% max change per decision
-  static const double MIN_SAMPLE_SIZE = 30; // Minimum shrimp for reliable sampling
-  static const int MAX_DAYS_WITHOUT_SAMPLE = 21; // Maximum age for sampling data
-  static const double MIN_CONFIDENCE_FOR_ACTION = 0.6; // Minimum confidence for strong actions
-  static const double TRAY_RESPONSE_THRESHOLD = 0.8; // Minimum tray response for feed decisions
+  static const double maxFeedChangePercentage = 0.15; // 15% max change per decision
+  static const double minSampleSize = 30; // Minimum shrimp for reliable sampling
+  static const int maxDaysWithoutSample = 21; // Maximum age for sampling data
+  static const double minConfidenceForAction = 0.6; // Minimum confidence for strong actions
+  static const double trayResponseThreshold = 0.8; // Minimum tray response for feed decisions
 
   /// Validate decision against real-world constraints
   static DecisionValidation validateDecision({
@@ -37,26 +37,26 @@ class RealWorldAnchors {
     double safetyScore = 1.0;
 
     // Check 1: Recent sampling data available
-    if (anchors.daysSinceLastSample > MAX_DAYS_WITHOUT_SAMPLE) {
+    if (anchors.daysSinceLastSample > maxDaysWithoutSample) {
       issues.add('Sampling data too old (${anchors.daysSinceLastSample} days)');
       safetyScore *= 0.3;
     }
 
     // Check 2: Minimum sample size
-    if (anchors.lastSampleSize < MIN_SAMPLE_SIZE) {
+    if (anchors.lastSampleSize < minSampleSize) {
       warnings.add('Sample size small (${anchors.lastSampleSize} shrimp)');
       safetyScore *= 0.8;
     }
 
     // Check 3: Tray response consistency
-    if (anchors.trayResponseScore < TRAY_RESPONSE_THRESHOLD) {
+    if (anchors.trayResponseScore < trayResponseThreshold) {
       warnings.add('Low tray response score (${(anchors.trayResponseScore * 100).toStringAsFixed(0)}%)');
       safetyScore *= 0.7;
     }
 
     // Check 4: Feed change magnitude
     final feedChangePercentage = data['feedChangePercentage'] as double? ?? 0.0;
-    if (feedChangePercentage.abs() > MAX_FEED_CHANGE_PERCENTAGE) {
+    if (feedChangePercentage.abs() > maxFeedChangePercentage) {
       issues.add('Feed change too large (${(feedChangePercentage * 100).toStringAsFixed(1)}%)');
       safetyScore *= 0.2;
     }
@@ -285,7 +285,7 @@ class RealWorldAnchors {
     if (safetyScore < 0.3) {
       return 'POSTPONE: Insufficient data for safe feed adjustment';
     } else if (safetyScore < 0.6) {
-      return 'CONSERVATIVE: Reduce feed change to ${MAX_FEED_CHANGE_PERCENTAGE * 50}% and monitor closely';
+      return 'CONSERVATIVE: Reduce feed change to ${maxFeedChangePercentage * 50}% and monitor closely';
     } else if (feedChangePercentage.abs() > 0.1) {
       return 'CONFIRM: Get farmer confirmation before implementing ${(feedChangePercentage * 100).toStringAsFixed(1)}% change';
     } else {
@@ -406,7 +406,7 @@ class FarmAnchors {
     if (overallStability >= 0.9) return ConfidenceLevel.high;
     if (overallStability >= 0.7) return ConfidenceLevel.medium;
     if (overallStability >= 0.5) return ConfidenceLevel.low;
-    return ConfidenceLevel.very_low;
+    return ConfidenceLevel.veryLow;
   }
 }
 
@@ -441,7 +441,7 @@ class DecisionValidation {
   /// Get validation status
   ValidationStatus get status {
     if (!isValid) return ValidationStatus.invalid;
-    if (needsConfirmation) return ValidationStatus.needs_confirmation;
+    if (needsConfirmation) return ValidationStatus.needsConfirmation;
     if (warnings.isNotEmpty) return ValidationStatus.caution;
     return ValidationStatus.valid;
   }
@@ -450,7 +450,7 @@ class DecisionValidation {
   String get statusText {
     switch (status) {
       case ValidationStatus.valid: return 'Valid';
-      case ValidationStatus.needs_confirmation: return 'Needs Confirmation';
+      case ValidationStatus.needsConfirmation: return 'Needs Confirmation';
       case ValidationStatus.caution: return 'Caution';
       case ValidationStatus.invalid: return 'Invalid';
     }
@@ -460,7 +460,7 @@ class DecisionValidation {
   String get statusColor {
     switch (status) {
       case ValidationStatus.valid: return '#006A3A';
-      case ValidationStatus.needs_confirmation: return '#FFC107';
+      case ValidationStatus.needsConfirmation: return '#FFC107';
       case ValidationStatus.caution: return '#FF8F00';
       case ValidationStatus.invalid: return '#E53935';
     }
@@ -476,13 +476,13 @@ enum DecisionType {
 
 enum ValidationStatus {
   valid,
-  needs_confirmation,
+  needsConfirmation,
   caution,
   invalid,
 }
 
 enum ConfidenceLevel {
-  very_low,
+  veryLow,
   low,
   medium,
   high,

@@ -21,7 +21,9 @@ class Harvest {
       cropId: map['crop_id']?.toString() ?? '',
       totalWeight: (map['total_weight'] as num?)?.toDouble() ?? 0.0,
       pricePerKg: (map['price_per_kg'] as num?)?.toDouble() ?? 0.0,
-      date: DateTime.parse(map['date'] ?? DateTime.now().toIso8601String()),
+      date: map['date'] != null
+          ? DateTime.parse(map['date'] as String)
+          : DateTime.utc(1970, 1, 1),
       createdAt:
           map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
     );

@@ -53,7 +53,9 @@ class Expense {
       category: ExpenseCategory.fromString(map['category'] ?? 'other'),
       amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       notes: map['notes']?.toString(),
-      date: DateTime.parse(map['date'] ?? DateTime.now().toIso8601String()),
+      date: map['date'] != null
+          ? DateTime.parse(map['date'] as String)
+          : DateTime.utc(1970, 1, 1),
       createdAt:
           map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
     );
@@ -64,11 +66,12 @@ class Expense {
       'id': id,
       'user_id': userId,
       'farm_id': farmId,
+      'crop_id': cropId,
       'pond_id': pondId,
       'category': category.value,
       'amount': amount,
       'notes': notes,
-      'date': date.toIso8601String().split('T')[0], // YYYY-MM-DD format
+      'date': date.toIso8601String().split('T')[0],
       'created_at': createdAt?.toIso8601String(),
     };
   }

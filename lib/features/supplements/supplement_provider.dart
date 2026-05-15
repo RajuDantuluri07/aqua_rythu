@@ -2,8 +2,6 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
-import 'package:aqua_rythu/core/services/supplement_service.dart';
-import 'package:aqua_rythu/core/utils/logger.dart';
 
 enum SupplementStatus { upcoming, active, completed }
 
@@ -199,9 +197,7 @@ class Supplement {
 
   List<SupplementItem> calculateDosage(double feedKg) {
     if (type != SupplementType.feedMix) return [];
-    if (feedQty <= 0) {
-      return items.map((item) => item).toList();
-    }
+    if (feedQty <= 0) return [];
 
     return items.map((item) {
       final rate = item.quantity / feedQty;
@@ -510,22 +506,7 @@ final supplementLogProvider =
 /// ---------------------------------------------------
 
 class SupplementNotifier extends StateNotifier<List<Supplement>> {
-  final _service = SupplementService();
-
-  SupplementNotifier() : super([]) {
-    _loadFromDb();
-  }
-
-  Future<void> _loadFromDb() async {
-    try {
-      final rows = await _service.fetchSupplements();
-      if (rows.isNotEmpty) {
-        replaceAll(rows.map((r) => Supplement.fromJson(r)).toList());
-      }
-    } catch (e) {
-      AppLogger.error('SupplementNotifier: failed to load supplements', e);
-    }
-  }
+  SupplementNotifier() : super([]);
 
   DateTime _sortAnchor(Supplement supplement) {
     return supplement.scheduleAnchorDate ??
@@ -566,60 +547,28 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
   }
 
   // 🔹 CREATE
-  void addSupplement(Supplement supplement) async {
-    final prevState = state;
+  void addSupplement(Supplement supplement) {
     state = _sorted([...state, supplement]);
-    try {
-      await _service.upsertSupplement(supplement.toJson());
-    } catch (e) {
-      AppLogger.error('Failed to persist new supplement ${supplement.id}', e);
-      state = prevState;
-    }
   }
 
   // 🔹 UPDATE
-  void editSupplement(Supplement updated) async {
-    final prevState = state;
+  void editSupplement(Supplement updated) {
     state = _sorted([
       for (final s in state)
         if (s.id == updated.id) updated else s
     ]);
-    try {
-      await _service.upsertSupplement(updated.toJson());
-    } catch (e) {
-      AppLogger.error('Failed to persist edited supplement ${updated.id}', e);
-      state = prevState;
-    }
   }
 
-  void togglePause(String id) async {
-    final prevState = state;
+  void togglePause(String id) {
     state = [
       for (final s in state)
         if (s.id == id) s.copyWith(isPaused: !s.isPaused) else s
     ];
-    final updated = state.firstWhere(
-      (s) => s.id == id,
-      orElse: () => prevState.firstWhere((s) => s.id == id),
-    );
-    try {
-      await _service.upsertSupplement(updated.toJson());
-    } catch (e) {
-      AppLogger.error('Failed to persist togglePause for supplement $id', e);
-      state = prevState;
-    }
   }
 
   // 🔹 DELETE
-  void deleteSupplement(String id) async {
-    final prevState = state;
+  void deleteSupplement(String id) {
     state = state.where((s) => s.id != id).toList();
-    try {
-      await _service.deleteSupplement(id);
-    } catch (e) {
-      AppLogger.error('Failed to delete supplement $id from DB', e);
-      state = prevState;
-    }
   }
 
   void removeSupplement(String id) {

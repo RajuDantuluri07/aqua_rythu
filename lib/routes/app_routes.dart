@@ -13,10 +13,8 @@ import '../features/inventory/inventory_setup_screen.dart';
 import '../features/inventory/inventory_dashboard_screen.dart';
 import '../features/expense/expense_summary_screen.dart';
 import '../features/expense/add_expense_screen.dart';
+import '../features/profit/profit_summary_screen.dart';
 import '../core/config/feature_flags.dart';
-// Admin module removed temporarily
-// import '../features/admin/admin_passcode_screen.dart';
-// import '../features/admin/admin_dashboard_screen.dart';
 
 class AppRoutes {
   static const login = '/login';
@@ -32,8 +30,7 @@ class AppRoutes {
   static const inventoryDashboard = '/inventory_dashboard';
   static const expenseSummary = '/expense-summary';
   static const addExpense = '/add-expense';
-  static const adminPasscode = '/admin/passcode';
-  static const adminDashboard = '/admin/dashboard';
+  static const profitSummary = '/profit-summary';
 
   static Map<String, Widget Function(BuildContext)> routes = {
     login: (context) => const LoginScreen(),
@@ -95,9 +92,20 @@ class AppRoutes {
         farmId: args['farmId']!,
       );
     },
-    // Admin routes removed temporarily
-    // adminPasscode: (context) => const AdminPasscodeScreen(),
-    // adminDashboard: (context) => const AdminDashboardScreen(),
+    profitSummary: (context) {
+      if (!FeatureFlags.isProfitVisible) {
+        return const _FeatureDisabledScreen(featureName: 'Profit & Costs');
+      }
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+      if (args?['cropId'] == null || args?['farmId'] == null) {
+        return const _FeatureDisabledScreen(featureName: 'Profit & Costs');
+      }
+      return ProfitSummaryScreen(
+        cropId: args!['cropId']!,
+        farmId: args['farmId']!,
+      );
+    },
   };
 }
 

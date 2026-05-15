@@ -57,7 +57,7 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
   Widget build(BuildContext context) {
     final asyncProducts = widget.categoryFilter != null
         ? ref.watch(productsByCategoryProvider(widget.categoryFilter!))
-        : const AsyncValue.data([]);
+        : ref.watch(allProductsProvider);
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
@@ -134,7 +134,7 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
                 ),
               ),
               data: (products) {
-                final List<ProductMaster> productList = products as List<ProductMaster>;
+                final List<ProductMaster> productList = products;
                 final visible = _filtered(productList);
                 if (visible.isEmpty) {
                   return Center(

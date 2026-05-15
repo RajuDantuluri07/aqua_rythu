@@ -81,54 +81,54 @@ class FeedEngineConstants {
   // ── Legacy Static Methods (for backward compatibility) ─────────────────────────
 
   /// Legacy method - use getFeedCostPerKg() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get feedCostPerKg => 70.0; // Default fallback
 
   /// Legacy method - use getHarvestPricePerKg() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get harvestPricePerKg => 150.0; // Default fallback
 
   /// Legacy method - use getMealFactors() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get firstMealFactor => 0.8; // Default fallback
 
   /// Legacy method - use getMealFactors() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get lastMealFactor => 1.2; // Default fallback
 
   /// Legacy method - use getFeedFactorBounds() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get minFeedFactor => 0.70; // Default fallback
 
   /// Legacy method - use getFeedFactorBounds() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get maxFeedFactor => 1.30; // Default fallback
 
   /// Legacy method - use getSmartModeMinDoc() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static int get smartModeMinDoc => 30; // Default fallback
 
   /// Legacy method - use getIntelligenceThresholds() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get intelligenceHighThreshold => 15.0; // Default fallback
 
   /// Legacy method - use getIntelligenceThresholds() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get intelligenceLowThreshold => 5.0; // Default fallback
 
   /// Legacy method - use getIntelligenceFactors() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get intelligenceHighFactor => 1.10; // Default fallback
 
   /// Legacy method - use getIntelligenceFactors() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get intelligenceMediumFactor => 1.05; // Default fallback
 
   /// Legacy method - use getIntelligenceFactors() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get intelligenceLowFactor => 0.95; // Default fallback
 
   /// Legacy method - use getIntelligenceFactors() instead
-  @deprecated
+  @Deprecated('This constant is deprecated. Use the replacement in EngineConstants instead.')
   static double get intelligenceVeryLowFactor => 0.90; // Default fallback
 }

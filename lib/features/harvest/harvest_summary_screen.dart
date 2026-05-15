@@ -43,8 +43,9 @@ class HarvestSummaryScreen extends ConsumerWidget {
     // Calculate survival % (est)
     final survivingCount =
         harvests.fold(0.0, (sum, h) => sum + (h.quantity * h.countPerKg));
-    final survivalRate =
-        (survivingCount / pond.seedCount * 100).clamp(0.0, 100.0);
+    final survivalRate = pond.seedCount > 0
+        ? (survivingCount / pond.seedCount * 100).clamp(0.0, 100.0)
+        : 0.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),

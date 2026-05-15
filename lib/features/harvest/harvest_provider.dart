@@ -78,7 +78,7 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
     // Update UI immediately
     state = [...state, entry];
 
-    // Persist to Supabase
+    // Persist to Supabase then reload so local state uses the DB-generated UUID.
     try {
       await _supabase.from('harvest_logs').insert({
         'pond_id': pondId,
@@ -91,10 +91,12 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
         'date': entry.date.toIso8601String().split('T')[0],
         'count_per_kg': entry.countPerKg,
       });
+      // Replace optimistic state (local timestamp ID) with canonical DB state.
+      await _loadHarvests();
     } catch (e, stackTrace) {
       AppLogger.error('Failed to save harvest for pond $pondId', e, stackTrace);
-      // Revert optimistic update on error
-      state = state.where((h) => h.date != entry.date).toList();
+      // Revert optimistic update: remove only the specific entry by id.
+      state = state.where((h) => h.id != entry.id).toList();
     }
   }
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/models/master_category.dart';
 import '../../../core/models/product_master.dart';
 import '../../../core/models/supplement_schedule.dart';
 import '../../../core/providers/product_provider.dart';
@@ -66,7 +65,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
     _endDate = supplement.endDate ?? _endDate;
     _selectedUnit =
         supplement.items.isNotEmpty ? supplement.items.first.unit : _selectedUnit;
-    _notesController.text = supplement.notes ?? '';
+    _notesController.text = supplement.notes;
   }
 
   @override
@@ -241,12 +240,12 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         ? ref.watch(feedCategoriesProvider)
         : ref.watch(waterCategoriesProvider);
 
-    final productsAsync = _selectedCategory != null
-        ? ref.watch(productsByCategoryProvider(_selectedCategory!))
-        : const AsyncValue.data([]);
+    if (_selectedCategory != null) {
+      ref.watch(productsByCategoryProvider(_selectedCategory!));
+    }
 
     return Scaffold(
-      backgroundColor: AppColors.cardBg,
+      backgroundColor: AppColors.card,
       appBar: AppBar(
         title: Text(_isEditing ? "Edit Supplement" : "Add Supplement"),
         centerTitle: true,

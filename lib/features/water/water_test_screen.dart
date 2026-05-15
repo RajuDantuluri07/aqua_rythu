@@ -503,7 +503,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
         const SizedBox(height: 2),
         Text(
           "Optimal: ${range['optimalMin']}-${range['optimalMax']}${range['unit']}",
-          style: const TextStyle(fontSize: 9, color: AppColors.textTertiary),
+          style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
         ),
       ],
     );
@@ -524,63 +524,63 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 40,
               child: Text("DOC",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 45,
               child: Text("pH",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 45,
               child: Text("DO",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 50,
               child: Text("Sal",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 55,
               child: Text("Alk",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 55,
               child: Text("NH3",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 55,
               child: Text("NO2",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
           SizedBox(
               width: 55,
               child: Text("Score",
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textTertiary))),
+                      color: AppColors.textSecondary))),
         ],
       ),
     );
