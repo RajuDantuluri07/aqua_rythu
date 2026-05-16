@@ -37,12 +37,7 @@ class PondViewState {
 
   double get totalFeed =>
       roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
-  double get finalFeed {
-    if (feedResult == null) {
-      throw StateError('Feed result not available - call loadPondData() first');
-    }
-    return feedResult!.finalFeed;
-  }
+  double get finalFeed => feedResult?.finalFeed ?? 0.0;
 
   bool get isStopFeeding => feedResult?.decision.action == 'Stop Feeding';
 }

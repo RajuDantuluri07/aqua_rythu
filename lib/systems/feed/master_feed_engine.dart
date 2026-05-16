@@ -218,7 +218,7 @@ class MasterFeedEngine {
     final int validatedDensity = density;
 
     // ── Step 0b: Input clamping ───────────────────────────────────────────
-    final int safeDoc = validatedDoc.clamp(1, 120); // Extended to 120 DOC
+    final int safeDoc = validatedDoc.clamp(1, 150);
     final int safeDensity = validatedDensity.clamp(1000, 1000000);
     final bool wasInputClamped = doc != safeDoc || density != safeDensity;
 
@@ -639,6 +639,21 @@ class MasterFeedEngine {
   static Future<OrchestratorResult> orchestrateForPond(String pondId) async {
     // 🔥 VERIFICATION LOG: Should print ONLY ONCE per pond load (via Controller cache)
     AppLogger.info('🔥 FEED ENGINE CALLED: pond=$pondId');
+
+    // Guard: wait for subscription hydration before using isPro.
+    // Prevents the boot race where SubscriptionGate defaults to FREE while
+    // the SubscriptionNotifier is still fetching the backend entitlement.
+    if (!SubscriptionGate.isHydrated) {
+      await SubscriptionGate.hydrationFuture.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          AppLogger.warn(
+            '[MasterFeedEngine] Subscription hydration timeout — '
+            'proceeding with current PRO state (isPro=${SubscriptionGate.isPro})',
+          );
+        },
+      );
+    }
 
     // ── STEP 0: Load Admin Config ─────────────────────────────────────────
     final appConfigService = AppConfigService(Supabase.instance.client);

@@ -1122,7 +1122,7 @@ class _PondCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: canViewFcr
-                      ? _MetricCard(
+                      ? const _MetricCard(
                           label: 'FCR',
                           value: '-',
                           color: _textSub,
@@ -1136,9 +1136,9 @@ class _PondCard extends StatelessWidget {
                               color: const Color(0xFFFFF8E1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Column(
+                            child: const Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
+                              children: [
                                 Text('FCR', style: TextStyle(fontSize: 10, color: _textSub, fontWeight: FontWeight.w600)),
                                 SizedBox(height: 2),
                                 Icon(Icons.lock_outline_rounded, size: 13, color: Color(0xFFF59E0B)),

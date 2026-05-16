@@ -50,7 +50,13 @@ class FarmMemberService {
     });
   }
 
-  Future<void> removeMember(String memberId) async {
-    await _db.from('farm_members').delete().eq('id', memberId);
+  Future<void> removeMember(String memberId, {required String farmId}) async {
+    // Scope the delete to the specific farm — belt-and-suspenders against a
+    // UI bug passing the wrong memberId, complementing RLS enforcement.
+    await _db
+        .from('farm_members')
+        .delete()
+        .eq('id', memberId)
+        .eq('farm_id', farmId);
   }
 }

@@ -39,18 +39,6 @@ class FeedHistoryNotifier
   final Ref ref;
   final _feedService = FeedService();
 
-  /// 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation
-  /// Feed recalculation now happens through controller.invalidate() which
-  /// ensures single source of truth for all feed calculations.
-  // Future<void> _triggerSmartFeedRecalculation(String pondId) async {
-  //   try {
-  //     await _feedService.recalculateFeedPlan(pondId);
-  //   } catch (e) {
-  //     AppLogger.error('Feed recalculation trigger failed', e);
-  //   }
-  // }
-
-  // REMOVED: _expectedFeedForDoc - callers must now explicitly pass expectedFeed
 
   /// 🍽 LOG REAL-TIME FEEDING
   ///

@@ -66,10 +66,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       children: [
                         CircleAvatar(
                           radius: 46,
-                          backgroundImage: NetworkImage(
-                            userProfile.profileImageUrl ??
-                                'https://i.pravatar.cc/150?img=3',
-                          ),
+                          backgroundColor: const Color(0xFFE8F5EE),
+                          backgroundImage: userProfile.profileImageUrl != null
+                              ? NetworkImage(userProfile.profileImageUrl!)
+                              : null,
+                          onBackgroundImageError: userProfile.profileImageUrl != null
+                              ? (_, __) {}
+                              : null,
+                          child: userProfile.profileImageUrl == null
+                              ? const Icon(Icons.person,
+                                  size: 46, color: Color(0xFF1B8A4C))
+                              : null,
                         ),
                         Positioned(
                           right: 0,
@@ -510,6 +517,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Future<bool> _promptDebugPasscode(BuildContext ctx) async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Debug Access'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Passcode'),
+          onSubmitted: (_) => Navigator.of(dialogCtx).pop(true),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return false;
+    const debugPin = 'aqua#dev1';
+    return controller.text == debugPin;
+  }
+
   void _showDebugMenu() {
     if (!kDebugMode) return;
 
@@ -542,22 +580,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 color: Color(0xFF1B8A4C),
               ),
             ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.receipt_long_rounded,
-                  color: Colors.indigo),
-              title: const Text('Payment Logs'),
-              subtitle: const Text('Inspect payment events & errors'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const PaymentDebugScreen(),
-                  ),
-                );
-              },
-            ),
+            if (kDebugMode) ...[
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.receipt_long_rounded,
+                    color: Colors.indigo),
+                title: const Text('Payment Logs'),
+                subtitle: const Text('Inspect payment events & errors'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  final granted = await _promptDebugPasscode(context);
+                  if (!granted) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Incorrect passcode')),
+                      );
+                    }
+                    return;
+                  }
+                  if (mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PaymentDebugScreen(),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
             const SizedBox(height: 20),
           ],
         ),

@@ -109,6 +109,8 @@ class _AuthGateState extends ConsumerState<AuthGate>
   bool _hasSeenOnboarding = false;
   bool _onboardingChecked = false;
   bool _showFeedSyncWarning = false;
+  bool _feedSyncWarningDismissed = false;
+  static const _kFeedSyncDismissedKey = 'feed_sync_warning_dismissed';
 
   @override
   void initState() {
@@ -119,9 +121,32 @@ class _AuthGateState extends ConsumerState<AuthGate>
   }
 
   Future<void> _checkFeedSyncWarning() async {
+    final prefs = await SharedPreferences.getInstance();
+    _feedSyncWarningDismissed = prefs.getBool(_kFeedSyncDismissedKey) ?? false;
+    if (_feedSyncWarningDismissed) return;
     final hasFailed = await FeedSyncQueue().hasPermanentlyFailedOps();
     if (mounted && hasFailed) {
       setState(() => _showFeedSyncWarning = true);
+    }
+  }
+
+  Future<void> _dismissFeedSyncWarning() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kFeedSyncDismissedKey, true);
+    if (mounted) setState(() => _showFeedSyncWarning = false);
+  }
+
+  Future<void> _retryFeedSync() async {
+    try {
+      await FeedSyncQueue().processQueue(FeedService());
+      final stillFailing = await FeedSyncQueue().hasPermanentlyFailedOps();
+      if (mounted) setState(() => _showFeedSyncWarning = stillFailing);
+      if (!stillFailing) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_kFeedSyncDismissedKey);
+      }
+    } catch (e) {
+      debugPrint('Feed sync retry failed: $e');
     }
   }
 
@@ -215,8 +240,18 @@ class _AuthGateState extends ConsumerState<AuthGate>
                           style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                       ),
+                      TextButton(
+                        onPressed: _retryFeedSync,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Retry', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
                       GestureDetector(
-                        onTap: () => setState(() => _showFeedSyncWarning = false),
+                        onTap: _dismissFeedSyncWarning,
                         child: const Icon(Icons.close, color: Colors.white, size: 16),
                       ),
                     ],

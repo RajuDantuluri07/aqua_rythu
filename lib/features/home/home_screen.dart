@@ -443,6 +443,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
+    if (farmState.loadError && farm == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: Text(AppLocalizations.of(context).t('home')),
+          backgroundColor: AppColors.background,
+          elevation: 0,
+        ),
+        bottomNavigationBar: const AppBottomBar(currentIndex: 0),
+        body: AccessDeniedView(
+          message: 'Could not load farm data. '
+              'Check your internet connection and tap Retry.',
+          onRetry: () =>
+              ref.read(farmProvider.notifier).loadFarms(),
+        ),
+      );
+    }
+
     if (farm == null) {
       return Scaffold(
         backgroundColor: AppColors.background,

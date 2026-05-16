@@ -39,6 +39,10 @@ class FeedSyncQueue {
   FeedSyncQueue._internal();
 
   bool _isProcessing = false;
+  DateTime? _processStartedAt;
+  // If a process run is older than this, consider it stale (e.g. process
+  // resumed after being suspended mid-run without hitting the finally block).
+  static const _processTimeoutSeconds = 120;
   final _rng = Random.secure();
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -60,8 +64,18 @@ class FeedSyncQueue {
   /// Process all pending operations using [sink] (typically FeedService).
   /// Re-entrant safe: concurrent calls are no-ops until the first completes.
   Future<void> processQueue(FeedCompletionSink sink) async {
-    if (_isProcessing) return;
+    // Reset stale lock: if a previous run started more than _processTimeoutSeconds
+    // ago and never hit the finally block (e.g. process resumed after OOM suspend),
+    // clear the flag so the queue isn't permanently stuck.
+    if (_isProcessing) {
+      final started = _processStartedAt;
+      final stale = started != null &&
+          DateTime.now().difference(started).inSeconds > _processTimeoutSeconds;
+      if (!stale) return;
+      AppLogger.warn('FeedSyncQueue: clearing stale _isProcessing lock');
+    }
     _isProcessing = true;
+    _processStartedAt = DateTime.now();
 
     try {
       final prefs = await SharedPreferences.getInstance();

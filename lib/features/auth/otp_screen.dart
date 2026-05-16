@@ -42,19 +42,22 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     });
   }
 
-  void _listenForOtp() async {
+  Future<void> _listenForOtp() async {
     await SmsAutoFill().listenForCode();
   }
 
   void _resendOtp() {
     final phone = ModalRoute.of(context)?.settings.arguments as String?;
-    if (phone != null) {
-      ref.read(authProvider.notifier).signInWithOtp(phone);
+    if (phone == null || phone.trim().length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("OTP Resent Successfully")),
+        const SnackBar(content: Text('Invalid phone number. Please go back and try again.')),
       );
+      return;
     }
-
+    ref.read(authProvider.notifier).signInWithOtp(phone.trim());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("OTP Resent Successfully")),
+    );
     _startTimer();
     _listenForOtp();
   }
@@ -68,10 +71,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     _focusNode.unfocus();
     setState(() => _isLoading = true);
 
-    await ref.read(authProvider.notifier).verifyOtp(phone, otp);
-
-    if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      await ref.read(authProvider.notifier).verifyOtp(phone, otp);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -99,7 +104,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     // ✅ FIX: FORCE NAVIGATION
     Navigator.pushNamedAndRemoveUntil(
       context,
-      AppRoutes.dashboard,
+      AppRoutes.home,
       (route) => false,
     );
   }

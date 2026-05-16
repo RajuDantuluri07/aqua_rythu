@@ -28,17 +28,21 @@ class FarmService {
       throw Exception('User not logged in');
     }
 
-    final response = await supabase
-        .from('farms')
-        .insert({
-          'name': name,
-          'location': location,
-          'user_id': user.id,
-        })
-        .select()
-        .single();
+    try {
+      final response = await supabase
+          .from('farms')
+          .insert({
+            'name': name,
+            'location': location,
+            'user_id': user.id,
+          })
+          .select()
+          .single();
 
-    return response['id'].toString();
+      return response['id'].toString();
+    } catch (e) {
+      throw Exception('Failed to create farm: $e');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getFarmsWithPonds() async {

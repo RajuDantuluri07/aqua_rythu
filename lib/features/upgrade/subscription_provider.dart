@@ -19,6 +19,8 @@ enum PaymentPhase {
   verifying,
   success,
   failed,
+  cancelled,
+  externalWalletPending,
 }
 
 // ── Pending verification record (T20) ────────────────────────────────────────
@@ -117,6 +119,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   Future<void> _initializeFromBackend() async {
     await hydrateFromBackend();
     state = state.copyWith(isHydrated: true);
+    // Resolve the boot-race gate so MasterFeedEngine.orchestrateForPond()
+    // can proceed with the correct PRO/FREE status.
+    SubscriptionGate.setHydrated();
   }
 
   @override
@@ -166,10 +171,12 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   Future<bool> restorePurchase() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final subscription = await _ref
+      // Use server-authoritative RPC — not the client-side SELECT path which
+      // can be fooled by local clock skew or stale RLS data.
+      final entitlement = await _ref
           .read(subscriptionServiceProvider)
-          .getCurrentSubscription();
-      if (subscription?.isPro == true) {
+          .getActiveEntitlement();
+      if (entitlement != null) {
         state = state.copyWith(currentPlan: PlanType.pro, isLoading: false);
         return true;
       }
@@ -204,6 +211,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     try {
       final orderId = await paymentService.createOrder(amountPaise, planType: plan.id);
 
+      // Log that payment was initiated (order exists, gateway not yet opened)
+      paymentService.logClientEvent(status: 'initiated', orderId: orderId);
+
       // Phase 2: Razorpay sheet is open
       state = state.copyWith(paymentPhase: PaymentPhase.awaitingPayment);
 
@@ -215,11 +225,36 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         userPhone: user?.phone,
       );
 
-      if (result.status != PaymentStatus.success) {
+      if (result.status == PaymentStatus.cancelled) {
+        paymentService.logClientEvent(status: 'cancelled', orderId: orderId);
+        state = state.copyWith(
+          paymentPhase: PaymentPhase.cancelled,
+          isLoading: false,
+          error: null,
+        );
+        return;
+      }
+
+      if (result.status == PaymentStatus.externalWalletPending) {
+        paymentService.logClientEvent(status: 'external_wallet_pending', orderId: orderId);
+        state = state.copyWith(
+          paymentPhase: PaymentPhase.externalWalletPending,
+          isLoading: false,
+          error: null,
+        );
+        return;
+      }
+
+      if (result.status == PaymentStatus.failed) {
+        paymentService.logClientEvent(
+          status: 'failed',
+          orderId: orderId,
+          errorMessage: result.error,
+        );
         state = state.copyWith(
           paymentPhase: PaymentPhase.failed,
           isLoading: false,
-          error: result.error ?? 'Payment was not completed.',
+          error: result.error ?? 'Payment failed. Please try again.',
         );
         return;
       }

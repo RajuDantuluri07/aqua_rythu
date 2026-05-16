@@ -44,8 +44,6 @@ import '../../core/config/app_config.dart';
 import '../../core/config/feature_flags.dart';
 import 'package:aqua_rythu/features/home/alert_strip.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
-// Smart feed provider file does not exist - commented out temporarily
-// import '../../systems/feed/smart_feed_provider.dart';
 import 'package:aqua_rythu/features/water/water_test_screen.dart';
 import 'package:aqua_rythu/features/home/kpi_row.dart';
 import 'package:aqua_rythu/features/home/feed_trend_card.dart';

@@ -39,13 +39,57 @@ class _State extends ConsumerState<UpgradeToProScreen> {
       if (!mounted) return;
       if (next.paymentPhase == PaymentPhase.success &&
           prev?.paymentPhase != PaymentPhase.success) {
+        // Pop first, then show snackbar on the parent context so it doesn't
+        // fire on a disposed widget tree (TICKET-025).
+        Navigator.of(context).pop();
+        // Use rootScaffoldMessengerKey or find the nearest mounted ancestor.
+        // ScaffoldMessenger is inherited and stays valid after this screen pops.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('PRO activated! Welcome to full power.'),
             backgroundColor: _accent,
           ),
         );
-        Navigator.of(context).pop();
+      }
+      if (next.paymentPhase == PaymentPhase.cancelled &&
+          prev?.paymentPhase != PaymentPhase.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Payment not completed — tap below to try again.'),
+            backgroundColor: Colors.amber.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      if (next.paymentPhase == PaymentPhase.failed &&
+          prev?.paymentPhase != PaymentPhase.failed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error ?? 'Payment failed. Please try again.'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      if (next.paymentPhase == PaymentPhase.externalWalletPending &&
+          prev?.paymentPhase != PaymentPhase.externalWalletPending) {
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Payment Redirected'),
+            content: const Text(
+              'You were redirected to an external wallet.\n\n'
+              'If you completed the payment there, your PRO subscription will activate automatically within a few minutes.\n\n'
+              'If not, tap "Try Again" to pay directly.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
       }
     });
 
@@ -554,6 +598,8 @@ class _State extends ConsumerState<UpgradeToProScreen> {
       PaymentPhase.creatingOrder => 'Preparing order…',
       PaymentPhase.awaitingPayment => 'Waiting for payment…',
       PaymentPhase.verifying => 'Verifying payment…',
+      PaymentPhase.failed => 'Try Again',
+      PaymentPhase.externalWalletPending => 'Try Again',
       _ => 'Start Saving Feed Now',
     };
 

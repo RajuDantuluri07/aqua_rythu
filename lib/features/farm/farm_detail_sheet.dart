@@ -101,7 +101,7 @@ class _FarmDetailSheetState extends ConsumerState<FarmDetailSheet> {
 
   Future<void> _deleteMember(String memberId) async {
     try {
-      await FarmMemberService().removeMember(memberId);
+      await FarmMemberService().removeMember(memberId, farmId: widget.farm.id);
       setState(_loadMembers);
     } catch (e) {
       if (mounted) {

@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
 
-enum PaymentStatus { success, failed, cancelled }
+enum PaymentStatus { success, failed, cancelled, externalWalletPending }
 
 class PaymentResult {
   final PaymentStatus status;
@@ -169,18 +169,44 @@ class PaymentService {
     _cleanup();
   }
 
+  /// Logs a client-side payment event to payment_logs. Fire-and-forget —
+  /// must never throw or block the main payment flow.
+  Future<void> logClientEvent({
+    required String status,
+    required String orderId,
+    String? paymentId,
+    String? errorMessage,
+  }) async {
+    try {
+      final userId = _db.auth.currentUser?.id;
+      if (userId == null) return;
+      await _db.from('payment_logs').insert({
+        'user_id': userId,
+        'order_id': orderId,
+        'payment_id': paymentId,
+        'status': status,
+        'source': 'client',
+        'error_message': errorMessage,
+      });
+    } catch (_) {
+      // Intentionally swallow — logging must not block payments.
+    }
+  }
+
   void _onError(PaymentFailureResponse response) {
+    // Razorpay code 0 = user dismissed the checkout sheet (not a payment failure).
+    final cancelled = response.code == 0;
     _completer?.complete(PaymentResult(
-      status: PaymentStatus.failed,
-      error: response.message ?? 'Payment failed',
+      status: cancelled ? PaymentStatus.cancelled : PaymentStatus.failed,
+      error: cancelled ? null : (response.message ?? 'Payment failed'),
     ));
     _cleanup();
   }
 
   void _onExternalWallet(ExternalWalletResponse response) {
     _completer?.complete(const PaymentResult(
-      status: PaymentStatus.cancelled,
-      error: 'Redirected to external wallet',
+      status: PaymentStatus.externalWalletPending,
+      error: null,
     ));
     _cleanup();
   }

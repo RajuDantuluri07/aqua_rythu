@@ -202,11 +202,15 @@ class FarmState {
   final List<Farm> farms;
   final String selectedId;
   final bool accessDenied;
+  /// True when the last loadFarms() call failed with a network/DB error.
+  /// The UI should show a retry banner when this is true and farms is empty.
+  final bool loadError;
 
   FarmState({
     required this.farms,
     required this.selectedId,
     this.accessDenied = false,
+    this.loadError = false,
   });
 
   Farm? get currentFarm {
@@ -222,11 +226,13 @@ class FarmState {
     List<Farm>? farms,
     String? selectedId,
     bool? accessDenied,
+    bool? loadError,
   }) {
     return FarmState(
       farms: farms ?? this.farms,
       selectedId: selectedId ?? this.selectedId,
       accessDenied: accessDenied ?? this.accessDenied,
+      loadError: loadError ?? this.loadError,
     );
   }
 }
@@ -319,11 +325,14 @@ class FarmNotifier extends StateNotifier<FarmState> {
         farms: loadedFarms,
         selectedId: setAsSelectedId ??
             (loadedFarms.isNotEmpty ? loadedFarms.first.id : ''),
+        loadError: false,
       );
     } catch (e) {
       AppLogger.error("Error loading farms", e);
       if (isRlsDenied(e)) {
         state = state.copyWith(accessDenied: true);
+      } else {
+        state = state.copyWith(loadError: true);
       }
     }
   }
@@ -552,28 +561,32 @@ class FarmNotifier extends StateNotifier<FarmState> {
     );
   }
 
-  /// 🔄 SMART FEED TRIGGER: Removed - controller handles recalculation
-  /// Feed recalculation now happens through controller.invalidate() which
-  /// ensures single source of truth for all feed calculations.
-  // void triggerSmartFeedRecalculationOnDocChange(String pondId) {
-  //   // Fire-and-forget Smart Feed recalculation
-  //   FeedService().recalculateFeedPlan(pondId).catchError((e) {
-  //     AppLogger.error('Feed recalculation trigger failed', e);
-  //   });
-  // }
 }
 
 final farmProvider = StateNotifierProvider<FarmNotifier, FarmState>((ref) {
   return FarmNotifier();
 });
 
-/// A provider that returns the current date and refreshes every hour
-/// to ensure DOC increments automatically at midnight.
+/// Returns the current date/time and refreshes at both midnight and every hour.
+///
+/// The midnight-aligned timer ensures DOC increments within 1 minute of
+/// actual midnight rather than waiting up to 59 minutes for the hourly tick
+/// (TICKET-026 — DST/NTP clock jumps could cause wrong DOC for up to 1 hour).
 final currentDateProvider = Provider<DateTime>((ref) {
-  // Rebuild this provider every hour
-  final timer =
+  // Hourly fallback — keeps DOC fresh even without a midnight trigger.
+  final hourly =
       Timer.periodic(const Duration(hours: 1), (_) => ref.invalidateSelf());
-  ref.onDispose(() => timer.cancel());
+
+  // One-shot timer aligned to the next local midnight.
+  final now = DateTime.now();
+  final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+  final untilMidnight = nextMidnight.difference(now);
+  final midnight = Timer(untilMidnight, () => ref.invalidateSelf());
+
+  ref.onDispose(() {
+    hourly.cancel();
+    midnight.cancel();
+  });
   return DateTime.now();
 });
 

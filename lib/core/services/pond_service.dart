@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_generator.dart';
 import '../utils/logger.dart';
 import '../utils/doc_utils.dart';
+import '../utils/uuid_generator.dart';
 import '../../features/farm/farm_provider.dart';
 import '../../features/pond/enums/seed_type.dart';
 export '../../features/farm/farm_provider.dart' show Pond, PondStatus;
@@ -22,6 +23,7 @@ class PondService {
     required int numTrays,
     SeedType? seedType,
     String? feedBrandId,
+    String? operationId,
   }) async {
     await createPondAndReturnId(
       farmId: farmId,
@@ -33,11 +35,13 @@ class PondService {
       numTrays: numTrays,
       seedType: seedType,
       feedBrandId: feedBrandId,
+      operationId: operationId,
     );
   }
 
-  /// Creates a pond + feed schedule and returns the new pond ID.
-  /// Used when the caller needs the ID (e.g. to pre-mark feed rounds).
+  /// Creates a pond + blind-phase feed schedule atomically via a single DB RPC.
+  /// Returns the new pond ID. Passing [operationId] makes the call idempotent —
+  /// a second call with the same ID returns the existing pond without a duplicate.
   Future<String?> createPondAndReturnId({
     required String farmId,
     required String name,
@@ -48,50 +52,46 @@ class PondService {
     required int numTrays,
     SeedType? seedType,
     String? feedBrandId,
+    String? operationId,
   }) async {
-    final user = supabase.auth.currentUser;
-
-    if (user == null) {
+    if (supabase.auth.currentUser == null) {
       throw Exception('User not logged in');
     }
 
-    try {
-      final resolvedSeedType = seedType ?? SeedTypeX.fromPlSize(plSize);
+    final resolvedSeedType = seedType ?? SeedTypeX.fromPlSize(plSize);
+    final opId = operationId ?? generateUuidV4();
 
-      final insertData = {
-        'farm_id': farmId,
-        'name': name,
-        'area': area,
-        'stocking_date': stockingDate.toIso8601String().split('T')[0],
-        'seed_count': seedCount,
-        'pl_size': plSize,
-        'num_trays': numTrays,
-        'user_id': user.id,
-        'stocking_type': resolvedSeedType.dbValue,
-        'status': 'active',
-      };
-
-      if (feedBrandId != null) {
-        insertData['feed_brand_id'] = feedBrandId;
-      }
-
-      final response = await supabase
-          .from('ponds')
-          .insert(insertData)
-          .select('id')
-          .single();
-
-      final pondId = response['id'] as String;
-      AppLogger.info("Created pond: $pondId (brand: ${feedBrandId ?? 'none'})");
-
-      // MANDATORY: Generate feed schedule immediately after pond creation
-      await generateFeedSchedule(pondId);
-
-      AppLogger.info("Pond + feed plan created: $pondId");
-      return pondId;
-    } catch (e) {
-      throw Exception('Failed to create pond: $e');
+    final params = <String, dynamic>{
+      'p_farm_id':       farmId,
+      'p_name':          name,
+      'p_area':          area,
+      'p_stocking_date': stockingDate.toIso8601String().split('T')[0],
+      'p_seed_count':    seedCount,
+      'p_pl_size':       plSize,
+      'p_num_trays':     numTrays,
+      'p_stocking_type': resolvedSeedType.dbValue,
+      'p_operation_id':  opId,
+    };
+    if (feedBrandId != null) {
+      params['p_feed_brand_id'] = feedBrandId;
     }
+
+    final result = await supabase.rpc('create_pond_with_feed_plan', params: params);
+    final response = Map<String, dynamic>.from(result as Map);
+
+    if (response['success'] != true) {
+      throw Exception(response['error'] ?? 'Failed to create pond');
+    }
+
+    final pondId = response['pond_id'] as String;
+    final roundsCreated = response['feed_rounds_created'] as int? ?? 0;
+    final isDuplicate = response['duplicate'] == true;
+
+    AppLogger.info(
+      'Pond created: $pondId — $roundsCreated feed rounds '
+      '(brand: ${feedBrandId ?? 'none'}, duplicate: $isDuplicate)',
+    );
+    return pondId;
   }
 
   // ================================

@@ -14,55 +14,6 @@ class FeedService implements FeedCompletionSink {
   final supabase = Supabase.instance.client;
   final _inventoryService = InventoryService();
 
-  Future<void> saveFeed({
-    required String pondId,
-    required DateTime date,
-    required int doc,
-    required List<double> rounds,
-    required double expectedFeed,
-    required double cumulativeFeed,
-    required double baseFeed,
-    required String engineVersion,
-    double? leftoverPercent,
-    String? stockingType,
-    int? density,
-  }) async {
-    // feed_given = actual feed given by the farmer (sum of all rounds today).
-    // base_feed  = engine recommendation (finalFeed from orchestrator).
-    // NOTE: cumulativeFeed (all-time since stocking) is intentionally NOT stored
-    // here; it lives only in FeedHistoryLog in-memory state.
-    final actualFeedGiven = rounds.fold(0.0, (sum, r) => sum + r);
-
-    // Check inventory stock before feeding (warning only — never blocks feed recording).
-    try {
-      await _checkInventoryStock(pondId, actualFeedGiven);
-    } on InsufficientStockException catch (e) {
-      AppLogger.warn('Low stock for pond $pondId: $e');
-    }
-
-    await _withRetry('saveFeed(pond=$pondId doc=$doc)', () async {
-      // 🔒 FIX #1: Use safe insert function to prevent duplicates
-      // This will check for existing (pond_id, doc, round) before inserting
-      final inserted = await supabase.rpc('safe_insert_feed_log', params: {
-        'p_pond_id': pondId,
-        'p_doc': doc,
-        'p_round': 1, // Daily feed log uses round=1 by convention
-        'p_feed_given': actualFeedGiven,
-        'p_base_feed': baseFeed,
-        'p_created_at': date.toIso8601String(),
-        'p_tray_leftover': leftoverPercent,
-        'p_stocking_type': stockingType,
-        'p_density': density,
-      });
-
-      if (!inserted) {
-        AppLogger.warn(
-            'Feed log skipped - duplicate entry for pond $pondId DOC $doc');
-        return; // Skip silently for duplicates
-      }
-    });
-  }
-
   /// Check inventory stock before feeding.
   ///
   /// Throws [InsufficientStockException] if feeding [feedAmount] would push
@@ -472,6 +423,13 @@ class FeedService implements FeedCompletionSink {
       throw Exception('Crop completed');
     }
 
+    // Warn if feeding would exhaust stock (never blocks the feed record).
+    try {
+      await _checkInventoryStock(pondId, feedKg);
+    } on InsufficientStockException catch (e) {
+      AppLogger.warn('Low stock for pond $pondId: $e');
+    }
+
     final logs = await fetchFeedLogs(pondId);
     final parsedLogs = logs.map(FeedLog.fromMap).toList();
 
@@ -591,16 +549,18 @@ class FeedService implements FeedCompletionSink {
 
   Future<void> _deductInventoryStock(String pondId, double feedKg) async {
     try {
-      final row = await supabase
-          .from('ponds')
-          .select('farm_id')
-          .eq('id', pondId)
-          .maybeSingle();
-      final farmId = row?['farm_id'] as String?;
-      if (farmId == null) return;
-      await _inventoryService.recordFeedConsumption(farmId, feedKg);
+      await _withRetry('deductInventoryStock(pond=$pondId)', () async {
+        final row = await supabase
+            .from('ponds')
+            .select('farm_id')
+            .eq('id', pondId)
+            .maybeSingle();
+        final farmId = row?['farm_id'] as String?;
+        if (farmId == null) return;
+        await _inventoryService.recordFeedConsumption(farmId, feedKg);
+      });
     } catch (e) {
-      AppLogger.error('Inventory deduction failed (non-blocking)', e);
+      AppLogger.error('Inventory deduction failed after retries (non-blocking)', e);
     }
   }
 
