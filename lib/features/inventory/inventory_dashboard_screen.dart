@@ -17,23 +17,8 @@ class InventoryDashboardScreen extends ConsumerStatefulWidget {
 
 class _InventoryDashboardScreenState
     extends ConsumerState<InventoryDashboardScreen> {
-  String _selectedCategory = 'all';
-
-  static const _categories = [
-    ('all', 'All'),
-    ('feed', 'Feed'),
-    ('medicine', 'Supplements'),
-    ('probiotic', 'Probiotic'),
-    ('mineral', 'Mineral'),
-  ];
-
   static const _green = Color(0xFF1B5E20);
   static const _bg = Color(0xFFF2F4F0);
-
-  List<InventoryItem> _filtered(List<InventoryItem> items) {
-    if (_selectedCategory == 'all') return items;
-    return items.where((i) => i.category == _selectedCategory).toList();
-  }
 
   void _navigateToSetup(String farmId) {
     Navigator.of(context)
@@ -68,12 +53,7 @@ class _InventoryDashboardScreenState
       body: inventoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _buildErrorState(e.toString(), farm.id),
-        data: (items) => Column(
-          children: [
-            _buildCategoryFilter(),
-            Expanded(child: _buildBody(items, farm.id)),
-          ],
-        ),
+        data: (items) => _buildBody(items, farm.id),
       ),
       bottomNavigationBar: _buildAddButton(farm.id),
     );
@@ -101,50 +81,10 @@ class _InventoryDashboardScreenState
     );
   }
 
-  Widget _buildCategoryFilter() {
-    return SizedBox(
-      height: 48,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: _categories.map((cat) {
-          final isSelected = _selectedCategory == cat.$1;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8, bottom: 8),
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedCategory = cat.$1),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isSelected ? _green : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? _green : const Color(0xFFDDDDDD),
-                  ),
-                ),
-                child: Text(
-                  cat.$2,
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : const Color(0xFF555555),
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   Widget _buildBody(List<InventoryItem> items, String farmId) {
     if (items.isEmpty) return _buildEmptyState();
 
-    final filtered = _filtered(items);
+    final filtered = items;
     if (filtered.isEmpty) {
       return Center(
         child: Text(
@@ -239,8 +179,23 @@ class _InventoryDashboardScreenState
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 12),
+              padding: const EdgeInsets.only(left: 16, bottom: 6),
               child: _statusBadge(item.status),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  _infoChip(Icons.straighten_rounded, 'Unit: ${item.unit.isNotEmpty ? item.unit : '—'}'),
+                  if (item.hasPackTracking)
+                    _infoChip(
+                      Icons.inventory_2_outlined,
+                      '1 ${item.packLabel} = ${_fmtNum(item.packSize!)} ${item.unit}',
+                    ),
+                ],
+              ),
             ),
             Container(
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -503,5 +458,33 @@ class _InventoryDashboardScreenState
   String _fmt(double v) {
     if (v == v.roundToDouble()) return v.toStringAsFixed(0);
     return v.toStringAsFixed(1);
+  }
+
+  String _fmtNum(double v) => _fmt(v);
+
+  Widget _infoChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F4F0),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE8DD)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: const Color(0xFF4A7A4A)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFF3A5A3A),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

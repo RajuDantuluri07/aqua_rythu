@@ -444,14 +444,22 @@ class _ItemCard extends StatelessWidget {
         if (feed.cultureType != null) _MetaRow('Culture', feed.cultureType!),
       ]);
     } else if (supp != null) {
+      final effectiveUnit = supp.unitType?.isNotEmpty == true
+          ? supp.unitType!
+          : (supp.baseUnit?.isNotEmpty == true ? supp.baseUnit! : '');
       rows.addAll([
         _MetaRow('Category', supp.category),
         if (supp.brand != null && supp.brand!.isNotEmpty)
           _MetaRow('Company', supp.brand!),
         if (supp.form != null) _MetaRow('Form', supp.form!),
-        if (supp.packageSize != null && supp.unitType != null)
-          _MetaRow('Package Size', '${supp.packageSize} ${supp.unitType}'),
-        _MetaRow('Application', _appTypeLabel(supp.category)),
+        if (effectiveUnit.isNotEmpty) _MetaRow('Unit', effectiveUnit),
+        if (supp.packageSize != null)
+          _MetaRow(
+            'Package Size',
+            effectiveUnit.isNotEmpty
+                ? '${supp.packageSize} $effectiveUnit'
+                : '${supp.packageSize}',
+          ),
       ]);
     }
 
