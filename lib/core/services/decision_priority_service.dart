@@ -262,6 +262,7 @@ class DecisionPriorityService {
 
   static SafePrimaryDecision _createSafetyDecision(
       List<SafetyIssue> issues, FarmAnchors anchors) {
+    if (issues.isEmpty) return _createDefaultMaintenanceDecision(anchors);
     final criticalIssues =
         issues.where((i) => i.severity == SafetySeverity.critical);
     final primaryIssue =

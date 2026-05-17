@@ -3,6 +3,9 @@ import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:ui';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'core/theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/profile/farm_settings_provider.dart';
@@ -19,6 +22,7 @@ import 'core/language/language_provider.dart';
 import 'core/language/app_localizations.dart';
 import 'core/services/feed_sync_queue.dart';
 import 'core/services/feed_service.dart';
+import 'core/providers/connectivity_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,9 +34,19 @@ void main() async {
     return;
   }
 
-  // Global Flutter error handler for debugging crashes
+  // Firebase must be initialized before any other service.
+  await Firebase.initializeApp();
+
+  // Route all Flutter framework errors to Crashlytics (fatal in release).
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+  };
+
+  // Route unhandled platform/async errors to Crashlytics.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
   };
 
   try {
@@ -207,9 +221,17 @@ class _AuthGateState extends ConsumerState<AuthGate>
     final authState = ref.watch(authProvider);
 
     // Hydrate subscription once when the user becomes authenticated.
+    // Also set Crashlytics user ID so crash reports are tied to the farmer.
     ref.listen<AppAuthState>(authProvider, (prev, next) {
       if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
         ref.read(subscriptionProvider.notifier).hydrateFromBackend();
+        final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+        if (userId.isNotEmpty) {
+          FirebaseCrashlytics.instance.setUserIdentifier(userId);
+        }
+      }
+      if (!next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
+        FirebaseCrashlytics.instance.setUserIdentifier('');
       }
     });
 
@@ -219,50 +241,14 @@ class _AuthGateState extends ConsumerState<AuthGate>
     }
 
     if (authState.isAuthenticated) {
-      if (_showFeedSyncWarning) {
-        return Stack(
-          children: [
-            const HomeScreen(),
-            SafeArea(
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  width: double.infinity,
-                  color: const Color(0xFFF59E0B),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Some feed records failed to sync. Check your connection.',
-                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _retryFeedSync,
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text('Retry', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                      GestureDetector(
-                        onTap: _dismissFeedSyncWarning,
-                        child: const Icon(Icons.close, color: Colors.white, size: 16),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      }
-      return const HomeScreen();
+      final isOnline = ref.watch(connectivityProvider).valueOrNull ?? true;
+      return Stack(
+        children: [
+          const HomeScreen(),
+          if (!isOnline) _buildOfflineBanner(),
+          if (_showFeedSyncWarning && isOnline) _buildFeedSyncBanner(),
+        ],
+      );
     }
 
     // First-time users see the onboarding carousel before login.
@@ -271,5 +257,69 @@ class _AuthGateState extends ConsumerState<AuthGate>
     }
 
     return const LoginScreen();
+  }
+
+  Widget _buildOfflineBanner() {
+    return SafeArea(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: double.infinity,
+          color: const Color(0xFF374151),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: const Row(
+            children: [
+              Icon(Icons.wifi_off_rounded, color: Colors.white70, size: 16),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No internet connection',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeedSyncBanner() {
+    return SafeArea(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: double.infinity,
+          color: const Color(0xFFF59E0B),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Some feed records failed to sync. Check your connection.',
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+              TextButton(
+                onPressed: _retryFeedSync,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Retry', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              GestureDetector(
+                onTap: _dismissFeedSyncWarning,
+                child: const Icon(Icons.close, color: Colors.white, size: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

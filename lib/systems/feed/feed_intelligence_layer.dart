@@ -56,7 +56,7 @@ class FeedIntelligenceLayer {
 
   static double applyRampMode({required int doc, required double feed}) {
     if (doc < 31 || doc > 35) return feed;
-    final progress = ((doc - 30) / 5.0).clamp(0.0, 1.0);
+    final progress = ((doc - 31) / 4.0).clamp(0.0, 1.0);
     final rampFactor = 0.75 + (0.25 * progress);
     return feed * rampFactor;
   }

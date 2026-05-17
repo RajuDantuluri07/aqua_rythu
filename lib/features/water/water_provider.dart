@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/farm_settings_provider.dart';
 import '../../core/utils/logger.dart';
+import '../../core/services/analytics_service.dart';
 
 class WaterLog {
   final String id;
@@ -255,6 +257,7 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
         'doc': doc,
         'created_at': now.toIso8601String(),
       });
+      unawaited(AnalyticsService.instance.logWaterLogAdded(pondId: pondId, doc: doc));
     } catch (e) {
       AppLogger.error('Failed to save water log', e);
     }

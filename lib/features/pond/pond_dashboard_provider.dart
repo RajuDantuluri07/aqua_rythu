@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/logger.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/utils/feed_debug_logger.dart';
 import '../../core/utils/uuid_generator.dart';
 import '../../core/models/feed_pending_operation.dart';
@@ -64,6 +66,11 @@ class PondDashboardState {
   /// Screen listens and shows the anchor feed input dialog once.
   final bool needsAnchorFeedInput;
 
+  /// Non-null when the pond cannot be loaded due to missing/corrupt setup data
+  /// (e.g. null stocking_date). The screen renders an error card instead of
+  /// crashing. Other ponds are unaffected.
+  final String? pondSetupError;
+
   PondDashboardState({
     required this.selectedPond,
     required this.doc,
@@ -82,6 +89,7 @@ class PondDashboardState {
     this.decision,
     this.feedDebugInfo,
     this.needsAnchorFeedInput = false,
+    this.pondSetupError,
   });
 
   PondDashboardState copyWith({
@@ -103,6 +111,8 @@ class PondDashboardState {
     FeedDecision? decision,
     FeedDebugInfo? feedDebugInfo,
     bool? needsAnchorFeedInput,
+    String? pondSetupError,
+    bool clearPondSetupError = false,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -125,6 +135,8 @@ class PondDashboardState {
       decision: decision ?? this.decision,
       feedDebugInfo: feedDebugInfo ?? this.feedDebugInfo,
       needsAnchorFeedInput: needsAnchorFeedInput ?? this.needsAnchorFeedInput,
+      pondSetupError:
+          clearPondSetupError ? null : (pondSetupError ?? this.pondSetupError),
     );
   }
 }
@@ -167,99 +179,121 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   /// ✅ Guarantees: Feed engine runs exactly ONCE per pond+doc load
   /// ✅ Prevents: Duplicate calculations, UI flickering, inconsistent values
   Future<void> loadTodayFeed(String pondId) async {
-    state = state.copyWith(isFeedLoading: true);
+    state = state.copyWith(isFeedLoading: true, clearPondSetupError: true);
 
-    final farmState = ref.read(farmProvider);
+    try {
+      final farmState = ref.read(farmProvider);
 
-    // Find pond in farm state
-    Pond? pond;
-    for (final farm in farmState.farms) {
-      final index = farm.ponds.indexWhere((p) => p.id == pondId);
-      if (index != -1) {
-        pond = farm.ponds[index];
-        break;
+      // Find pond in farm state
+      Pond? pond;
+      for (final farm in farmState.farms) {
+        final index = farm.ponds.indexWhere((p) => p.id == pondId);
+        if (index != -1) {
+          pond = farm.ponds[index];
+          break;
+        }
       }
-    }
 
-    if (pond == null) {
-      AppLogger.error("Pond not found in state: $pondId");
-      state = state.copyWith(isFeedLoading: false);
-      return;
-    }
-
-    final currentDoc = ref.read(docProvider(pondId));
-
-    // Activate smart feed if needed
-    final needsAnchor = currentDoc >= 31 && !pond.isAnchorInitialized;
-    if (currentDoc >= 31 && !pond.isSmartFeedEnabled) {
-      try {
-        await PondService()
-            .updateSmartFeedStatus(pondId: pondId, isEnabled: true);
-        ref.read(farmProvider.notifier).updateSmartFeedStatus(pondId, true);
-      } catch (e) {
-        AppLogger.error('Failed to activate smart feed for pond $pondId', e);
+      if (pond == null) {
+        AppLogger.error("Pond not found in state: $pondId");
+        state = state.copyWith(isFeedLoading: false);
+        return;
       }
+
+      final currentDoc = ref.read(docProvider(pondId));
+
+      // Activate smart feed if needed
+      final needsAnchor = currentDoc >= 31 && !pond.isAnchorInitialized;
+      if (currentDoc >= 31 && !pond.isSmartFeedEnabled) {
+        try {
+          await PondService()
+              .updateSmartFeedStatus(pondId: pondId, isEnabled: true);
+          ref.read(farmProvider.notifier).updateSmartFeedStatus(pondId, true);
+        } catch (e) {
+          AppLogger.error('Failed to activate smart feed for pond $pondId', e);
+        }
+      }
+
+      // ✅ SINGLE SOURCE OF TRUTH: Controller orchestrates all data loading
+      final viewState = await _controller.load(pondId, knownDoc: currentDoc);
+
+      if (viewState.error != null) {
+        AppLogger.error(
+          'Controller error for pond $pondId: ${viewState.error}',
+          Exception(viewState.error),
+        );
+        state = state.copyWith(
+          isFeedLoading: false,
+          pondSetupError: viewState.error,
+        );
+        return;
+      }
+
+      // Fetch last feed time for gap check
+      final persistedLastFeedTime =
+          await FeedService().fetchLatestFeedTimeForDoc(
+        pondId: pondId,
+        doc: currentDoc,
+      );
+      final lastFeedTime = state.lastFeedTime != null &&
+              (persistedLastFeedTime == null ||
+                  state.lastFeedTime!.isAfter(persistedLastFeedTime))
+          ? state.lastFeedTime
+          : persistedLastFeedTime;
+
+      // Equality guards: only replace when values actually changed
+      final newRecommendation =
+          (viewState.feedResult?.recommendation == state.recommendation)
+              ? null
+              : viewState.feedResult?.recommendation;
+      final newDecision = (viewState.feedResult?.decision == state.decision)
+          ? null
+          : viewState.feedResult?.decision;
+
+      // TASK 10: only update feed amounts when they actually changed
+      final prevAmounts = state.roundFeedAmounts;
+      final feedChanged =
+          viewState.roundFeedAmounts.length != prevAmounts.length ||
+              viewState.roundFeedAmounts.entries
+                  .any((e) => prevAmounts[e.key] != e.value);
+
+      AppLogger.info('⚡ Feed state updated via controller | pondId: $pondId | '
+          'total: ${viewState.totalFeed.toStringAsFixed(2)}kg | '
+          'fromCache: ${_controller.cachedResult(pondId, currentDoc) != null}');
+
+      state = state.copyWith(
+        roundFeedAmounts: feedChanged ? viewState.roundFeedAmounts : null,
+        roundToFeedId: viewState.roundToFeedId,
+        roundFeedStatus: viewState.roundFeedStatus,
+        isFeedLoading: false,
+        feedAutoRecovered: viewState.feedAutoRecovered,
+        lastFeedTime: lastFeedTime,
+        clearLastFeedTime: lastFeedTime == null,
+        recommendation: newRecommendation,
+        decision: newDecision,
+        feedDebugInfo: viewState.feedResult?.debugInfo,
+        needsAnchorFeedInput: needsAnchor,
+      );
+
+      // Ensure the rolling 7-day feed window exists ahead of today (fire-and-forget)
+      // currentDoc was computed earlier in this method — reuse it here.
+      ensureFutureFeedExists(pondId, currentDoc).catchError((e) {
+        AppLogger.error('ensureFutureFeedExists failed on load', e);
+      });
+    } catch (e, stackTrace) {
+      // Top-level guard: any unexpected exception (e.g. null stocking_date in
+      // docProvider, corrupt DB row) transitions to an error state rather than
+      // crashing the screen or escaping as an unhandled future.
+      AppLogger.error(
+        'loadTodayFeed unexpected error for pond $pondId — showing setup error card',
+        e,
+        stackTrace,
+      );
+      state = state.copyWith(
+        isFeedLoading: false,
+        pondSetupError: 'Failed to load pond data: $e',
+      );
     }
-
-    // ✅ SINGLE SOURCE OF TRUTH: Controller orchestrates all data loading
-    final viewState = await _controller.load(pondId, knownDoc: currentDoc);
-
-    if (viewState.error != null) {
-      AppLogger.error('Controller error for pond $pondId: ${viewState.error}');
-      state = state.copyWith(isFeedLoading: false);
-      return;
-    }
-
-    // Fetch last feed time for gap check
-    final persistedLastFeedTime = await FeedService().fetchLatestFeedTimeForDoc(
-      pondId: pondId,
-      doc: currentDoc,
-    );
-    final lastFeedTime = state.lastFeedTime != null &&
-            (persistedLastFeedTime == null ||
-                state.lastFeedTime!.isAfter(persistedLastFeedTime))
-        ? state.lastFeedTime
-        : persistedLastFeedTime;
-
-    // Equality guards: only replace when values actually changed
-    final newRecommendation =
-        (viewState.feedResult?.recommendation == state.recommendation)
-            ? null
-            : viewState.feedResult?.recommendation;
-    final newDecision = (viewState.feedResult?.decision == state.decision)
-        ? null
-        : viewState.feedResult?.decision;
-
-    // TASK 10: only update feed amounts when they actually changed
-    final prevAmounts = state.roundFeedAmounts;
-    final feedChanged =
-        viewState.roundFeedAmounts.length != prevAmounts.length ||
-            viewState.roundFeedAmounts.entries
-                .any((e) => prevAmounts[e.key] != e.value);
-
-    AppLogger.info('⚡ Feed state updated via controller | pondId: $pondId | '
-        'total: ${viewState.totalFeed.toStringAsFixed(2)}kg | '
-        'fromCache: ${_controller.cachedResult(pondId, currentDoc) != null}');
-
-    state = state.copyWith(
-      roundFeedAmounts: feedChanged ? viewState.roundFeedAmounts : null,
-      roundToFeedId: viewState.roundToFeedId,
-      roundFeedStatus: viewState.roundFeedStatus,
-      isFeedLoading: false,
-      feedAutoRecovered: viewState.feedAutoRecovered,
-      lastFeedTime: lastFeedTime,
-      clearLastFeedTime: lastFeedTime == null,
-      recommendation: newRecommendation,
-      decision: newDecision,
-      feedDebugInfo: viewState.feedResult?.debugInfo,
-      needsAnchorFeedInput: needsAnchor,
-    );
-
-    // Ensure the rolling 7-day feed window exists ahead of today (fire-and-forget)
-    // currentDoc was computed earlier in this method — reuse it here.
-    ensureFutureFeedExists(pondId, currentDoc).catchError((e) {
-      AppLogger.error('ensureFutureFeedExists failed on load', e);
-    });
   }
 
   /// Called by the screen after the anchor feed dialog is shown/dismissed.
@@ -552,6 +586,9 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
         AppLogger.info(
             'logFeeding: pond=$pondId doc=$doc round=$round qty=${actualDbFeedSaved.toStringAsFixed(3)}kg');
+        unawaited(AnalyticsService.instance.logFeedRoundCompleted(
+          pondId: pondId, doc: doc, round: round, qty: actualDbFeedSaved,
+        ));
         await ref.read(feedHistoryProvider.notifier).logFeeding(
               pondId: pondId,
               doc: doc,

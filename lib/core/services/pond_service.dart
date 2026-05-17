@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_generator.dart';
 import '../utils/logger.dart';
+import 'analytics_service.dart';
 import '../utils/doc_utils.dart';
 import '../utils/uuid_generator.dart';
 import '../../features/farm/farm_provider.dart';
@@ -91,6 +93,9 @@ class PondService {
       'Pond created: $pondId — $roundsCreated feed rounds '
       '(brand: ${feedBrandId ?? 'none'}, duplicate: $isDuplicate)',
     );
+    if (!isDuplicate) {
+      unawaited(AnalyticsService.instance.logPondCreated(pondId: pondId));
+    }
     return pondId;
   }
 

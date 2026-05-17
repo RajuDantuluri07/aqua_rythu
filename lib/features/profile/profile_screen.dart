@@ -11,6 +11,8 @@ import 'user_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
 import '../admin/payment_debug_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../core/utils/logger.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -366,6 +368,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             _sectionLabel('ACCOUNT'),
             _sectionCard([
               _menuItem(
+                icon: Icons.bug_report_outlined,
+                label: 'Share Logs',
+                onTap: _shareLogs,
+              ),
+              _menuItem(
                 icon: Icons.logout_rounded,
                 label: 'Sign Out',
                 labelColor: const Color(0xFFE53935),
@@ -394,6 +401,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _shareLogs() async {
+    final file = await AppLogger.getLogFile();
+    if (file == null || !await file.exists()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No log file found.')),
+        );
+      }
+      return;
+    }
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      subject: 'AquaRythu App Logs',
     );
   }
 

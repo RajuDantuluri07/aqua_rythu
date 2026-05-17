@@ -1767,7 +1767,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 ],
 
                 /// ── DAILY TASKS TIMELINE ─────────────────────────────────────
-                if (dashboardState.isFeedLoading)
+                if (dashboardState.pondSetupError != null)
+                  _buildPondSetupErrorCard(context, dashboardState.pondSetupError!)
+                else if (dashboardState.isFeedLoading)
                   const Center(
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 40),
@@ -2400,6 +2402,59 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPondSetupErrorCard(BuildContext context, String error) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange.shade700, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Pond setup incomplete',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.orange.shade900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Some required pond information is missing. Please edit the pond to continue feed tracking.',
+            style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Edit Pond'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.orange.shade800,
+                side: BorderSide(color: Colors.orange.shade400),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+          ),
         ],
       ),
     );

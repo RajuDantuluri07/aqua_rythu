@@ -5,6 +5,7 @@ import 'auth_provider.dart';
 import 'forgot_password_dialog.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/logger.dart';
+import '../profile/legal_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -170,7 +171,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         style: TextStyle(
                             color: AppColors.textSecondary, fontSize: 12)),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => LegalScreen.termsAndConditions(),
+                        ),
+                      ),
                       child: const Text("TERMS",
                           style: TextStyle(
                               fontSize: 12, fontWeight: FontWeight.bold)),

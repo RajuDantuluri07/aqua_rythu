@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:aqua_rythu/core/services/payment_service.dart';
 import 'package:aqua_rythu/core/services/subscription_gate.dart';
 import 'package:aqua_rythu/core/services/subscription_service.dart';
 import 'package:aqua_rythu/core/utils/logger.dart';
+import 'package:aqua_rythu/core/services/analytics_service.dart';
 
 // ── Payment phase (T22) ──────────────────────────────────────────────────────
 
@@ -210,6 +212,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     final paymentService = _ref.read(paymentServiceProvider);
     final user = Supabase.instance.client.auth.currentUser;
 
+    unawaited(AnalyticsService.instance.logSubscriptionUpgradeTapped(planId: plan.id));
+
     // Phase 1: Creating order
     state = state.copyWith(
       paymentPhase: PaymentPhase.creatingOrder,
@@ -331,6 +335,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
       // Verified — clear pending and activate PRO
       await _clearPendingVerification();
+      unawaited(AnalyticsService.instance.logSubscriptionPurchased(
+        planId: pending.planType, price: pending.price,
+      ));
       state = state.copyWith(
         currentPlan: PlanType.pro,
         paymentPhase: PaymentPhase.success,

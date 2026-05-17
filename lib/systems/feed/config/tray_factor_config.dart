@@ -28,7 +28,7 @@ class TrayFactorConfig {
     empty: 0.15,
     light: 0.0,
     medium: -0.20,
-    heavy: -0.35,
+    heavy: -0.286,
   );
 
   /// Validate that all factors are within reasonable bounds

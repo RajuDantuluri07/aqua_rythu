@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
+import 'analytics_service.dart';
 
 class SamplingService {
   final _supabase = Supabase.instance.client;
@@ -56,6 +58,9 @@ class SamplingService {
     AppLogger.info(
       'SamplingService.addSampling: pond $pondId DOC $doc ABW ${averageBodyWeight.toStringAsFixed(1)}g',
     );
+    unawaited(AnalyticsService.instance.logSamplingAdded(
+      pondId: pondId, doc: doc, abwG: averageBodyWeight,
+    ));
   }
 
   Future<List<Map<String, dynamic>>> fetchSamplings(String pondId) async {

@@ -15,8 +15,9 @@
 *.iws
 .idea/
 
-# VS Code
+# VS Code — only settings.json is intentionally tracked (no secrets)
 .vscode/launch.json
+.vscode/*.code-snippets
 
 # Flutter/Dart/Pub
 build/
@@ -46,5 +47,11 @@ windows/flutter/ephemeral/
 # Linux
 linux/flutter/ephemeral/
 
-# Supabase / Secrets (Future proofing)
+# Secrets — never commit these
 .env
+.env.local
+.env.production
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
