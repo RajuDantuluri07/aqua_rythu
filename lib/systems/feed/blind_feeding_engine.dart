@@ -95,11 +95,11 @@ class BlindFeedingEngine {
     // ── CALCULATION ────────────────────────────────────────────────────────
     double feedPerLakh;
 
-    if (seedType.toLowerCase() == 'nursery') {
-      // Nursery feed: Use nursery table values (higher feed for bigger shrimp)
+    if (seedType.toLowerCase() == 'nursery' && !isNurseryTransition) {
+      // Nursery feed (DOC 1–10): use nursery table (heavier shrimp from hatchery)
       feedPerLakh = _getNurseryFeedPerLakh(safeDOC);
     } else {
-      // Hatchery feed: Use incremental formula (smaller shrimp)
+      // Hatchery feed — also used for nursery DOC > 10 (post-transition)
       final increment = _calculateCumulativeIncrement(safeDOC);
       feedPerLakh = _baseFeed + increment;
     }

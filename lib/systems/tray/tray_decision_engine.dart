@@ -251,11 +251,22 @@ class TrayDecisionEngine {
       }
     }
 
-    // Dampen consecutive increase: +5% → +3% (BUG-09 fix).
+    // Dampen the second consecutive INCREASE to +3% (prevents overreaction).
+    // On the third+ consecutive INCREASE, reset to full +5% — sustained empty
+    // trays indicate genuine hunger, not a single-session spike.
     if (action == 'INCREASE' && validLogs.length > _maxRounds) {
       final prevWindow = validLogs.skip(_maxRounds).take(_maxRounds).toList();
-      if (_avgScore(prevWindow) >= 0.6) {
-        action = 'INCREASE_DAMPENED';
+      if (_actionFromScore(_avgScore(prevWindow)) == 'INCREASE') {
+        final twoAgoWindow =
+            validLogs.skip(_maxRounds * 2).take(_maxRounds).toList();
+        final twoAgoAction = twoAgoWindow.isEmpty
+            ? 'MAINTAIN'
+            : _actionFromScore(_avgScore(twoAgoWindow));
+        if (twoAgoAction != 'INCREASE') {
+          // Exactly the second consecutive INCREASE → dampen once
+          action = 'INCREASE_DAMPENED';
+        }
+        // Third+ consecutive INCREASE → full +5% (sustained demand)
       }
     }
 

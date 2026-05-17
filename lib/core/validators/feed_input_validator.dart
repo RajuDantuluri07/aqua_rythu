@@ -111,8 +111,14 @@ class FeedInputValidator {
     }
 
     // ── mortality ────────────────────────────────────────────────────────────
+    // NOTE: FeedInput is immutable so we can only warn here.  Callers must
+    // clamp mortality to [0, seedCount] before constructing FeedInput.
+    // FeedInputBuilder.fromDB() is responsible for this clamp.
     if (input.mortality < 0) {
-      AppLogger.warn('FeedInput.mortality=${input.mortality} is negative — treating as 0.');
+      AppLogger.error(
+        'FeedInput.mortality=${input.mortality} is negative — data entry error. '
+        'FCR biomass will overcount if FCR engine is enabled.',
+      );
     } else if (input.mortality > input.seedCount) {
       AppLogger.error(
         'FeedInput.mortality=${input.mortality} exceeds seedCount=${input.seedCount}. '

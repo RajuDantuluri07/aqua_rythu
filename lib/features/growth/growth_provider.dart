@@ -56,7 +56,7 @@ class GrowthNotifier extends StateNotifier<List<SamplingLog>> {
 }
 
 final growthProvider =
-    StateNotifierProvider.family<GrowthNotifier, List<SamplingLog>, String>(
+    StateNotifierProvider.family.autoDispose<GrowthNotifier, List<SamplingLog>, String>(
         (ref, pondId) {
   return GrowthNotifier(pondId);
 });

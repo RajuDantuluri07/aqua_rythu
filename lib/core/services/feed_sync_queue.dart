@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/feed_pending_operation.dart';
@@ -38,10 +39,11 @@ class FeedSyncQueue {
   factory FeedSyncQueue() => _instance;
   FeedSyncQueue._internal();
 
-  bool _isProcessing = false;
+  // Completer-based mutex: concurrent callers await the same future instead of
+  // spawning a second processing run. Stale lock detection handles the case
+  // where the app was suspended between acquire and finally-block release.
+  Completer<void>? _activeProcess;
   DateTime? _processStartedAt;
-  // If a process run is older than this, consider it stale (e.g. process
-  // resumed after being suspended mid-run without hitting the finally block).
   static const _processTimeoutSeconds = 120;
   final _rng = Random.secure();
 
@@ -62,19 +64,23 @@ class FeedSyncQueue {
   }
 
   /// Process all pending operations using [sink] (typically FeedService).
-  /// Re-entrant safe: concurrent calls are no-ops until the first completes.
+  /// Re-entrant safe: concurrent callers await the same Completer rather than
+  /// spawning a second run. A stale lock (> _processTimeoutSeconds) is reset
+  /// so the queue isn't permanently stuck after an OOM suspend.
   Future<void> processQueue(FeedCompletionSink sink) async {
-    // Reset stale lock: if a previous run started more than _processTimeoutSeconds
-    // ago and never hit the finally block (e.g. process resumed after OOM suspend),
-    // clear the flag so the queue isn't permanently stuck.
-    if (_isProcessing) {
+    final existing = _activeProcess;
+    if (existing != null && !existing.isCompleted) {
       final started = _processStartedAt;
       final stale = started != null &&
           DateTime.now().difference(started).inSeconds > _processTimeoutSeconds;
-      if (!stale) return;
-      AppLogger.warn('FeedSyncQueue: clearing stale _isProcessing lock');
+      if (!stale) {
+        return existing.future; // join the in-flight run
+      }
+      AppLogger.warn('FeedSyncQueue: clearing stale lock');
+      existing.complete(); // unblock any waiters before we reset
     }
-    _isProcessing = true;
+    final completer = Completer<void>();
+    _activeProcess = completer;
     _processStartedAt = DateTime.now();
 
     try {
@@ -131,8 +137,10 @@ class FeedSyncQueue {
       }
     } catch (e) {
       AppLogger.error('FeedSyncQueue.processQueue unexpected error: $e');
+      completer.completeError(e);
+      return;
     } finally {
-      _isProcessing = false;
+      if (!completer.isCompleted) completer.complete();
     }
   }
 
@@ -184,7 +192,13 @@ class FeedSyncQueue {
 
   Future<void> _saveAll(
       SharedPreferences prefs, List<FeedPendingOperation> ops) async {
-    await prefs.setStringList(
-        _storageKey, ops.map((o) => o.toJsonString()).toList());
+    try {
+      await prefs.setStringList(
+          _storageKey, ops.map((o) => o.toJsonString()).toList());
+    } catch (e) {
+      AppLogger.error(
+          'CRITICAL: FeedSyncQueue _saveAll failed — pending ops may be lost on restart: $e');
+      rethrow;
+    }
   }
 }

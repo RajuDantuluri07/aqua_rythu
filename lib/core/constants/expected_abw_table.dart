@@ -43,7 +43,9 @@ double getExpectedABW(int doc) {
   for (int i = 0; i < keys.length - 1; i++) {
     final k1 = keys[i], k2 = keys[i + 1];
     if (doc > k1 && doc < k2) {
-      final t = (doc - k1) / (k2 - k1);
+      final span = k2 - k1;
+      if (span == 0) continue; // Guard: duplicate keys can't produce a valid segment
+      final t = (doc - k1) / span;
       return expectedAbwTable[k1]! + t * (expectedAbwTable[k2]! - expectedAbwTable[k1]!);
     }
   }

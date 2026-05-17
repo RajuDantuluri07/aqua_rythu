@@ -39,8 +39,9 @@ class FeedBrandRepository {
           .select()
           .eq('id', brandId)
           .eq('active', true)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return FeedBrand.fromJson(response);
     } catch (e) {
       return null;
@@ -55,8 +56,9 @@ class FeedBrandRepository {
           .eq('brand', brandName)
           .eq('active', true)
           .limit(1)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return FeedBrand.fromJson(response);
     } catch (e) {
       return null;

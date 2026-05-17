@@ -66,7 +66,7 @@ final profitServiceProvider = Provider<ProfitService>((ref) {
   return ProfitService();
 });
 
-final profitProvider = StateNotifierProvider.family<ProfitNotifier, AsyncValue<Map<String, dynamic>>, String>(
+final profitProvider = StateNotifierProvider.family.autoDispose<ProfitNotifier, AsyncValue<Map<String, dynamic>>, String>(
   (ref, cropId) {
     final profitService = ref.watch(profitServiceProvider);
     return ProfitNotifier(profitService, cropId);

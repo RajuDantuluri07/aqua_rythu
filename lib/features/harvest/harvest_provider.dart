@@ -113,6 +113,6 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
 
 /// ================= PROVIDER =================
 final harvestProvider =
-    StateNotifierProvider.family<HarvestNotifier, List<HarvestEntry>, String>(
+    StateNotifierProvider.family.autoDispose<HarvestNotifier, List<HarvestEntry>, String>(
   (ref, pondId) => HarvestNotifier(pondId),
 );

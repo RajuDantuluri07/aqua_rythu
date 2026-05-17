@@ -443,9 +443,6 @@ class MasterFeedEngine {
     final rawIntegratedFeed = blendResult.blendedFeed;
     double feed = rawIntegratedFeed;
 
-    // ── STEP 3.5: Apply Global Multiplier from Admin Panel ───────────────────
-    feed = feed * feedEngineConfig.globalFeedMultiplier;
-
     // ── STEP 4: Safety Clamp (allow true stop, cap unrealistic spikes) ─────
     const minFeed = 0.0;
     final maxFeed = baseFeedKg * 1.30; // maxFeedFactor default fallback
@@ -477,6 +474,18 @@ class MasterFeedEngine {
     }
     if (maxFeed > 0 && finalFeed > maxFeed) {
       finalFeed = maxFeed;
+    }
+
+    // ── STEP 4.5: Global Multiplier applied AFTER all safety clamps ──────────
+    // Multiplier is an admin override (A/B test, emergency scaling).  Applying
+    // it before the ±30% clamp silently nullified any value > 1.30.  It now
+    // operates on the already-safe finalFeed with only the absolute hard ceiling
+    // as a guard so that emergency +50% instructions actually take effect.
+    if (feedEngineConfig.globalFeedMultiplier != 1.0 && finalFeed > 0) {
+      final densityScale = input.seedCount / 100000.0;
+      final hardCeiling = (densityScale * kAbsoluteMaxFeed).clamp(kAbsoluteMaxFeed, 500.0);
+      finalFeed = (finalFeed * feedEngineConfig.globalFeedMultiplier)
+          .clamp(kAbsoluteMinFeed, hardCeiling);
     }
     final isCriticalStop = finalFeed == 0.0 &&
         (trayFactor == 0.0 || envFactor == 0.0 || rawIntegratedFeed == 0.0);
@@ -807,9 +816,13 @@ class MasterFeedEngine {
     }
 
     // ── CRITICAL WATER QUALITY CHECK ─────────────────────────────────────
-    if (input.dissolvedOxygen < 2.0) {
+    // Threshold aligned with EnvFactorService._criticalDoThreshold (3.5 mg/L).
+    // At DO < 3.5 the env factor returns 0.0 (STOP feeding) — reject here too
+    // so the farmer sees an explicit STOP reason instead of a silent 0 kg result.
+    if (input.dissolvedOxygen < 3.5) {
       return ValidationResult.invalid(
-        'CRITICAL DO: dissolvedOxygen=${input.dissolvedOxygen} mg/L. Below safe threshold.',
+        'CRITICAL DO: dissolvedOxygen=${input.dissolvedOxygen} mg/L '
+        '(< 3.5 mg/L critical threshold). STOP FEEDING — check aerators immediately.',
       );
     }
 

@@ -51,8 +51,9 @@ class ScheduleRepository {
           .from('supplement_schedules')
           .insert(data)
           .select()
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return SupplementSchedule.fromJson(response);
     } catch (_) {
       return null;
@@ -69,8 +70,9 @@ class ScheduleRepository {
           .update(data)
           .eq('id', schedule.id)
           .select()
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return SupplementSchedule.fromJson(response);
     } catch (_) {
       return null;
@@ -110,8 +112,9 @@ class ScheduleRepository {
           .from('supplement_schedule_logs')
           .insert(data)
           .select()
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return SupplementScheduleLog.fromJson(response);
     } catch (_) {
       return null;

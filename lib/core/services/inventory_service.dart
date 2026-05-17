@@ -247,9 +247,9 @@ class InventoryService {
           .from('inventory_stock_view')
           .select('expected_stock')
           .eq('id', itemId)
-          .single();
+          .maybeSingle();
 
-      final stock = (result['expected_stock'] as num?)?.toDouble() ?? 0.0;
+      final stock = (result?['expected_stock'] as num?)?.toDouble() ?? 0.0;
       return stock <= threshold;
     } catch (e) {
       AppLogger.error('Failed to check low stock: $e');
@@ -396,9 +396,9 @@ class InventoryService {
           .from('inventory_items')
           .select('unit')
           .eq('id', itemId)
-          .single();
+          .maybeSingle();
 
-      final inventoryUnit = result['unit'] as String? ?? '';
+      final inventoryUnit = result?['unit'] as String? ?? '';
 
       // Normalize units for comparison
       final normalizedInvUnit = inventoryUnit.toLowerCase().trim();

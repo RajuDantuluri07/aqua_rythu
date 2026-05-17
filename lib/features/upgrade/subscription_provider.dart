@@ -9,6 +9,7 @@ import 'package:aqua_rythu/core/models/subscription_plans.dart';
 import 'package:aqua_rythu/core/services/payment_service.dart';
 import 'package:aqua_rythu/core/services/subscription_gate.dart';
 import 'package:aqua_rythu/core/services/subscription_service.dart';
+import 'package:aqua_rythu/core/utils/logger.dart';
 
 // ── Payment phase (T22) ──────────────────────────────────────────────────────
 
@@ -140,8 +141,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       state = state.copyWith(
         currentPlan: entitlement != null ? PlanType.pro : PlanType.free,
       );
-    } catch (_) {
-      // Silent — user stays FREE; manual restore available.
+    } catch (e) {
+      AppLogger.error('Subscription hydration failed: $e');
+      // User stays FREE; manual restore available via settings.
     }
 
     // T27: If no local pending proof, check the backend — covers reinstalls
@@ -162,8 +164,15 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
           await _savePendingVerification(pending);
           state = state.copyWith(pendingVerification: pending);
         }
-      } catch (_) {}
+      } catch (e) {
+        AppLogger.error('Failed to fetch pending verification from backend: $e');
+      }
     }
+
+    // Always mark hydration complete so the feed engine never times out and
+    // silently falls back to FREE for PRO users on slow networks.
+    state = state.copyWith(isHydrated: true);
+    SubscriptionGate.setHydrated();
   }
 
   // ── Restore purchase ────────────────────────────────────────────────────────
@@ -342,14 +351,18 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_pendingKey, jsonEncode(pending.toJson()));
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.error('Failed to save pending verification: $e');
+    }
   }
 
   Future<void> _clearPendingVerification() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_pendingKey);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.error('Failed to clear pending verification: $e');
+    }
   }
 
   Future<void> _loadPendingVerification() async {
@@ -362,7 +375,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       );
       // Surface the pending state so the UI can show a retry banner
       state = state.copyWith(pendingVerification: pending);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.error('Failed to load pending verification: $e');
+    }
   }
 
 }

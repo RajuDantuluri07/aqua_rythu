@@ -140,10 +140,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   // Lock mechanism to prevent concurrent feed updates
   final Set<String> _updateLocks = <String>{};
 
-  PondDashboardNotifier(this.ref)
+  PondDashboardNotifier(this.ref, String pondId)
       : _controller = PondDashboardController(),
         super(PondDashboardState(
-          selectedPond: "",
+          selectedPond: pondId,
           doc: 1,
           currentFeed: 0.0,
           trayResults: <int, TrayStatus>{},
@@ -152,7 +152,9 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           roundFeedStatus: {},
           isFeedLoading: false,
         )) {
-    // Don't initialize with a default pond, wait for explicit selection
+    if (pondId.isNotEmpty) {
+      Future.microtask(() => _updateStateForPond(pondId));
+    }
   }
 
   // =========================================================
@@ -767,6 +769,6 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 /// =======================
 
 final pondDashboardProvider =
-    StateNotifierProvider<PondDashboardNotifier, PondDashboardState>((ref) {
-  return PondDashboardNotifier(ref);
-});
+    StateNotifierProvider.family.autoDispose<PondDashboardNotifier, PondDashboardState, String>(
+      (ref, pondId) => PondDashboardNotifier(ref, pondId),
+    );

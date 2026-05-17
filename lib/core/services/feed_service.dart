@@ -172,7 +172,10 @@ class FeedService implements FeedCompletionSink {
             'is_manual': true,
           })
           .select('id')
-          .single();
+          .maybeSingle();
+      if (response == null) {
+        throw Exception('insertFeedRound: insert returned no data for pond=$pondId doc=$doc round=$round');
+      }
       return response['id'] as String;
     });
   }

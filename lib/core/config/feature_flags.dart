@@ -19,10 +19,10 @@ class FeatureFlags {
 
   static const bool inventoryEnabled   = true;
   static const bool expenseEnabled     = true;
-  static const bool profitEnabled      = false;
-  static const bool waterEnabled       = false;
-  static const bool supplementsEnabled = false;
-  static const bool harvestEnabled     = false;
+  static const bool profitEnabled      = true;
+  static const bool waterEnabled       = true;
+  static const bool supplementsEnabled = true;
+  static const bool harvestEnabled     = true;
 
   // ─── ALWAYS LAUNCHED ─────────────────────────────────────────────────────
 
@@ -40,7 +40,10 @@ class FeatureFlags {
   // Lets engineers reach unlaunched screens in debug builds.
   // Subscription gating (FeatureGate / SubscriptionGate) is NOT bypassed.
 
-  static const bool enableAllFeaturesForDev = true;
+  static const bool enableAllFeaturesForDev = bool.fromEnvironment(
+    'ENABLE_ALL_FEATURES_DEV',
+    defaultValue: false,
+  );
 
   // ─── ACCESSORS ───────────────────────────────────────────────────────────
 

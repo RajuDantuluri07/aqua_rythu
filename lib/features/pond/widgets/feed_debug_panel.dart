@@ -7,7 +7,8 @@ import '../pond_dashboard_provider.dart';
 /// Hidden debug panel for field validation of feed operations
 /// Activated by tapping 5 times on the app title in debug builds
 class FeedDebugPanel extends ConsumerStatefulWidget {
-  const FeedDebugPanel({super.key});
+  const FeedDebugPanel({super.key, required this.pondId});
+  final String pondId;
 
   @override
   ConsumerState<FeedDebugPanel> createState() => _FeedDebugPanelState();
@@ -28,7 +29,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
     final logs = await FeedDebugLogger.getRecentLogs(count: 20);
 
     // Also fetch actual DB feed values for current pond
-    final pondState = ref.read(pondDashboardProvider);
+    final pondState = ref.read(pondDashboardProvider(widget.pondId));
     final actualDbValues = <int, double?>{};
 
     if (pondState.selectedPond.isNotEmpty) {
@@ -65,7 +66,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
       return const SizedBox.shrink();
     }
 
-    final pondState = ref.watch(pondDashboardProvider);
+    final pondState = ref.watch(pondDashboardProvider(widget.pondId));
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -292,7 +293,7 @@ class _FeedDebugPanelState extends ConsumerState<FeedDebugPanel> {
       );
 
       // Get current state values
-      final pondState = ref.read(pondDashboardProvider);
+      final pondState = ref.read(pondDashboardProvider(widget.pondId));
       final stateRounds = pondState.roundFeedAmounts;
       final stateFinalRounds = pondState.roundFinalFeedAmounts;
 

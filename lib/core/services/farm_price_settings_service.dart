@@ -54,7 +54,7 @@ class FarmPriceSettingsNotifier
   }
 }
 
-final farmPriceSettingsProvider = StateNotifierProvider.family<
+final farmPriceSettingsProvider = StateNotifierProvider.family.autoDispose<
     FarmPriceSettingsNotifier, AsyncValue<FarmPriceSettings>, String>(
   (ref, farmId) =>
       FarmPriceSettingsNotifier(farmId, FarmPriceSettingsService()),

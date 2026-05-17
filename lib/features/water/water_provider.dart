@@ -266,7 +266,7 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
 }
 
 final waterProvider =
-    StateNotifierProvider.family<WaterNotifier, List<WaterLog>, String>(
+    StateNotifierProvider.family.autoDispose<WaterNotifier, List<WaterLog>, String>(
         (ref, pondId) {
   return WaterNotifier(pondId);
 });

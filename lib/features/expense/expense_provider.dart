@@ -151,7 +151,7 @@ final expenseServiceProvider = Provider<ExpenseService>((ref) {
   return ExpenseService();
 });
 
-final expensesProvider = StateNotifierProvider.family<ExpenseNotifier,
+final expensesProvider = StateNotifierProvider.family.autoDispose<ExpenseNotifier,
     AsyncValue<List<Expense>>, String>(
   (ref, cropId) {
     final expenseService = ref.watch(expenseServiceProvider);
@@ -163,7 +163,7 @@ final expensesProvider = StateNotifierProvider.family<ExpenseNotifier,
   },
 );
 
-final expenseSummaryProvider = StateNotifierProvider.family<
+final expenseSummaryProvider = StateNotifierProvider.family.autoDispose<
     ExpenseSummaryNotifier, AsyncValue<Map<String, dynamic>>, String>(
   (ref, cropId) {
     final expenseService = ref.watch(expenseServiceProvider);

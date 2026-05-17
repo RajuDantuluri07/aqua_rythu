@@ -94,8 +94,11 @@ class ExpenseService {
           .from('expenses')
           .insert(expenseData)
           .select()
-          .single();
+          .maybeSingle();
 
+      if (response == null) {
+        throw Exception('Failed to create expense: insert returned no data');
+      }
       AppLogger.info('Insert result: $response');
       AppLogger.info('Created expense: ${response['id']}');
       return response['id'].toString();

@@ -37,8 +37,11 @@ class FarmService {
             'user_id': user.id,
           })
           .select()
-          .single();
+          .maybeSingle();
 
+      if (response == null) {
+        throw Exception('Failed to create farm: insert returned no data');
+      }
       return response['id'].toString();
     } catch (e) {
       throw Exception('Failed to create farm: $e');

@@ -69,9 +69,10 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   late AnimationController _pulseController;
   bool _showFeedScheduleTip = false;
   int _debugTapCount = 0;
-  // Flag to prevent repeated anchor feed dialog popup
   bool _anchorFeedDialogShown = false;
   final _scheduleRepo = ScheduleRepository();
+  // Current pond key for the .family provider — updated via _setSelectedPond().
+  String _selectedPondId = '';
 
   @override
   void initState() {
@@ -81,6 +82,11 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       duration: const Duration(milliseconds: 700),
     );
     _checkFeedScheduleTip();
+  }
+
+  void _setSelectedPond(String pondId) {
+    if (!mounted || _selectedPondId == pondId || pondId.isEmpty) return;
+    setState(() => _selectedPondId = pondId);
   }
 
   /// Secret 5-tap trigger → opens the Feed Engine Debug dashboard.
@@ -508,7 +514,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     Map<int, bool> trayDone = const {},
   ]) {
     final config = getFeedConfig(doc);
-    final dashboardState = ref.watch(pondDashboardProvider);
+    final dashboardState = ref.watch(pondDashboardProvider(_selectedPondId));
     final roundFeedStatus = dashboardState.roundFeedStatus;
 
     // Get tray logs to retrieve individual tray statuses per round
@@ -583,7 +589,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         onMarkDone = () async {
           final scaffoldContext = context;
           try {
-            await ref.read(pondDashboardProvider.notifier).markFeedDone(r);
+            await ref.read(pondDashboardProvider(_selectedPondId).notifier).markFeedDone(r);
             // Show success message
             if (scaffoldContext.mounted) {
               ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -763,7 +769,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     if (isLocked) {
       return;
     }
-    final selectedPond = ref.read(pondDashboardProvider).selectedPond;
+    final selectedPond = _selectedPondId;
     final doc = ref.read(docProvider(selectedPond));
 
     final result = await Navigator.push(
@@ -782,7 +788,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
 
     if (result != null) {
-      ref.read(pondDashboardProvider.notifier).logTray(round);
+      ref.read(pondDashboardProvider(selectedPond).notifier).logTray(round);
     }
   }
 
@@ -791,7 +797,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     if (isLocked) {
       return null;
     }
-    final selectedPond = ref.read(pondDashboardProvider).selectedPond;
+    final selectedPond = _selectedPondId;
     final doc = ref.read(docProvider(selectedPond));
 
     final result = await Navigator.push(
@@ -810,7 +816,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
 
     if (result != null) {
-      ref.read(pondDashboardProvider.notifier).logTray(round);
+      ref.read(pondDashboardProvider(selectedPond).notifier).logTray(round);
     }
     return result;
   }
@@ -884,7 +890,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           TextButton(
             onPressed: () {
               ref
-                  .read(pondDashboardProvider.notifier)
+                  .read(pondDashboardProvider(_selectedPondId).notifier)
                   .clearNeedsAnchorFeedInput();
               Navigator.pop(dialogCtx);
             },
@@ -894,9 +900,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
             onPressed: () {
               final val = double.tryParse(ctrl.text.trim());
               if (val != null && val > 0) {
-                ref.read(pondDashboardProvider.notifier).updateAnchorFeed(val);
+                ref.read(pondDashboardProvider(_selectedPondId).notifier).updateAnchorFeed(val);
                 ref
-                    .read(pondDashboardProvider.notifier)
+                    .read(pondDashboardProvider(_selectedPondId).notifier)
                     .clearNeedsAnchorFeedInput();
                 Navigator.pop(dialogCtx);
               }
@@ -992,8 +998,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final dashboardState = ref.watch(pondDashboardProvider);
-    final selectedPond = dashboardState.selectedPond;
+    // Guard: pondId not yet resolved from route args — show splash.
+    if (_selectedPondId.isEmpty) {
+      // Resolve from route args on the first frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final route = ModalRoute.of(context);
+        final args = route?.settings.arguments as String?;
+        if (args != null && args.isNotEmpty) {
+          _setSelectedPond(args);
+        } else {
+          final ponds = ref.read(farmProvider).currentFarm?.ponds ?? [];
+          if (ponds.isNotEmpty) _setSelectedPond(ponds.first.id);
+        }
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final dashboardState = ref.watch(pondDashboardProvider(_selectedPondId));
+    final selectedPond = _selectedPondId;
     final today = ref.watch(todayProvider);
     final oneWeekAgo = ref.watch(oneWeekAgoProvider);
     final isPro = ref.watch(subscriptionProvider).isPro;
@@ -1006,9 +1029,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         .toList();
 
     // Notify user when feed plan was silently regenerated (auto-recovery)
-    ref.listen<PondDashboardState>(pondDashboardProvider, (previous, next) {
+    ref.listen<PondDashboardState>(pondDashboardProvider(_selectedPondId), (previous, next) {
       if (next.feedAutoRecovered && !(previous?.feedAutoRecovered ?? false)) {
-        ref.read(pondDashboardProvider.notifier).clearAutoRecoveredFlag();
+        ref.read(pondDashboardProvider(_selectedPondId).notifier).clearAutoRecoveredFlag();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1045,7 +1068,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           currentDoc <= 30 &&
           !_anchorFeedDialogShown) {
         _anchorFeedDialogShown = true;
-        ref.read(pondDashboardProvider.notifier).clearNeedsAnchorFeedInput();
+        ref.read(pondDashboardProvider(_selectedPondId).notifier).clearNeedsAnchorFeedInput();
         // Use post-frame callback to avoid showing dialog during build
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -1058,7 +1081,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       // The current session is unaffected, but if the app restarts before
       // connectivity is restored the round will be locked again.
       if (next.trayPersistFailed && !(previous?.trayPersistFailed ?? false)) {
-        ref.read(pondDashboardProvider.notifier).clearTrayPersistFailedFlag();
+        ref.read(pondDashboardProvider(_selectedPondId).notifier).clearTrayPersistFailedFlag();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1083,23 +1106,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       }
     });
 
-    // Safe argument handling — provider is the single source of truth for feed data
+    // Handle route-argument pond switches (e.g. deep link or back-navigation).
+    // _setSelectedPond is idempotent — safe to call every build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final route = ModalRoute.of(context);
-      final args = route?.settings.arguments as String?;
-      if (args != null && args.isNotEmpty && args != selectedPond) {
-        ref.read(pondDashboardProvider.notifier).selectPond(args);
-      } else if (selectedPond.isEmpty) {
-        // Auto-select first pond (e.g. after first pond creation redirect)
-        final ponds = ref.read(farmProvider).currentFarm?.ponds ?? [];
-        if (ponds.isNotEmpty) {
-          ref.read(pondDashboardProvider.notifier).selectPond(ponds.first.id);
-        }
-      } else if (selectedPond.isNotEmpty &&
-          dashboardState.roundFeedAmounts.isEmpty &&
-          !dashboardState.isFeedLoading) {
-        ref.read(pondDashboardProvider.notifier).loadTodayFeed(selectedPond);
+      final args = ModalRoute.of(context)?.settings.arguments as String?;
+      if (args != null && args.isNotEmpty && args != _selectedPondId) {
+        _setSelectedPond(args);
       }
     });
 
@@ -1519,9 +1532,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
                       return GestureDetector(
                         onTap: () {
-                          ref
-                              .read(pondDashboardProvider.notifier)
-                              .selectPond(pond.id);
+                          _setSelectedPond(pond.id);
                         },
                         onLongPress: () {
                           if (hasFeed || hasHarvest) {

@@ -28,8 +28,11 @@ class HarvestService {
                 DateTime.now().toIso8601String().split('T')[0],
           })
           .select()
-          .single();
+          .maybeSingle();
 
+      if (response == null) {
+        throw Exception('Failed to create harvest: insert returned no data');
+      }
       AppLogger.info('Created harvest: ${response['id']}');
       return response['id'].toString();
     } catch (e) {

@@ -100,7 +100,7 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
     ref.read(growthProvider(widget.pondId).notifier).clearLogs();
     ref.read(supplementProvider.notifier).clearForPond(widget.pondId);
     ref.read(supplementLogProvider.notifier).clearForPond(widget.pondId);
-    ref.read(pondDashboardProvider.notifier).resetPondState(widget.pondId);
+    ref.read(pondDashboardProvider(widget.pondId).notifier).resetPondState(widget.pondId);
 
     if (!mounted) return;
     Navigator.pop(context);
