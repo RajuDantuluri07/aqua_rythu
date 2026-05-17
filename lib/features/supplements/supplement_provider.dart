@@ -1,7 +1,13 @@
 // lib/features/supplements/supplement_provider.dart
 
+import 'dart:async' show unawaited;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
+import 'package:aqua_rythu/core/models/supplement_schedule_log.dart';
+import 'package:aqua_rythu/core/repositories/schedule_repository.dart';
+import 'package:aqua_rythu/core/services/inventory_service.dart';
+import 'package:aqua_rythu/core/utils/logger.dart';
 
 enum SupplementStatus { upcoming, active, completed }
 
@@ -324,11 +330,11 @@ class Supplement {
 }
 
 /// ---------------------------------------------------
-/// 📦 LOG MODEL (History Tracking)
+/// 📦 LOG MODEL (Application History — DB-backed)
 /// ---------------------------------------------------
 class SupplementLog {
   final String id;
-  final String supplementId;
+  final String supplementId; // supplement_schedule.id
   final String pondId;
   final String? pondName;
   final DateTime timestamp;
@@ -357,6 +363,33 @@ class SupplementLog {
     this.scheduledAt,
   });
 
+  /// Build from the DB-persisted SupplementScheduleLog row.
+  factory SupplementLog.fromDbLog(SupplementScheduleLog dbLog) {
+    final items = dbLog.appliedItems.map(CalculatedItem.fromJson).toList();
+    SupplementType? type;
+    if (dbLog.feedRound != null) {
+      type = SupplementType.feedMix;
+    } else if (dbLog.inputUnit == 'acre') {
+      type = SupplementType.waterMix;
+    }
+
+    return SupplementLog(
+      id: dbLog.id,
+      supplementId: dbLog.supplementScheduleId,
+      pondId: dbLog.pondId ?? '',
+      timestamp: dbLog.createdAt,
+      appliedItems: items,
+      supplementName: dbLog.supplementName,
+      scheduledTime: dbLog.feedRound,
+      supplementType: type,
+      feedRound: dbLog.feedRound != null
+          ? int.tryParse(dbLog.feedRound!.replaceAll(RegExp(r'[^0-9]'), ''))
+          : null,
+      inputValue: dbLog.inputValue,
+      inputUnit: dbLog.inputUnit,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'supplementId': supplementId,
@@ -372,100 +405,99 @@ class SupplementLog {
         'inputUnit': inputUnit,
         'scheduledAt': scheduledAt?.toIso8601String(),
       };
-
-  factory SupplementLog.fromJson(Map<String, dynamic> json) {
-    return SupplementLog(
-      id: json['id'],
-      supplementId: json['supplementId'],
-      pondId: json['pondId'],
-      pondName: json['pondName'],
-      timestamp: json['timestamp'] != null
-          ? DateTime.tryParse(json['timestamp']) ?? DateTime.now()
-          : DateTime.now(),
-      appliedItems: (json['appliedItems'] as List? ?? const [])
-          .map((item) =>
-              CalculatedItem.fromJson(Map<String, dynamic>.from(item)))
-          .toList(),
-      supplementName: json['supplementName'],
-      scheduledTime: json['scheduledTime'],
-      supplementType: () {
-        try {
-          return json['supplementType'] != null
-              ? SupplementType.values.byName(json['supplementType'] as String)
-              : null;
-        } catch (_) {
-          return null;
-        }
-      }(),
-      feedRound: json['feedRound'],
-      inputValue: (json['inputValue'] as num?)?.toDouble(),
-      inputUnit: json['inputUnit'],
-      scheduledAt: json['scheduledAt'] != null
-          ? DateTime.tryParse(json['scheduledAt'])
-          : null,
-    );
-  }
 }
 
-class SupplementLogNotifier extends StateNotifier<List<SupplementLog>> {
-  SupplementLogNotifier() : super([]);
+/// ---------------------------------------------------
+/// 🎮 DB-BACKED LOG NOTIFIER (family by pondId)
+/// ---------------------------------------------------
+class SupplementLogNotifier extends StateNotifier<AsyncValue<List<SupplementLog>>> {
+  final String pondId;
+  final ScheduleRepository _repo;
+  final InventoryService _inventoryService;
+  final _supabase = Supabase.instance.client;
 
-  List<Map<String, dynamic>> toJsonList() {
-    return state.map((log) => log.toJson()).toList();
+  SupplementLogNotifier(this.pondId, this._repo, this._inventoryService)
+      : super(const AsyncValue.loading()) {
+    _loadFromDb();
   }
 
-  void replaceAll(List<SupplementLog> logs) {
-    state = [...logs]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  Future<void> _loadFromDb() async {
+    if (pondId.isEmpty) {
+      state = const AsyncValue.data([]);
+      return;
+    }
+    try {
+      final dbLogs = await _repo.fetchLogsByPond(pondId);
+      final logs = dbLogs.map(SupplementLog.fromDbLog).toList();
+      state = AsyncValue.data(logs);
+    } catch (e, st) {
+      AppLogger.error('SupplementLogNotifier: failed to load for pond $pondId', e);
+      state = AsyncValue.error(e, st);
+    }
   }
 
-  void hydrateFromJson(List<dynamic> records) {
-    replaceAll(
-      records
-          .map((record) =>
-              SupplementLog.fromJson(Map<String, dynamic>.from(record as Map)))
-          .toList(),
-    );
-  }
+  Future<void> reload() => _loadFromDb();
 
-  void logApplication({
-    String? id,
+  /// Persist an application log to the DB and update in-memory state.
+  /// Pass [farmId] to trigger a best-effort inventory deduction for each item.
+  Future<void> logApplication({
     required String supplementId,
-    required String pondId,
+    required String supplementName,
     required List<CalculatedItem> items,
-    String? pondName,
-    String? supplementName,
-    String? scheduledTime,
-    SupplementType? supplementType,
-    int? feedRound,
+    required SupplementType supplementType,
+    String? farmId,
+    String? feedRound,
     double? inputValue,
     String? inputUnit,
-    DateTime? scheduledAt,
-  }) {
-    final log = SupplementLog(
-      id: id ?? '${DateTime.now().millisecondsSinceEpoch}_$pondId',
-      supplementId: supplementId,
+    String? remarks,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    final now = DateTime.now();
+
+    final dbLog = SupplementScheduleLog(
+      id: '',
+      supplementScheduleId: supplementId,
       pondId: pondId,
-      pondName: pondName,
-      timestamp: DateTime.now(),
-      appliedItems: items,
       supplementName: supplementName,
-      scheduledTime: scheduledTime,
-      supplementType: supplementType,
+      appliedDate: now,
       feedRound: feedRound,
+      status: 'applied',
+      remarks: remarks,
+      appliedItems: items.map((i) => i.toJson()).toList(),
       inputValue: inputValue,
       inputUnit: inputUnit,
-      scheduledAt: scheduledAt,
+      createdBy: user?.id,
+      createdAt: now,
     );
-    state = [...state, log];
+
+    try {
+      final saved = await _repo.insertLog(dbLog);
+      final uiLog = SupplementLog.fromDbLog(saved);
+      final current = state.valueOrNull ?? [];
+      state = AsyncValue.data([uiLog, ...current]);
+    } catch (e) {
+      AppLogger.error('SupplementLogNotifier.logApplication failed: $e');
+      rethrow;
+    }
+
+    // Best-effort inventory deduction — failures are logged but do not bubble up.
+    if (farmId != null && farmId.isNotEmpty) {
+      for (final item in items) {
+        unawaited(
+          _inventoryService.recordSupplementConsumption(
+            farmId, item.name, item.quantity, item.unit,
+          ),
+        );
+      }
+    }
   }
 
   bool hasFeedLogForRoundOnDate({
-    required String pondId,
     required int round,
     required DateTime date,
   }) {
-    return state.any((log) =>
-        log.pondId == pondId &&
+    final logs = state.valueOrNull ?? [];
+    return logs.any((log) =>
         log.supplementType == SupplementType.feedMix &&
         log.feedRound == round &&
         log.timestamp.year == date.year &&
@@ -474,35 +506,27 @@ class SupplementLogNotifier extends StateNotifier<List<SupplementLog>> {
   }
 
   bool hasWaterLogForSupplementOnDate({
-    required String pondId,
     required String supplementId,
     required DateTime date,
   }) {
-    return state.any((log) =>
-        log.pondId == pondId &&
+    final logs = state.valueOrNull ?? [];
+    return logs.any((log) =>
         log.supplementId == supplementId &&
         log.supplementType == SupplementType.waterMix &&
         log.timestamp.year == date.year &&
         log.timestamp.month == date.month &&
         log.timestamp.day == date.day);
   }
-
-  void removeLog(String logId) {
-    state = state.where((l) => l.id != logId).toList();
-  }
-
-  void clearForPond(String pondId) {
-    state = state.where((log) => log.pondId != pondId).toList();
-  }
 }
 
-final supplementLogProvider =
-    StateNotifierProvider<SupplementLogNotifier, List<SupplementLog>>((ref) {
-  return SupplementLogNotifier();
-});
+final supplementLogProvider = StateNotifierProvider.family
+    .autoDispose<SupplementLogNotifier, AsyncValue<List<SupplementLog>>, String>(
+  (ref, pondId) =>
+      SupplementLogNotifier(pondId, ScheduleRepository(), InventoryService()),
+);
 
 /// ---------------------------------------------------
-/// 🎮 CONTROLLER / NOTIFIER
+/// 🎮 IN-MEMORY PLAN NOTIFIER (for active session plans)
 /// ---------------------------------------------------
 
 class SupplementNotifier extends StateNotifier<List<Supplement>> {
@@ -546,12 +570,10 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
     );
   }
 
-  // 🔹 CREATE
   void addSupplement(Supplement supplement) {
     state = _sorted([...state, supplement]);
   }
 
-  // 🔹 UPDATE
   void editSupplement(Supplement updated) {
     state = _sorted([
       for (final s in state)
@@ -566,7 +588,6 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
     ];
   }
 
-  // 🔹 DELETE
   void deleteSupplement(String id) {
     state = state.where((s) => s.id != id).toList();
   }
@@ -584,7 +605,6 @@ class SupplementNotifier extends StateNotifier<List<Supplement>> {
         continue;
       }
 
-      // Global plans should remain available to other ponds.
       if (supplement.pondIds.contains('ALL')) {
         updated.add(supplement);
         continue;

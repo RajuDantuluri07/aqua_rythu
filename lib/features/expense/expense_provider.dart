@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/expense_model.dart';
 import '../../core/services/expense_service.dart';
 import '../../core/utils/logger.dart';
+import '../../core/utils/uuid_generator.dart';
 
 class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
   final ExpenseService expenseService;
@@ -43,12 +44,12 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
         amount: amount,
         notes: notes,
         date: date,
+        operationId: generateUuidV4(),
       );
       AppLogger.info('Expense created successfully with ID: $expenseId');
 
-      // Refresh the expenses list with explicit wait
       await loadExpenses();
-      AppLogger.info('Expenses reloaded after creation');
+      ref.invalidate(expenseSummaryProvider(cropId));
     } catch (e, stackTrace) {
       AppLogger.error('Failed to add expense: $e\nStackTrace: $stackTrace');
       rethrow;
@@ -61,6 +62,8 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
     double? amount,
     String? notes,
     DateTime? date,
+    String? pondId,
+    bool changePondId = false,
   }) async {
     try {
       await expenseService.updateExpense(
@@ -69,16 +72,13 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
         amount: amount,
         notes: notes,
         date: date,
+        pondId: pondId,
+        changePondId: changePondId,
       );
 
-      // Refresh the expenses list
       await loadExpenses();
-
-      // Invalidate dependent providers to ensure UI sync
-      ref.invalidate(expensesProvider(cropId));
       ref.invalidate(expenseSummaryProvider(cropId));
     } catch (e) {
-      // Let the UI handle the error
       rethrow;
     }
   }
@@ -87,11 +87,7 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
     try {
       await expenseService.deleteExpense(expenseId);
 
-      // Refresh the expenses list
       await loadExpenses();
-
-      // Invalidate dependent providers to ensure UI sync
-      ref.invalidate(expensesProvider(cropId));
       ref.invalidate(expenseSummaryProvider(cropId));
     } catch (e) {
       // Let the UI handle the error
@@ -173,6 +169,7 @@ final expenseSummaryProvider = StateNotifierProvider.family.autoDispose<
 
 /// Farm-level expense total — keyed by farmId, used by the dashboard metrics provider.
 final farmExpensesTotalProvider =
-    FutureProvider.family<double, String>((ref, farmId) async {
-  return ExpenseService().getTotalExpenses(farmId: farmId);
+    FutureProvider.family.autoDispose<double, String>((ref, farmId) async {
+  final svc = ref.watch(expenseServiceProvider);
+  return svc.getTotalExpenses(farmId: farmId);
 });

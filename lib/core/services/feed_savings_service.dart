@@ -276,7 +276,7 @@ class FeedSavingsService {
   Future<bool> _hasSamplingData(String pondId) async {
     try {
       final response = await _supabase
-          .from('samplings')
+          .from('sampling_logs')
           .select('id')
           .eq('pond_id', pondId)
           .limit(1);
@@ -308,7 +308,7 @@ class FeedSavingsService {
   Future<bool> _hasAnySamplingDataForPonds(List<String> pondIds) async {
     try {
       final response = await _supabase
-          .from('samplings')
+          .from('sampling_logs')
           .select('id')
           .inFilter('pond_id', pondIds)
           .limit(1);

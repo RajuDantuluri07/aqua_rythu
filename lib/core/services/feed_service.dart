@@ -542,29 +542,9 @@ class FeedService implements FeedCompletionSink {
             'feed_logs repaired (pond=$pondId doc=$doc r=$round)');
       }
 
-      final isDuplicate = result['operationDuplicate'] == true ||
-          result['alreadyCompleted'] == true;
-      if (!isDuplicate) {
-        _deductInventoryStock(pondId, amount);
-      }
     });
-  }
-
-  Future<void> _deductInventoryStock(String pondId, double feedKg) async {
-    try {
-      await _withRetry('deductInventoryStock(pond=$pondId)', () async {
-        final row = await supabase
-            .from('ponds')
-            .select('farm_id')
-            .eq('id', pondId)
-            .maybeSingle();
-        final farmId = row?['farm_id'] as String?;
-        if (farmId == null) return;
-        await _inventoryService.recordFeedConsumption(farmId, feedKg);
-      });
-    } catch (e) {
-      AppLogger.error('Inventory deduction failed after retries (non-blocking)', e);
-    }
+    // Inventory deduction is now handled atomically inside the
+    // complete_feed_round_with_log RPC — no separate app-side call needed.
   }
 
   // Phase 5: Feed amount validation — rejects NaN, Infinity, negative, and

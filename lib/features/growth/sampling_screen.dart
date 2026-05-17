@@ -9,6 +9,7 @@ import '../upgrade/subscription_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:aqua_rythu/core/services/sampling_service.dart';
+import '../../core/constants/expected_abw_table.dart';
 import '../../core/utils/logger.dart';
 
 class SamplingScreen extends ConsumerStatefulWidget {
@@ -245,6 +246,36 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     );
   }
 
+  Widget _buildGrowthComparisonBadge(double actualAbw, double expectedAbw) {
+    if (expectedAbw <= 0) return const SizedBox.shrink();
+    final ratio = actualAbw / expectedAbw;
+    final diffPct = ((ratio - 1) * 100).round();
+    final Color bgColor;
+    final String label;
+    if (ratio >= 1.05) {
+      bgColor = const Color(0xFF2BA864);
+      label = '+$diffPct% vs expected';
+    } else if (ratio >= 0.90) {
+      bgColor = Colors.white24;
+      label = diffPct == 0 ? 'On target' : '$diffPct% vs expected';
+    } else {
+      bgColor = const Color(0xFFE05C4B);
+      label = '$diffPct% vs expected';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
   String _getGrowthInsight(
       List<SamplingLog> logs, int currentDoc, double currentAbw) {
     if (logs.isEmpty || logs.first.doc == currentDoc) {
@@ -290,7 +321,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
     if (doc > 60) survival = 0.90;
 
     final currentAbw = logs.isNotEmpty ? logs.first.averageBodyWeight : 0.0;
-    const targetAbw = 5.0; // Target ABW at this DOC (can be improved)
+    final expectedAbw = getExpectedABW(doc);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -355,8 +386,8 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                             decoration: BoxDecoration(
                                 color: Colors.white24,
                                 borderRadius: BorderRadius.circular(10)),
-                            child: const Text("TARGET ${targetAbw}g",
-                                style: TextStyle(
+                            child: Text("EXPECTED ${expectedAbw.toStringAsFixed(1)}g",
+                                style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold)),
@@ -373,6 +404,10 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
                             fontSize: 32,
                             fontWeight: FontWeight.w900),
                       ),
+                      if (currentAbw > 0) ...[
+                        const SizedBox(height: 6),
+                        _buildGrowthComparisonBadge(currentAbw, expectedAbw),
+                      ],
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,

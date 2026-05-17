@@ -132,6 +132,7 @@ class InventoryService {
           .eq('category', 'feed')
           .eq('is_auto_tracked', true)
           .isFilter('crop_id', null)
+          .isFilter('deleted_at', null)
           .maybeSingle();
       return result;
     } catch (e) {
@@ -144,6 +145,14 @@ class InventoryService {
     final feedItem = await getFeedItemForFarm(farmId);
     if (feedItem == null) return;
     final itemId = feedItem['id'] as String;
+
+    final isConsistent = await validateUnitConsistency(itemId, 'kg');
+    if (!isConsistent) {
+      AppLogger.warn(
+          'recordFeedConsumption: unit mismatch for feed item $itemId in farm $farmId — skipping deduction');
+      return;
+    }
+
     final today = DateTime.now().toIso8601String().split('T')[0];
     await supabase.from('inventory_consumption').insert({
       'item_id': itemId,
@@ -217,23 +226,17 @@ class InventoryService {
     }
   }
 
-  // Get today's usage for a feed item
+  // Get today's total usage for an item (SUM pushed to DB, not summed in app).
   Future<double> getTodayUsage(String itemId) async {
     try {
-      final today = DateTime.now();
-      final todayStr = today.toIso8601String().split('T')[0];
+      final todayStr = DateTime.now().toIso8601String().split('T')[0];
       final result = await supabase
           .from('inventory_consumption')
-          .select('quantity_used')
+          .select('quantity_used.sum()')
           .eq('item_id', itemId)
-          .eq('source', 'feed_auto')
-          .eq('date', todayStr);
-
-      double totalUsage = 0.0;
-      for (final row in result) {
-        totalUsage += (row['quantity_used'] as num?)?.toDouble() ?? 0.0;
-      }
-      return totalUsage;
+          .eq('date', todayStr)
+          .maybeSingle();
+      return (result?['quantity_used'] as num?)?.toDouble() ?? 0.0;
     } catch (e) {
       AppLogger.error('Failed to get today usage: $e');
       return 0.0;
@@ -331,13 +334,15 @@ class InventoryService {
     }
   }
 
-  // Delete an inventory item and all related records
+  // Soft-delete an inventory item — sets deleted_at, preserving audit trail.
   Future<void> deleteInventoryItem(String itemId) async {
     try {
-      await supabase.from('inventory_items').delete().eq('id', itemId);
-      AppLogger.info('Deleted inventory item $itemId');
+      await supabase.from('inventory_items').update({
+        'deleted_at': DateTime.now().toIso8601String(),
+      }).eq('id', itemId);
+      AppLogger.info('Soft-deleted inventory item $itemId');
     } catch (e) {
-      AppLogger.error('Failed to delete inventory item: $e');
+      AppLogger.error('Failed to soft-delete inventory item: $e');
       rethrow;
     }
   }
@@ -386,6 +391,53 @@ class InventoryService {
     } catch (e) {
       AppLogger.error('Failed to get stock mismatch: $e');
       return null;
+    }
+  }
+
+  // Deduct supplement consumption from inventory using best-effort name matching.
+  // Logs a warning and skips silently if no matching item is found.
+  Future<void> recordSupplementConsumption(
+    String farmId,
+    String itemName,
+    double quantity,
+    String unit,
+  ) async {
+    try {
+      final results = await supabase
+          .from('inventory_items')
+          .select('id, name, unit')
+          .eq('farm_id', farmId)
+          .ilike('name', '%${itemName.trim()}%')
+          .limit(1);
+
+      if (results.isEmpty) {
+        AppLogger.warn(
+            'recordSupplementConsumption: no inventory item matching "$itemName" in farm $farmId — skipping deduction');
+        return;
+      }
+
+      final item = results.first;
+      final itemId = item['id'] as String;
+      final inventoryUnit = (item['unit'] as String? ?? '').toLowerCase().trim();
+      final consumeUnit = unit.toLowerCase().trim();
+
+      if (inventoryUnit != consumeUnit) {
+        AppLogger.warn(
+            'recordSupplementConsumption: unit mismatch for "$itemName" — inventory=$inventoryUnit, supplement=$consumeUnit — skipping deduction');
+        return;
+      }
+
+      final today = DateTime.now().toIso8601String().split('T')[0];
+      await supabase.from('inventory_consumption').insert({
+        'item_id': itemId,
+        'source': 'supplement_auto',
+        'quantity_used': quantity,
+        'date': today,
+      });
+      AppLogger.info(
+          'Deducted $quantity $unit of "$itemName" from inventory (farm $farmId)');
+    } catch (e) {
+      AppLogger.error('recordSupplementConsumption failed for "$itemName": $e');
     }
   }
 

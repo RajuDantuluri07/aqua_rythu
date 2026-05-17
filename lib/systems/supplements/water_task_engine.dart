@@ -24,6 +24,7 @@ class WaterTaskEngine {
 
     return plans.where((p) {
       if (p.type != SupplementType.waterMix || p.date == null) return false;
+      if (p.isPaused) return false;
       return p.isActiveOnDate(normalizedToday);
     }).expand((plan) {
       final timeSlot = plan.effectiveWaterTime ?? '';

@@ -1,4 +1,5 @@
 // ignore_for_file: unused_element
+import 'dart:async' show unawaited;
 import 'package:aqua_rythu/core/services/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
@@ -229,6 +230,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   bool _logFeedSupplementApplication({
     required String pondId,
     required String pondName,
+    required String farmId,
     required int round,
     required double feedQty,
     required List<Supplement> activePlansToday,
@@ -237,8 +239,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       return false;
     }
     final alreadyLogged =
-        ref.read(supplementLogProvider.notifier).hasFeedLogForRoundOnDate(
-              pondId: pondId,
+        ref.read(supplementLogProvider(pondId).notifier).hasFeedLogForRoundOnDate(
               round: round,
               date: DateTime.now(),
             );
@@ -264,17 +265,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         continue;
       }
       loggedAny = true;
-      ref.read(supplementLogProvider.notifier).logApplication(
-            supplementId: plan.id,
-            pondId: pondId,
-            pondName: pondName,
-            items: appliedItems,
-            supplementName: plan.goal != null ? plan.name : plan.name,
-            supplementType: SupplementType.feedMix,
-            feedRound: round,
-            inputValue: feedQty,
-            inputUnit: 'kg',
-          );
+      unawaited(
+        ref.read(supplementLogProvider(pondId).notifier).logApplication(
+              supplementId: plan.id,
+              supplementName: plan.name,
+              items: appliedItems,
+              supplementType: SupplementType.feedMix,
+              farmId: farmId,
+              feedRound: roundKey,
+              inputValue: feedQty,
+              inputUnit: 'kg',
+            ),
+      );
     }
     return loggedAny;
   }
@@ -308,6 +310,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   bool _logWaterSupplementApplication({
     required String pondId,
     required String pondName,
+    required String farmId,
     required double pondArea,
     required Supplement plan,
     required DateTime scheduledAt,
@@ -315,12 +318,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     if (pondArea <= 0) {
       return false;
     }
-    final alreadyLogged =
-        ref.read(supplementLogProvider.notifier).hasWaterLogForSupplementOnDate(
-              pondId: pondId,
-              supplementId: plan.id,
-              date: scheduledAt,
-            );
+    final alreadyLogged = ref
+        .read(supplementLogProvider(pondId).notifier)
+        .hasWaterLogForSupplementOnDate(
+          supplementId: plan.id,
+          date: scheduledAt,
+        );
     if (alreadyLogged) {
       return true;
     }
@@ -330,18 +333,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       return false;
     }
 
-    ref.read(supplementLogProvider.notifier).logApplication(
-          supplementId: plan.id,
-          pondId: pondId,
-          pondName: pondName,
-          items: appliedItems,
-          supplementName: plan.name,
-          scheduledTime: _formatWaterTime(scheduledAt),
-          supplementType: SupplementType.waterMix,
-          inputValue: pondArea,
-          inputUnit: 'acre',
-          scheduledAt: scheduledAt,
-        );
+    unawaited(
+      ref.read(supplementLogProvider(pondId).notifier).logApplication(
+            supplementId: plan.id,
+            supplementName: plan.name,
+            items: appliedItems,
+            supplementType: SupplementType.waterMix,
+            farmId: farmId,
+            inputValue: pondArea,
+            inputUnit: 'acre',
+          ),
+    );
     return true;
   }
 

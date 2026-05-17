@@ -34,7 +34,9 @@ class FeedIntelligenceLayer {
     required FeedInput input,
   }) {
     final observedSignal = curveFeed * trayFactor * envFactor;
-    final hasObserved = input.trayStatuses.isNotEmpty || input.abw != null;
+    // Only count ABW as "observed" if the sample is fresh (≤7 days old).
+    final freshAbw = input.abw != null && input.sampleAgeDays <= 7;
+    final hasObserved = input.trayStatuses.isNotEmpty || freshAbw;
     final observedWeight = hasObserved ? 0.35 : 0.0;
     final curveWeight = 1.0 - observedWeight;
     final blendedFeed = (curveFeed * curveWeight) + (observedSignal * observedWeight);
@@ -43,7 +45,9 @@ class FeedIntelligenceLayer {
       'Curve baseline weight ${(curveWeight * 100).toStringAsFixed(0)}%',
       'Observed signal weight ${(observedWeight * 100).toStringAsFixed(0)}%',
       if (input.trayStatuses.isNotEmpty) 'Tray observations included',
-      if (input.abw != null) 'Sampling observation included',
+      if (freshAbw) 'Sampling observation included',
+      if (input.abw != null && !freshAbw)
+        'Sampling data stale (${input.sampleAgeDays}d) — ignored',
     ];
 
     return FeedBlendResult(
@@ -79,6 +83,9 @@ class FeedIntelligenceLayer {
     if (input.abw == null) {
       score -= 15;
       factors.add('No recent sampling data (-15)');
+    } else if (input.sampleAgeDays > 7) {
+      score -= 10;
+      factors.add('Sampling data stale — ${input.sampleAgeDays}d old (-10)');
     } else {
       factors.add('Sampling data available (+0)');
     }

@@ -261,8 +261,6 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
         return Icons.bolt;
       case ExpenseCategory.diesel:
         return Icons.local_gas_station;
-      case ExpenseCategory.feed:
-        return Icons.water_drop_rounded;
       case ExpenseCategory.seed:
         return Icons.grass_rounded;
       case ExpenseCategory.sampling:

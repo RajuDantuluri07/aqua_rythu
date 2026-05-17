@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense_model.dart';
 import '../utils/logger.dart';
+import '../utils/uuid_generator.dart';
 
 class ExpenseService {
   final supabase = Supabase.instance.client;
@@ -69,12 +70,15 @@ class ExpenseService {
     required double amount,
     String? notes,
     DateTime? date,
+    String? operationId,
   }) async {
     try {
       final user = supabase.auth.currentUser;
       if (user == null) {
         throw Exception('User not logged in');
       }
+
+      final opId = operationId ?? generateUuidV4();
 
       final expenseData = {
         'user_id': user.id,
@@ -86,13 +90,15 @@ class ExpenseService {
         'notes': notes,
         'date': date?.toIso8601String().split('T')[0] ??
             DateTime.now().toIso8601String().split('T')[0],
+        'operation_id': opId,
       };
 
       AppLogger.info('Expense payload: $expenseData');
 
+      // ON CONFLICT on operation_id returns the existing row instead of error.
       final response = await supabase
           .from('expenses')
-          .insert(expenseData)
+          .upsert(expenseData, onConflict: 'operation_id')
           .select()
           .maybeSingle();
 
@@ -347,6 +353,8 @@ class ExpenseService {
     double? amount,
     String? notes,
     DateTime? date,
+    String? pondId,
+    bool changePondId = false,
   }) async {
     try {
       final user = supabase.auth.currentUser;
@@ -360,6 +368,10 @@ class ExpenseService {
       if (notes != null) updateData['notes'] = notes.isEmpty ? null : notes;
       if (date != null) {
         updateData['date'] = date.toIso8601String().split('T')[0];
+      }
+      if (changePondId) {
+        updateData['pond_id'] =
+            pondId != null && pondId.isNotEmpty ? pondId : null;
       }
 
       if (updateData.isEmpty) {

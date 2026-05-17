@@ -155,8 +155,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
     try {
       final now = DateTime.now();
+      final existingId = widget.supplement?.id;
+      final isUpdate = existingId != null && existingId.isNotEmpty;
+
       final schedule = SupplementSchedule(
-        id: widget.supplement?.id ?? '',
+        id: existingId ?? '',
         pondId: widget.pondId,
         farmId: widget.farmId,
         productId: _items.isNotEmpty ? _items.first.productId : null,
@@ -176,30 +179,32 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         updatedAt: now,
       );
 
-      final result = await _scheduleRepo.insertSchedule(schedule);
+      // Edit mode → UPDATE, Create mode → INSERT
+      if (isUpdate) {
+        await _scheduleRepo.updateSchedule(schedule);
+      } else {
+        await _scheduleRepo.insertSchedule(schedule);
+      }
 
       if (!mounted) return;
       setState(() => _isSaving = false);
 
-      if (result != null) {
-        ref.invalidate(supplementSchedulesProvider(widget.pondId));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _selectedType == SupplementType.feedMix
-                  ? "Feed supplement saved"
-                  : "Water treatment saved",
-            ),
-            behavior: SnackBarBehavior.floating,
+      ref.invalidate(supplementSchedulesProvider(widget.pondId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isUpdate
+                ? "Schedule updated"
+                : (_selectedType == SupplementType.feedMix
+                    ? "Feed supplement saved"
+                    : "Water treatment saved"),
           ),
-        );
-        Navigator.pop(context, true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Error saving schedule")),
-        );
-      }
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),

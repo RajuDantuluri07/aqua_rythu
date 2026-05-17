@@ -108,6 +108,7 @@ class TrayService {
         .select()
         .eq('pond_id', pondId)
         .order('date', ascending: false)
-        .order('round_number', ascending: false);
+        .order('round_number', ascending: false)
+        .limit(200);
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/expense_model.dart';
+import '../farm/farm_provider.dart';
 import 'expense_provider.dart';
 
 class EditExpenseScreen extends ConsumerStatefulWidget {
@@ -27,16 +28,17 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
 
   ExpenseCategory _selectedCategory = ExpenseCategory.labour;
   DateTime _selectedDate = DateTime.now();
+  String? _selectedPondId;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize with existing expense data
     _selectedCategory = widget.expense.category;
     _amountController.text = widget.expense.amount.toString();
     _notesController.text = widget.expense.notes ?? '';
     _selectedDate = widget.expense.date;
+    _selectedPondId = widget.expense.pondId;
   }
 
   @override
@@ -78,6 +80,8 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
                 ? null
                 : _notesController.text.trim(),
             date: _selectedDate,
+            pondId: _selectedPondId,
+            changePondId: true,
           );
 
       if (mounted) {
@@ -109,6 +113,12 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final farmState = ref.watch(farmProvider);
+    final ponds = farmState.farms
+        .where((f) => f.id == widget.farmId)
+        .expand((f) => f.ponds)
+        .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Expense'),
@@ -154,6 +164,30 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 16),
+
+              // Pond (optional)
+              DropdownButtonFormField<String?>(
+                value: ponds.any((p) => p.id == _selectedPondId)
+                    ? _selectedPondId
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Pond (Optional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.water),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('No specific pond'),
+                  ),
+                  ...ponds.map((p) => DropdownMenuItem<String?>(
+                        value: p.id,
+                        child: Text(p.name),
+                      )),
+                ],
+                onChanged: (value) => setState(() => _selectedPondId = value),
               ),
               const SizedBox(height: 16),
 

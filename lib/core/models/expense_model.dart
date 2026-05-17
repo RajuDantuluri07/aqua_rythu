@@ -2,7 +2,6 @@ enum ExpenseCategory {
   labour('labour', 'Labour'),
   electricity('electricity', 'Electricity'),
   diesel('diesel', 'Diesel/Oil'),
-  feed('feed', 'Feed / Supplements'),
   seed('seed', 'Seed / PL Cost'),
   sampling('sampling', 'Sampling'),
   other('other', 'Other');
@@ -57,7 +56,7 @@ class Expense {
       notes: map['notes']?.toString(),
       date: map['date'] != null
           ? DateTime.parse(map['date'] as String)
-          : DateTime.utc(1970, 1, 1),
+          : throw FormatException('expense date is null for id: ${map['id']}'),
       createdAt:
           map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
     );

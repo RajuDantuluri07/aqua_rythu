@@ -95,18 +95,16 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
         final bDate = b.type == SupplementType.feedMix ? b.startDate : b.date;
         return (bDate ?? DateTime(2000)).compareTo(aDate ?? DateTime(2000));
       });
-    final logs = ref
-        .watch(supplementLogProvider)
-        .where((log) => log.pondId == widget.pondId)
-        .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final logsAsync = ref.watch(supplementLogProvider(widget.pondId));
+    final logs = logsAsync.valueOrNull ?? [];
     final today = DateTime.now();
     final todayPlans = plans.where((plan) => plan.isActiveOnDate(today)).toList();
     final activePlans = todayPlans.where((plan) => !plan.isPaused).toList();
     final pausedPlans = todayPlans.where((plan) => plan.isPaused).toList();
+    final sortedLogs = [...logs]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final filteredHistory = _filterType == null
-        ? logs
-        : logs.where((log) => log.supplementType == _filterType).toList();
+        ? sortedLogs
+        : sortedLogs.where((log) => log.supplementType == _filterType).toList();
     final schedulesAsync = ref.watch(supplementSchedulesProvider(widget.pondId));
 
     return Scaffold(

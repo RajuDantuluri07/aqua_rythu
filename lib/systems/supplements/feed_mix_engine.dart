@@ -11,7 +11,7 @@ class FeedMixEngine {
       final isFeedType = p.type == SupplementType.feedMix;
       final inDocRange = doc >= p.startDoc && doc <= p.endDoc;
       final matchesRound = p.feedingTimes.contains(round);
-      return isFeedType && inDocRange && matchesRound;
+      return isFeedType && inDocRange && matchesRound && !p.isPaused;
     });
 
     return applicable.expand((plan) {
