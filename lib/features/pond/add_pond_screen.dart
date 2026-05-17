@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../farm/farm_provider.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
+import 'package:aqua_rythu/core/utils/uuid_generator.dart';
 import '../../routes/app_routes.dart';
 import 'enums/seed_type.dart';
 import 'package:aqua_rythu/features/upgrade/widgets/pond_limit_bottom_sheet.dart';
@@ -30,10 +31,14 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   SeedType _seedType = SeedType.hatcherySmall;
   String? _selectedFeedBrandId;
   bool _isLoading = false;
+  late String _operationId;
 
   @override
   void initState() {
     super.initState();
+    // Generated once per screen instance — survives double-tap or retry;
+    // the RPC returns the existing pond on a duplicate call with the same ID.
+    _operationId = generateUuidV4();
   }
 
   @override
@@ -182,6 +187,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           numTrays: _numTrays,
           seedType: _seedType,
           feedBrandId: _selectedFeedBrandId,
+          operationId: _operationId,
         );
 
         // Refresh the provider to sync the new pond from Supabase
