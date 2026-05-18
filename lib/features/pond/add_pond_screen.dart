@@ -106,8 +106,8 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
     if (count < 1000) {
       return "Minimum stocking is 1,000 shrimp";
     }
-    if (count > 500000) {
-      return "Max stocking is 5,00,000. Did you add an extra zero?";
+    if (count > 2500000) {
+      return "Max stocking is 25,00,000. Did you add an extra zero?";
     }
     return null;
   }

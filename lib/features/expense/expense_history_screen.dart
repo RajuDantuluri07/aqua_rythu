@@ -37,23 +37,20 @@ class _ExpenseHistoryScreenState extends ConsumerState<ExpenseHistoryScreen> {
   }
 
   Future<void> _refresh() async {
-    ref.invalidate(expensesProvider(widget.cropId));
-    // Small delay so the loading state is visible on pull-to-refresh.
+    ref.invalidate(farmExpensesListProvider(widget.farmId));
     await Future.delayed(const Duration(milliseconds: 400));
   }
 
   void _openFilter(List<({String id, String name})> ponds) async {
-    final current =
-        ref.read(expenseFilterProvider(widget.cropId));
+    final current = ref.read(farmExpenseFilterProvider(widget.farmId));
     final updated = await ExpenseFilterSheet.show(
       context,
       current: current,
       ponds: ponds,
     );
     if (updated != null && mounted) {
-      ref
-          .read(expenseFilterProvider(widget.cropId).notifier)
-          .state = updated;
+      ref.read(farmExpenseFilterProvider(widget.farmId).notifier).state =
+          updated;
     }
   }
 
@@ -91,9 +88,9 @@ class _ExpenseHistoryScreenState extends ConsumerState<ExpenseHistoryScreen> {
 
     final pondNameById = {for (final p in pondList) p.id: p.name};
 
-    final filter = ref.watch(expenseFilterProvider(widget.cropId));
+    final filter = ref.watch(farmExpenseFilterProvider(widget.farmId));
     final expensesAsync =
-        ref.watch(filteredExpensesProvider(widget.cropId));
+        ref.watch(filteredFarmExpensesProvider(widget.farmId));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -176,7 +173,7 @@ class _ExpenseHistoryScreenState extends ConsumerState<ExpenseHistoryScreen> {
           ),
           GestureDetector(
             onTap: () => ref
-                .read(expenseFilterProvider(widget.cropId).notifier)
+                .read(farmExpenseFilterProvider(widget.farmId).notifier)
                 .state = const ExpenseFilter(),
             child: Icon(Icons.close, size: 16, color: Colors.blue.shade700),
           ),

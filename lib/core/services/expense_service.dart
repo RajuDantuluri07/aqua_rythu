@@ -65,7 +65,7 @@ class ExpenseService {
 
   Future<String> createExpense({
     required String farmId,
-    required String cropId,
+    String? cropId,
     String? pondId,
     required ExpenseCategory category,
     required double amount,
@@ -81,14 +81,14 @@ class ExpenseService {
 
       final opId = operationId ?? generateUuidV4();
 
-      final expenseData = {
+      final expenseData = <String, dynamic>{
         'user_id': user.id,
         'farm_id': farmId,
-        'crop_id': cropId,
-        'pond_id': pondId,
+        if (cropId != null) 'crop_id': cropId,
+        if (pondId != null) 'pond_id': pondId,
         'category': category.value,
         'amount': amount,
-        'notes': notes,
+        if (notes != null) 'notes': notes,
         'date': date?.toIso8601String().split('T')[0] ??
             DateTime.now().toIso8601String().split('T')[0],
         'operation_id': opId,

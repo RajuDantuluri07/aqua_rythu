@@ -128,31 +128,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedCropId == null) {
-      if (_loadingCycles) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Loading crop cycles, please wait…')),
-        );
-        return;
-      }
-      if (_activeCycles.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'No active crop found. Start a crop cycle before adding expenses.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      // Defensive: single cycle should have been auto-selected in _loadData.
-      if (_activeCycles.length == 1) {
-        setState(() => _selectedCropId = _activeCycles.first.id);
-      } else {
-        // Multi-crop — the form validator on _buildCropSelector should have
-        // caught this, but bail gracefully if it somehow didn't.
-        return;
-      }
+    // If cycles are still resolving and user hasn't picked one yet, wait.
+    if (_loadingCycles) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading crop info, please wait…')),
+      );
+      return;
     }
 
     final amount = double.tryParse(_amountController.text.trim());
@@ -173,7 +154,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       // without being constrained by the provider family key.
       await ExpenseService().createExpense(
         farmId: widget.farmId,
-        cropId: _selectedCropId!,
+        cropId: _selectedCropId,   // nullable — farm-wide expense if null
         pondId: _selectedPondId,
         category: _selectedCategory,
         amount: amount,
@@ -184,9 +165,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         operationId: generateUuidV4(),
       );
 
-      // Invalidate the provider so any open summary screen refreshes.
-      ref.invalidate(expensesProvider(_selectedCropId!));
-      ref.invalidate(expenseSummaryProvider(_selectedCropId!));
+      // Refresh crop-scoped providers if we know the crop, always refresh farm-level.
+      if (_selectedCropId != null) {
+        ref.invalidate(expensesProvider(_selectedCropId!));
+        ref.invalidate(expenseSummaryProvider(_selectedCropId!));
+      }
+      ref.invalidate(farmExpensesTotalProvider(widget.farmId));
+      ref.invalidate(farmExpensesListProvider(widget.farmId));
 
       if (mounted) {
         Navigator.of(context).pop();

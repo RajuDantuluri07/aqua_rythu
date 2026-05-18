@@ -75,6 +75,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   final _scheduleRepo = ScheduleRepository();
   // Current pond key for the .family provider — updated via _setSelectedPond().
   String _selectedPondId = '';
+  // Tracks water mix supplement IDs confirmed-applied this session.
+  final Set<String> _appliedWaterScheduleIds = {};
 
   @override
   void initState() {
@@ -361,6 +363,94 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
   }
 
+  // ── Time helpers for water mix positioning ────────────────────────────────
+
+  /// Parses "HH:mm" (24h) → DateTime (today's date + that time). Returns null on failure.
+  DateTime? _parseTime24(String? hhmm) {
+    if (hhmm == null || hhmm.isEmpty) return null;
+    try {
+      final parts = hhmm.split(':');
+      if (parts.length != 2) return null;
+      final today = DateTime.now();
+      return DateTime(today.year, today.month, today.day,
+          int.parse(parts[0]), int.parse(parts[1]));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Parses "06:00 AM" / "04:00 PM" display strings → DateTime (today). Returns null on failure.
+  DateTime? _parseDisplayTime(String display) {
+    try {
+      final parts = display.trim().split(' ');
+      if (parts.length != 2) return null;
+      final timeParts = parts[0].split(':');
+      if (timeParts.length != 2) return null;
+      int hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+      final period = parts[1].toUpperCase();
+      if (period == 'PM' && hour != 12) hour += 12;
+      if (period == 'AM' && hour == 12) hour = 0;
+      final today = DateTime.now();
+      return DateTime(today.year, today.month, today.day, hour, minute);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _markWaterApplied(SupplementSchedule schedule) async {
+    try {
+      final log = SupplementScheduleLog(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        supplementScheduleId: schedule.id,
+        appliedDate: DateTime.now(),
+        feedRound: null,
+        status: 'applied',
+        remarks: null,
+        createdAt: DateTime.now(),
+      );
+      await _scheduleRepo.insertLog(log);
+      if (mounted) {
+        setState(() => _appliedWaterScheduleIds.add(schedule.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${schedule.productName ?? schedule.categoryName ?? 'Water treatment'} applied to pond',
+            ),
+            backgroundColor: const Color(0xFF0D9488),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildWaterMixRoundCard(SupplementSchedule schedule) {
+    final isApplied = _appliedWaterScheduleIds.contains(schedule.id);
+    final parsedTime = _parseTime24(schedule.scheduledTime);
+    final timeDisplay = parsedTime != null
+        ? DateFormat('hh:mm a').format(parsedTime)
+        : 'Water Treatment';
+    return _WaterRoundCard(
+      time: timeDisplay,
+      title: schedule.productName ?? schedule.categoryName ?? 'Water Treatment',
+      items: const [],
+      isApplied: isApplied,
+      onMarkDone: isApplied ? null : () => _markWaterApplied(schedule),
+    );
+  }
+
   /// Returns feed round display cards for scheduled feed rounds.
   /// Uses FeedTimelineCard to show rich round data (amount, status, tray, etc.)
   /// Only the next incomplete round can be marked done; others are disabled.
@@ -565,6 +655,21 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       }
     }
 
+    // Collect active water mix schedules sorted by scheduled time.
+    // Schedules without a scheduledTime are placed after all feed rounds.
+    final waterMixSchedules = todaySchedules
+        .where((s) => s.applicationType == 'water_mix' && s.isActiveOnDate(today))
+        .toList()
+      ..sort((a, b) {
+        final aTime = _parseTime24(a.scheduledTime);
+        final bTime = _parseTime24(b.scheduledTime);
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return aTime.compareTo(bTime);
+      });
+    int waterIdx = 0;
+
     final result = <Widget>[];
     for (final r in visibleRounds) {
       final idx = r - 1;
@@ -572,6 +677,21 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       final time = config.timingsDisplay[idx];
       if (time.startsWith('--')) {
         continue; // skip rounds with no scheduled time for this DOC
+      }
+
+      // Insert water mix cards whose scheduled time falls before this round.
+      final roundDateTime = _parseDisplayTime(time);
+      if (roundDateTime != null) {
+        while (waterIdx < waterMixSchedules.length) {
+          final wm = waterMixSchedules[waterIdx];
+          final wmTime = _parseTime24(wm.scheduledTime);
+          if (wmTime != null && wmTime.isBefore(roundDateTime)) {
+            result.add(_buildWaterMixRoundCard(wm));
+            waterIdx++;
+          } else {
+            break;
+          }
+        }
       }
 
       final amount = roundFeedAmounts[r] ?? 0.0;
@@ -664,6 +784,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           isSmartFeed: doc > 30,
         ),
       );
+    }
+
+    // Insert any remaining water mix cards (after last round or no time set).
+    while (waterIdx < waterMixSchedules.length) {
+      result.add(_buildWaterMixRoundCard(waterMixSchedules[waterIdx]));
+      waterIdx++;
     }
 
     // Edge case: if all rounds filtered out (all zero feed), show message

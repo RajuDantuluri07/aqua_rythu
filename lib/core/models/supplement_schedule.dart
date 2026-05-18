@@ -15,6 +15,10 @@ class SupplementSchedule {
   final String? createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  /// Water mix only: "HH:mm" (24h) — used to position the card in the feed timeline
+  final String? scheduledTime;
+  /// Water mix only: repeat interval in days (null = one-time, 7/10/15/30 = recurring)
+  final int? frequencyDays;
 
   const SupplementSchedule({
     required this.id,
@@ -33,6 +37,8 @@ class SupplementSchedule {
     this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.scheduledTime,
+    this.frequencyDays,
   });
 
   bool get isActive => status == 'active';
@@ -41,9 +47,21 @@ class SupplementSchedule {
     final dateOnly = DateTime(date.year, date.month, date.day);
     final startOnly = DateTime(startDate.year, startDate.month, startDate.day);
     final endOnly = DateTime(endDate.year, endDate.month, endDate.day);
-    return !dateOnly.isBefore(startOnly) &&
-        !dateOnly.isAfter(endOnly) &&
-        isActive;
+
+    if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly) || !isActive) {
+      return false;
+    }
+
+    // Water mix with repeat: only active on days that are exact multiples of
+    // frequencyDays from the start date (e.g., every 7 days).
+    if (applicationType == 'water_mix' &&
+        frequencyDays != null &&
+        frequencyDays! > 0) {
+      final diff = dateOnly.difference(startOnly).inDays;
+      return diff % frequencyDays! == 0;
+    }
+
+    return true;
   }
 
   SupplementSchedule copyWith({
@@ -63,6 +81,8 @@ class SupplementSchedule {
     String? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? scheduledTime,
+    int? frequencyDays,
   }) {
     return SupplementSchedule(
       id: id ?? this.id,
@@ -81,6 +101,8 @@ class SupplementSchedule {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      scheduledTime: scheduledTime ?? this.scheduledTime,
+      frequencyDays: frequencyDays ?? this.frequencyDays,
     );
   }
 
@@ -103,6 +125,8 @@ class SupplementSchedule {
       createdBy: json['created_by'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      scheduledTime: json['scheduled_time'] as String?,
+      frequencyDays: json['frequency_days'] as int?,
     );
   }
 
@@ -123,6 +147,8 @@ class SupplementSchedule {
         'created_by': createdBy,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
+        'scheduled_time': scheduledTime,
+        'frequency_days': frequencyDays,
       };
 
   @override

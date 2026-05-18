@@ -241,7 +241,7 @@ final farmExpensesTotalProvider =
   return svc.getTotalExpenses(farmId: farmId);
 });
 
-// ── History / Filter providers ────────────────────────────────────────────────
+// ── History / Filter providers (crop-scoped) ─────────────────────────────────
 
 /// Active filter for the expense history screen, keyed by cropId.
 final expenseFilterProvider =
@@ -255,6 +255,56 @@ final filteredExpensesProvider =
   (ref, cropId) {
     final filter = ref.watch(expenseFilterProvider(cropId));
     return ref.watch(expensesProvider(cropId)).whenData(
+          (all) => filter.isActive ? all.where(filter.matches).toList() : all,
+        );
+  },
+);
+
+// ── Farm-scoped history providers ─────────────────────────────────────────────
+// Used by ExpenseHistoryScreen so farm-wide expenses (null cropId) are visible.
+
+class _FarmExpensesNotifier
+    extends StateNotifier<AsyncValue<List<Expense>>> {
+  final ExpenseService _svc;
+  final String farmId;
+
+  _FarmExpensesNotifier(this._svc, this.farmId)
+      : super(const AsyncValue.loading()) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    state = const AsyncValue.loading();
+    try {
+      final expenses = await _svc.getExpenses(farmId: farmId);
+      // Sort newest first (service returns by date desc already, but be safe).
+      expenses.sort((a, b) => b.date.compareTo(a.date));
+      state = AsyncValue.data(expenses);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> refresh() => _load();
+}
+
+final farmExpensesListProvider = StateNotifierProvider.family
+    .autoDispose<_FarmExpensesNotifier, AsyncValue<List<Expense>>, String>(
+  (ref, farmId) => _FarmExpensesNotifier(ExpenseService(), farmId),
+);
+
+/// Active filter for the farm-level history screen, keyed by farmId.
+final farmExpenseFilterProvider =
+    StateProvider.family.autoDispose<ExpenseFilter, String>(
+  (ref, farmId) => const ExpenseFilter(),
+);
+
+/// Farm-wide expenses with filter applied.
+final filteredFarmExpensesProvider =
+    Provider.family.autoDispose<AsyncValue<List<Expense>>, String>(
+  (ref, farmId) {
+    final filter = ref.watch(farmExpenseFilterProvider(farmId));
+    return ref.watch(farmExpensesListProvider(farmId)).whenData(
           (all) => filter.isActive ? all.where(filter.matches).toList() : all,
         );
   },

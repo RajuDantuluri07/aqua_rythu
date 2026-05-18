@@ -67,7 +67,7 @@ class Expense {
   final String? id;
   final String userId;
   final String farmId;
-  final String cropId;
+  final String? cropId; // nullable — farm-wide expenses have no crop cycle
   final String? pondId;
   final ExpenseCategory category;
   final double amount;
@@ -79,7 +79,7 @@ class Expense {
     this.id,
     required this.userId,
     required this.farmId,
-    required this.cropId,
+    this.cropId,
     this.pondId,
     required this.category,
     required this.amount,
@@ -93,7 +93,7 @@ class Expense {
       id: map['id']?.toString(),
       userId: map['user_id']?.toString() ?? '',
       farmId: map['farm_id']?.toString() ?? '',
-      cropId: map['crop_id']?.toString() ?? '',
+      cropId: map['crop_id']?.toString(),
       pondId: map['pond_id']?.toString(),
       category: ExpenseCategory.fromString(map['category'] ?? 'other'),
       amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
