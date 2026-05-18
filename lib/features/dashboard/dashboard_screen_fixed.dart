@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:aqua_rythu/features/farm/farm_provider.dart';
+import 'package:aqua_rythu/core/models/crop_cycle.dart';
+import 'package:aqua_rythu/core/services/crop_cycle_service.dart';
 import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
@@ -50,6 +52,8 @@ class _PondRow {
   final double area;
   final int seedCount;
   final PondViewState feedState;
+  final String? cropName;
+  final HarvestStatus harvestStatus;
 
   const _PondRow({
     required this.id,
@@ -67,6 +71,8 @@ class _PondRow {
     required this.area,
     required this.seedCount,
     required this.feedState,
+    this.cropName,
+    this.harvestStatus = HarvestStatus.notStarted,
   });
 }
 
@@ -85,7 +91,9 @@ class DashboardScreen extends ConsumerWidget {
 
     if (currentFarm == null) return _noFarmView(context);
 
-    final ponds = currentFarm.ponds.where((p) => p.status.name == 'active').toList();
+    final ponds = currentFarm.ponds
+        .where((p) => p.pondLifecycleStatus.isOperational)
+        .toList();
     if (ponds.isEmpty) {
       return _noPondsView(context, ref, farmState, currentFarm);
     }
@@ -97,6 +105,13 @@ class DashboardScreen extends ConsumerWidget {
     Future<List<_PondRow>> buildPondRows() async {
       final rows = <_PondRow>[];
       final yesterday = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 1));
+
+      // Load active crop cycles once to map cropId → name.
+      Map<String, String> cropNames = {};
+      try {
+        final cycles = await CropCycleService().getActiveCycles(currentFarm.id);
+        cropNames = {for (final c in cycles) c.id: c.name};
+      } catch (_) {}
 
       for (final pond in ponds) {
         try {
@@ -141,12 +156,16 @@ class DashboardScreen extends ConsumerWidget {
             todayFeed: todayFeed,
             yesterdayFeed: yesterdayFeed,
             status: status,
-            fcrTrendUp: false, // Simplified for now
+            fcrTrendUp: false,
             feedTrendUp: todayFeed > yesterdayFeed,
             hasAbwData: hasAbwData,
             area: pond.area,
             seedCount: pond.seedCount,
             feedState: feedState,
+            cropName: pond.activeCropId != null
+                ? cropNames[pond.activeCropId]
+                : null,
+            harvestStatus: pond.harvestStatus,
           ));
         } catch (e) {
           // Fallback for controller errors
@@ -178,6 +197,10 @@ class DashboardScreen extends ConsumerWidget {
               doc: 0,
               error: 'Failed to load: $e',
             ),
+            cropName: pond.activeCropId != null
+                ? cropNames[pond.activeCropId]
+                : null,
+            harvestStatus: pond.harvestStatus,
           ));
         }
       }
@@ -352,7 +375,7 @@ class DashboardScreen extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '${rows.length} ACTIVE PONDS',
+                              '${rows.length} POND${rows.length == 1 ? '' : 'S'}',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
@@ -375,6 +398,8 @@ class DashboardScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        _PondStatusStrip(rows: rows, allPonds: currentFarm.ponds),
                         const SizedBox(height: 12),
                         ...rows.map((r) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
@@ -1242,8 +1267,35 @@ class _PondCard extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          if (row.harvestStatus == HarvestStatus.partial) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _amberLight,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: _amber, width: 0.5),
+                              ),
+                              child: const Text('Partial Harvest',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: _amber,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ],
                         ],
                       ),
+                      if (row.cropName != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          row.cropName!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _textSub,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1336,6 +1388,66 @@ class _PondCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Pond lifecycle summary strip ─────────────────────────────────────────────
+class _PondStatusStrip extends StatelessWidget {
+  final List<_PondRow> rows;
+  final List<Pond> allPonds;
+
+  const _PondStatusStrip({required this.rows, required this.allPonds});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = rows
+        .where((r) => r.harvestStatus == HarvestStatus.notStarted)
+        .length;
+    final partial = rows
+        .where((r) => r.harvestStatus == HarvestStatus.partial)
+        .length;
+    final prep = allPonds
+        .where((p) => p.pondLifecycleStatus == PondLifecycleStatus.prep)
+        .length;
+
+    if (active == 0 && partial == 0 && prep == 0) return const SizedBox.shrink();
+
+    return Row(
+      children: [
+        if (active > 0)
+          _StripChip(label: '$active Active', color: _green),
+        if (active > 0 && partial > 0) const SizedBox(width: 8),
+        if (partial > 0)
+          _StripChip(label: '$partial Partial Harvest', color: _amber),
+        if (prep > 0) ...[
+          if (active > 0 || partial > 0) const SizedBox(width: 8),
+          _StripChip(label: '$prep Prep', color: _textSub),
+        ],
+      ],
+    );
+  }
+}
+
+class _StripChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StripChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }

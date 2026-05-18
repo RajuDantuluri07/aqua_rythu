@@ -80,15 +80,15 @@ class AppRoutes {
       }
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
-      if (args == null || args['cropId'] == null || args['farmId'] == null) {
+      if (args == null || args['farmId'] == null) {
         return const Scaffold(
           body: Center(
-            child: Text('Invalid arguments: cropId and farmId required'),
+            child: Text('Invalid arguments: farmId required'),
           ),
         );
       }
       return AddExpenseScreen(
-        cropId: args['cropId']!,
+        cropId: args['cropId'], // optional — screen resolves if null
         farmId: args['farmId']!,
       );
     },

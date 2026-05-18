@@ -72,7 +72,7 @@ class FeedInputBuilder {
     final pond = await _supabase
         .from('ponds')
         .select(
-          'seed_count, stocking_date, stocking_type, current_abw, latest_sample_date, anchor_feed, area',
+          'seed_count, stock_count, active_stock_pct, stocking_date, stocking_type, current_abw, latest_sample_date, anchor_feed, area',
         )
         .eq('id', pondId)
         .maybeSingle();
@@ -105,6 +105,11 @@ class FeedInputBuilder {
         'Cannot calculate feed with zero or negative shrimp count.',
       );
     }
+
+    // After a partial harvest, stock_count reflects the remaining live count.
+    // Use it instead of seed_count so biomass and feed calculations are accurate.
+    final stockCountRaw = _validateIntField(pond['stock_count'] ?? 0, 'stock_count');
+    final effectiveSeedCount = stockCountRaw > 0 ? stockCountRaw : seedCount;
     final sample = _latestAbwFromPondData(pond);
     final pondArea = _validateDoubleField(pond['area'], 'area');
     final water = await _latestWaterLog(pondId);
@@ -144,7 +149,7 @@ class FeedInputBuilder {
 
     final lastFcr = await _computeLastFcr(
       pondId: pondId,
-      seedCount: seedCount,
+      seedCount: effectiveSeedCount,
       abw: sample.abw,
     );
 
@@ -160,7 +165,7 @@ class FeedInputBuilder {
     }
 
     return FeedInput(
-      seedCount: seedCount,
+      seedCount: effectiveSeedCount,
       doc: currentDoc,
       abw: sample.abw,
       stockingType: StockingType.values.firstWhere(

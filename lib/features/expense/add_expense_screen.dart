@@ -2,16 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/expense_model.dart';
+import '../../core/models/crop_cycle.dart';
 import '../../core/services/pond_service.dart';
+import '../../core/services/crop_cycle_service.dart';
+import '../../core/services/expense_service.dart';
+import '../../core/utils/logger.dart';
+import '../../core/utils/uuid_generator.dart';
 import 'expense_provider.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
-  final String cropId;
+  /// Pre-selected crop ID. When null the screen loads active cycles and lets
+  /// the farmer pick. When only one active cycle exists it is auto-selected.
+  final String? cropId;
   final String farmId;
 
   const AddExpenseScreen({
     super.key,
-    required this.cropId,
+    this.cropId,
     required this.farmId,
   });
 
@@ -23,39 +30,25 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
-  final _pondService = PondService();
 
   ExpenseCategory _selectedCategory = ExpenseCategory.labour;
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
-  List<Map<String, dynamic>> _ponds = [];
+
+  // Crop resolution
+  List<CropCycle> _activeCycles = [];
+  String? _selectedCropId;
+  bool _loadingCycles = true;
+
+  // Pond filtering
+  List<Map<String, dynamic>> _allPonds = [];
   String? _selectedPondId;
-  bool _isLoadingPonds = true;
+  bool _loadingPonds = true;
 
   @override
   void initState() {
     super.initState();
-    _loadPonds();
-    // Auto-focus amount field as per UX requirements
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FocusScope.of(context).requestFocus(FocusNode());
-    });
-  }
-
-  Future<void> _loadPonds() async {
-    try {
-      final ponds = await _pondService.getPonds(widget.farmId);
-      if (mounted) {
-        setState(() {
-          _ponds = ponds;
-          _isLoadingPonds = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingPonds = false);
-      }
-    }
+    _loadData();
   }
 
   @override
@@ -65,41 +58,99 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     super.dispose();
   }
 
+  Future<void> _loadData() async {
+    try {
+      final results = await Future.wait([
+        CropCycleService().getActiveCycles(widget.farmId),
+        PondService().getPonds(widget.farmId),
+      ]);
+
+      final cycles = results[0] as List<CropCycle>;
+      final ponds = results[1] as List<Map<String, dynamic>>;
+
+      String? resolvedCropId = widget.cropId;
+
+      // If no cropId provided, auto-resolve:
+      // - single active cycle → auto-select it (no picker needed)
+      // - multiple → leave null so picker is shown
+      if (resolvedCropId == null && cycles.length == 1) {
+        resolvedCropId = cycles.first.id;
+      }
+
+      if (mounted) {
+        setState(() {
+          _activeCycles = cycles;
+          _selectedCropId = resolvedCropId;
+          _allPonds = ponds;
+          _loadingCycles = false;
+          _loadingPonds = false;
+        });
+      }
+    } catch (e) {
+      AppLogger.error('Failed to load expense screen data', e);
+      if (mounted) {
+        setState(() {
+          _loadingCycles = false;
+          _loadingPonds = false;
+        });
+      }
+    }
+  }
+
+  /// Ponds that belong to the currently selected crop cycle.
+  List<Map<String, dynamic>> get _pondsForCrop {
+    if (_selectedCropId == null) return _allPonds;
+    return _allPonds
+        .where((p) => p['active_crop_id'] == _selectedCropId)
+        .toList();
+  }
+
   Future<void> _submitExpense() async {
     if (_isLoading) return;
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedCropId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a crop before saving.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid amount. Please enter a valid number.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
 
     try {
-      final amount = double.tryParse(_amountController.text.trim());
+      // Use the service directly so we can supply a resolved cropId
+      // without being constrained by the provider family key.
+      await ExpenseService().createExpense(
+        farmId: widget.farmId,
+        cropId: _selectedCropId!,
+        pondId: _selectedPondId,
+        category: _selectedCategory,
+        amount: amount,
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+        date: _selectedDate,
+        operationId: generateUuidV4(),
+      );
 
-      if (amount == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Invalid amount. Please enter a valid number.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      await ref.read(expensesProvider(widget.cropId).notifier).addExpense(
-            farmId: widget.farmId,
-            pondId: _selectedPondId,
-            category: _selectedCategory,
-            amount: amount,
-            notes: _notesController.text.trim().isEmpty
-                ? null
-                : _notesController.text.trim(),
-            date: _selectedDate,
-          );
+      // Invalidate the provider so any open summary screen refreshes.
+      ref.invalidate(expensesProvider(_selectedCropId!));
+      ref.invalidate(expenseSummaryProvider(_selectedCropId!));
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -120,11 +171,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -152,7 +199,28 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Category Dropdown
+                      // ── Crop selector (only when multiple active cycles) ──
+                      if (!_loadingCycles && _activeCycles.length > 1) ...[
+                        _buildCropSelector(),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Loading indicator for cycles
+                      if (_loadingCycles) ...[
+                        const InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Loading crop cycles…',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.agriculture),
+                          ),
+                          child: SizedBox(
+                              height: 20,
+                              child: LinearProgressIndicator()),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Category
                       DropdownButtonFormField<ExpenseCategory>(
                         value: _selectedCategory,
                         decoration: const InputDecoration(
@@ -160,47 +228,68 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.category),
                         ),
-                        items: ExpenseCategory.values.map((category) {
+                        items: ExpenseCategory.values.map((c) {
                           return DropdownMenuItem(
-                            value: category,
-                            child: Text(category.label),
-                          );
+                              value: c, child: Text(c.label));
                         }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedCategory = value!;
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null) {
-                            return 'Please select a category';
-                          }
-                          return null;
-                        },
+                        onChanged: (v) =>
+                            setState(() => _selectedCategory = v!),
+                        validator: (v) =>
+                            v == null ? 'Please select a category' : null,
                       ),
+                      if (_selectedCategory == ExpenseCategory.feed ||
+                          _selectedCategory == ExpenseCategory.supplement) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF8E1),
+                            border: Border.all(color: const Color(0xFFFFB300)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.info_outline,
+                                  size: 16, color: Color(0xFFE65100)),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Feed and supplement costs are auto-tracked via Inventory. '
+                                  'Only add this expense if it was not already recorded there.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFE65100)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
-                      // Pond Selection Dropdown (Optional)
+                      // Pond selector (filtered by crop)
                       _buildPondDropdown(),
                       const SizedBox(height: 16),
 
-                      // Amount Field
+                      // Amount
                       TextFormField(
                         controller: _amountController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Amount (₹)',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.currency_rupee),
                         ),
                         autofocus: true,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
                             return 'Please enter an amount';
                           }
-                          final amount = double.tryParse(value);
-                          if (amount == null || amount <= 0) {
+                          final n = double.tryParse(v);
+                          if (n == null || n <= 0) {
                             return 'Please enter a valid amount greater than 0';
                           }
                           return null;
@@ -208,20 +297,18 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Date Field
+                      // Date
                       InkWell(
                         onTap: () async {
                           final date = await showDatePicker(
                             context: context,
                             initialDate: _selectedDate,
                             firstDate: DateTime(2020),
-                            lastDate:
-                                DateTime.now().add(const Duration(days: 30)),
+                            lastDate: DateTime.now()
+                                .add(const Duration(days: 30)),
                           );
                           if (date != null) {
-                            setState(() {
-                              _selectedDate = date;
-                            });
+                            setState(() => _selectedDate = date);
                           }
                         },
                         child: InputDecorator(
@@ -231,13 +318,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                             prefixIcon: Icon(Icons.calendar_today),
                           ),
                           child: Text(
-                            DateFormat('MMM dd, yyyy').format(_selectedDate),
-                          ),
+                              DateFormat('MMM dd, yyyy')
+                                  .format(_selectedDate)),
                         ),
                       ),
                       const SizedBox(height: 16),
 
-                      // Notes Field (Optional)
+                      // Notes
                       TextFormField(
                         controller: _notesController,
                         decoration: const InputDecoration(
@@ -256,10 +343,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               ),
             ),
 
-            // Sticky CTA — stays visible above keyboard
+            // Sticky CTA
             AnimatedPadding(
               duration: const Duration(milliseconds: 100),
-              padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset > 0 ? bottomInset + 8 : 16),
+              padding: EdgeInsets.fromLTRB(
+                  16, 8, 16, bottomInset > 0 ? bottomInset + 8 : 16),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -269,8 +357,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   child: _isLoading
                       ? const SizedBox(
@@ -282,10 +369,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                 AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text(
-                          'Add Expense',
-                          style: TextStyle(fontSize: 16),
-                        ),
+                      : const Text('Add Expense',
+                          style: TextStyle(fontSize: 16)),
                 ),
               ),
             ),
@@ -295,8 +380,43 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     );
   }
 
+  Widget _buildCropSelector() {
+    return DropdownButtonFormField<String>(
+      value: _selectedCropId,
+      decoration: const InputDecoration(
+        labelText: 'Select Crop *',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.agriculture),
+        helperText: 'Multiple active crops — choose which this expense belongs to',
+      ),
+      items: _activeCycles.map((c) {
+        final docLabel = c.stockingDate != null
+            ? 'DOC ${DateTime.now().difference(c.stockingDate!).inDays + 1}'
+            : '';
+        return DropdownMenuItem(
+          value: c.id,
+          child: Row(
+            children: [
+              Expanded(
+                  child: Text(c.name, overflow: TextOverflow.ellipsis)),
+              if (docLabel.isNotEmpty)
+                Text(docLabel,
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600)),
+            ],
+          ),
+        );
+      }).toList(),
+      onChanged: (v) => setState(() {
+        _selectedCropId = v;
+        _selectedPondId = null; // reset pond when crop changes
+      }),
+      validator: (v) => v == null ? 'Please select a crop' : null,
+    );
+  }
+
   Widget _buildPondDropdown() {
-    if (_isLoadingPonds) {
+    if (_loadingPonds) {
       return const InputDecorator(
         decoration: InputDecoration(
           labelText: 'Pond (Optional)',
@@ -307,13 +427,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       );
     }
 
-    if (_ponds.isEmpty) {
+    final ponds = _pondsForCrop;
+
+    if (ponds.isEmpty) {
       return const InputDecorator(
         decoration: InputDecoration(
           labelText: 'Pond (Optional)',
           border: OutlineInputBorder(),
           prefixIcon: Icon(Icons.water),
-          helperText: 'No ponds available',
+          helperText: 'No active ponds in this crop',
         ),
         child: Text('—'),
       );
@@ -325,25 +447,20 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         labelText: 'Pond (Optional)',
         border: OutlineInputBorder(),
         prefixIcon: Icon(Icons.water),
-        helperText: 'Select a pond or leave empty for farm-wide expense',
+        helperText: 'Leave empty for a farm-wide expense',
       ),
       items: [
         const DropdownMenuItem<String?>(
           value: null,
           child: Text('All Ponds (Farm-wide)'),
         ),
-        ..._ponds.map((pond) {
-          final pondId = pond['id'] as String;
-          final pondName = pond['name'] as String? ?? 'Unnamed Pond';
-          return DropdownMenuItem<String?>(
-            value: pondId,
-            child: Text(pondName),
-          );
+        ...ponds.map((p) {
+          final id = p['id'] as String;
+          final name = p['name'] as String? ?? 'Unnamed Pond';
+          return DropdownMenuItem<String?>(value: id, child: Text(name));
         }),
       ],
-      onChanged: (value) {
-        setState(() => _selectedPondId = value);
-      },
+      onChanged: (v) => setState(() => _selectedPondId = v),
     );
   }
 }

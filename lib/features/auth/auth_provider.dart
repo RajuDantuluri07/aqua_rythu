@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/user_provider.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
+import '../pond/controllers/pond_dashboard_controller.dart';
 import '../../core/utils/logger.dart';
 
 class AppAuthState {
@@ -75,6 +76,7 @@ String _friendlyAuthError(Object e, {_AuthFlow flow = _AuthFlow.email}) {
 class AuthNotifier extends StateNotifier<AppAuthState> {
   final SupabaseClient _supabase;
   final Ref ref;
+  bool _sessionCheckInFlight = false;
 
   AuthNotifier(this.ref, {SupabaseClient? supabaseClient})
       : _supabase = supabaseClient ?? Supabase.instance.client,
@@ -124,6 +126,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   }
 
   Future<void> checkSession() async {
+    if (_sessionCheckInFlight) return;
+    _sessionCheckInFlight = true;
     // isCheckingSession starts true; always clear it when done.
     try {
       final session = _supabase.auth.currentSession;
@@ -155,6 +159,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     } catch (e) {
       AppLogger.error('checkSession failed', e);
       state = state.copyWith(isAuthenticated: false, isCheckingSession: false);
+    } finally {
+      _sessionCheckInFlight = false;
     }
   }
 
@@ -211,6 +217,9 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
 
   Future<void> logout() async {
     await _supabase.auth.signOut();
+    pondDashboardController.clearCache();
+    ref.invalidate(farmProvider);
+    ref.invalidate(feedHistoryProvider);
     state = const AppAuthState();
   }
 

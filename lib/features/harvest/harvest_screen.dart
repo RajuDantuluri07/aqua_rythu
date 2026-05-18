@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../farm/farm_provider.dart';
 import 'harvest_provider.dart';
 import 'harvest_summary_screen.dart';
+import '../../core/services/pond_harvest_service.dart';
+import '../../core/utils/logger.dart';
 
 class HarvestScreen extends ConsumerWidget {
   final String pondId;
@@ -652,25 +654,70 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
   }
 
   Future<void> _saveHarvest({bool isFinal = false}) async {
-    final entry = HarvestEntry(
-      pondId: widget.pondId,
-      date: DateTime.now(),
-      doc: widget.doc,
-      quantity: double.tryParse(_qtyCtrl.text.trim()) ?? 0.0,
-      countPerKg: int.tryParse(_countCtrl.text.trim()) ?? 0,
-      pricePerKg: double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
-      expenses: double.tryParse(_expensesCtrl.text) ?? 0,
-      notes: _notesCtrl.text,
-      type: widget.type,
-    );
+    final qty = double.tryParse(_qtyCtrl.text.trim()) ?? 0.0;
+    final countPerKg = int.tryParse(_countCtrl.text.trim()) ?? 0;
+    final pricePerKg = double.tryParse(_priceCtrl.text.trim()) ?? 0.0;
+    final expenses = double.tryParse(_expensesCtrl.text.trim()) ?? 0.0;
 
-    ref.read(harvestProvider(widget.pondId).notifier).addHarvest(entry);
+    // Read pond info for stock calibration and crop cycle linkage.
+    final farmState = ref.read(farmProvider);
+    final pond = farmState.currentFarm?.ponds
+        .where((p) => p.id == widget.pondId)
+        .firstOrNull;
+
+    final currentStock = pond?.stockCount ?? pond?.seedCount ?? 100000;
+    final initialStock = pond?.seedCount ?? 100000;
+    final cropCycleId = pond?.activeCropId;
+    final abwAtHarvest = pond?.currentAbw;
+
+    final harvestType = isFinal ? 'full' : 'partial';
+
+    try {
+      // 1. Persist to DB, update pond status, sync crop cycle.
+      final result = await PondHarvestService().logHarvest(
+        pondId: widget.pondId,
+        harvestType: harvestType,
+        quantityKg: qty,
+        abwAtHarvest: abwAtHarvest,
+        countPerKg: countPerKg,
+        pricePerKg: pricePerKg,
+        harvestExpenses: expenses > 0 ? expenses : null,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        currentStockCount: currentStock,
+        initialStockCount: initialStock,
+        cropCycleId: cropCycleId,
+        doc: widget.doc,
+        harvestDate: DateTime.now(),
+      );
+
+      // 2. Update local farm state so UI reflects new stock immediately.
+      ref.read(farmProvider.notifier).updatePondHarvest(
+            pondId: widget.pondId,
+            newStockCount: result.newStockCount,
+            activeStockPct: result.activeStockPct,
+            harvestStage: harvestType == 'full' ? 'completed' : 'partial',
+            lastHarvestQty: qty,
+          );
+
+      // 3. Reload harvest ledger.
+      ref.invalidate(harvestProvider(widget.pondId));
+    } catch (e) {
+      AppLogger.error('Failed to save harvest', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save harvest: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
 
     if (isFinal) {
-      await ref
-          .read(farmProvider.notifier)
-          .updatePondStatus(widget.pondId, PondStatus.completed);
-      if (!mounted) return;
       Navigator.pop(context); // Close modal
       Navigator.pushReplacement(
         context,
@@ -678,15 +725,34 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
             builder: (_) => HarvestSummaryScreen(pondId: widget.pondId)),
       );
     } else {
+      // Show remaining biomass estimate for partial harvest.
+      final farmState2 = ref.read(farmProvider);
+      final updatedPond = farmState2.currentFarm?.ponds
+          .where((p) => p.id == widget.pondId)
+          .firstOrNull;
+      final remainingBiomass = updatedPond != null && (updatedPond.currentAbw ?? 0) > 0
+          ? (updatedPond.stockCount ?? 0) *
+              (updatedPond.currentAbw! / 1000) *
+              updatedPond.activeStockPct
+          : null;
+
       Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(remainingBiomass != null
+              ? 'Harvest logged. Est. remaining biomass: ${remainingBiomass.toStringAsFixed(0)} kg'
+              : 'Harvest logged successfully'),
+          backgroundColor: Colors.green.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
     }
 
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            isFinal ? "Pond Cycle Completed!" : "Harvest logged successfully"),
-        backgroundColor: isFinal ? Colors.purple : Colors.green.shade600,
+      const SnackBar(
+        content: Text('Pond Cycle Completed!'),
+        backgroundColor: Colors.purple,
         behavior: SnackBarBehavior.floating,
       ),
     );

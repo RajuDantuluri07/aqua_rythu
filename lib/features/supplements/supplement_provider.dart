@@ -1,6 +1,5 @@
 // lib/features/supplements/supplement_provider.dart
 
-import 'dart:async' show unawaited;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:aqua_rythu/features/supplements/screens/supplement_item.dart';
@@ -439,8 +438,10 @@ class SupplementLogNotifier extends StateNotifier<AsyncValue<List<SupplementLog>
   Future<void> reload() => _loadFromDb();
 
   /// Persist an application log to the DB and update in-memory state.
-  /// Pass [farmId] to trigger a best-effort inventory deduction for each item.
-  Future<void> logApplication({
+  /// Returns a list of inventory warning messages (empty = all deductions OK).
+  /// Callers should show these as non-blocking SnackBars so the farmer knows
+  /// which supplements were NOT deducted from inventory.
+  Future<List<String>> logApplication({
     required String supplementId,
     required String supplementName,
     required List<CalculatedItem> items,
@@ -480,16 +481,17 @@ class SupplementLogNotifier extends StateNotifier<AsyncValue<List<SupplementLog>
       rethrow;
     }
 
-    // Best-effort inventory deduction — failures are logged but do not bubble up.
+    // Best-effort inventory deduction — collect skip reasons so callers can warn.
+    final warnings = <String>[];
     if (farmId != null && farmId.isNotEmpty) {
       for (final item in items) {
-        unawaited(
-          _inventoryService.recordSupplementConsumption(
-            farmId, item.name, item.quantity, item.unit,
-          ),
+        final skipReason = await _inventoryService.recordSupplementConsumption(
+          farmId, item.name, item.quantity, item.unit,
         );
+        if (skipReason != null) warnings.add(skipReason);
       }
     }
+    return warnings;
   }
 
   bool hasFeedLogForRoundOnDate({

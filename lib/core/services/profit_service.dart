@@ -17,7 +17,7 @@ class ProfitService {
       String? resolvedFarmId = farmId;
       if (resolvedFarmId == null) {
         final row = await supabase
-            .from('ponds')
+            .from('crop_cycles')
             .select('farm_id')
             .eq('id', cropId)
             .maybeSingle();

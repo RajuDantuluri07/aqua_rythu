@@ -7,6 +7,8 @@ import '../utils/doc_utils.dart';
 import '../utils/uuid_generator.dart';
 import '../../features/farm/farm_provider.dart';
 import '../../features/pond/enums/seed_type.dart';
+import '../models/crop_cycle.dart';
+import 'crop_cycle_service.dart';
 export '../../features/farm/farm_provider.dart' show Pond, PondStatus;
 
 class PondService {
@@ -157,7 +159,12 @@ class PondService {
             anchor_feed,
             is_anchor_initialized,
             stocking_type,
-            feed_brand_id
+            feed_brand_id,
+            active_crop_id,
+            pond_status,
+            harvest_status,
+            stocked_at,
+            harvested_at
           ''').eq('id', pondId).maybeSingle();
 
       if (row == null) return null;
@@ -180,6 +187,17 @@ class PondService {
         isAnchorInitialized: row['is_anchor_initialized'] ?? false,
         seedType: SeedTypeX.fromDb(row['stocking_type'] as String?),
         feedBrandId: row['feed_brand_id'] as String?,
+        activeCropId: row['active_crop_id'] as String?,
+        pondLifecycleStatus:
+            PondLifecycleStatusX.fromDb(row['pond_status'] as String?),
+        harvestStatus:
+            HarvestStatusX.fromDb(row['harvest_status'] as String?),
+        stockedAt: row['stocked_at'] != null
+            ? DateTime.tryParse(row['stocked_at'] as String)
+            : null,
+        harvestedAt: row['harvested_at'] != null
+            ? DateTime.tryParse(row['harvested_at'] as String)
+            : null,
       );
     } catch (e) {
       AppLogger.error('Failed to fetch pond by ID: $pondId', e);
@@ -202,7 +220,9 @@ class PondService {
           status,
           current_abw,
           is_smart_feed_enabled,
-          feed_brand_id
+          feed_brand_id,
+          active_crop_id,
+          pond_status
         ''').eq('farm_id', farmId).order('created_at', ascending: false);
   }
 
@@ -247,6 +267,71 @@ class PondService {
   Future<List<Map<String, dynamic>>> getFeedSchedule(String pondId) async {
     throw UnimplementedError(
         'getFeedSchedule is deprecated - use feed_rounds table only');
+  }
+
+  // ================================
+  // ✅ START NEW CROP CYCLE (multi-crop architecture)
+  // ================================
+
+  /// Creates a new farm-level crop cycle and assigns this pond to it.
+  /// Pass [existingCycleId] to join an existing active cycle instead.
+  /// Clears old operational data and regenerates the feed plan.
+  Future<CropCycle> startNewCropCycle({
+    required String farmId,
+    required String pondId,
+    required DateTime stockingDate,
+    required int seedCount,
+    required int plSize,
+    required int numTrays,
+    String? feedBrandId,
+    String? existingCycleId,
+    String? cycleName,
+    String? species,
+  }) async {
+    final svc = CropCycleService();
+
+    // 1. Resolve or create the farm-level crop cycle.
+    CropCycle cycle;
+    if (existingCycleId != null) {
+      cycle = (await svc.getCycleById(existingCycleId))!;
+    } else {
+      final name = cycleName ??
+          'Cycle — ${stockingDate.day}/${stockingDate.month}/${stockingDate.year}';
+      cycle = await svc.createCycle(
+        farmId: farmId,
+        name: name,
+        species: species,
+        stockingDate: stockingDate,
+      );
+    }
+
+    // 2. Clear old cycle data for this pond.
+    await supabase.rpc('clear_pond_cycle_tables', params: {'p_pond_id': pondId});
+    AppLogger.info('Cleared old cycle data for pond $pondId');
+
+    // 3. Update pond with new stocking details and link to crop cycle.
+    final updateData = <String, dynamic>{
+      'stocking_date': stockingDate.toIso8601String().split('T')[0],
+      'seed_count': seedCount,
+      'pl_size': plSize,
+      'num_trays': numTrays,
+      'status': 'active',
+      'current_abw': null,
+      'active_crop_id': cycle.id,
+      'pond_status': PondLifecycleStatus.active.dbValue,
+      'harvest_status': HarvestStatus.notStarted.dbValue,
+      'stocked_at': stockingDate.toIso8601String(),
+      'harvested_at': null,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (feedBrandId != null) updateData['feed_brand_id'] = feedBrandId;
+    await supabase.from('ponds').update(updateData).eq('id', pondId);
+
+    // 4. Regenerate feed plan.
+    await generateFeedSchedule(pondId);
+    AppLogger.info('New crop cycle started: ${cycle.id} for pond $pondId');
+
+    return cycle;
   }
 
   // ================================

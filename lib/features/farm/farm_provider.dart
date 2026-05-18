@@ -8,6 +8,7 @@ import 'package:aqua_rythu/core/utils/logger.dart';
 import 'package:aqua_rythu/core/utils/doc_utils.dart';
 import 'package:aqua_rythu/core/utils/supabase_errors.dart';
 import '../pond/enums/seed_type.dart';
+import '../../core/models/crop_cycle.dart';
 
 enum PondStatus { active, completed }
 
@@ -55,6 +56,13 @@ class Pond {
   final String aerationType; // 'low' | 'medium' | 'high' — affects capacity
   final String? trayScore; // 'good' | 'average' | 'poor' — latest tray result
 
+  // ── Multi-crop lifecycle fields ─────────────────────────────────────────────
+  final String? activeCropId;
+  final PondLifecycleStatus pondLifecycleStatus;
+  final HarvestStatus harvestStatus;
+  final DateTime? stockedAt;
+  final DateTime? harvestedAt;
+
   Pond({
     required this.id,
     required this.name,
@@ -84,6 +92,11 @@ class Pond {
     this.trayScore,
     this.feedBrandId,
     this.feedBrandName,
+    this.activeCropId,
+    this.pondLifecycleStatus = PondLifecycleStatus.active,
+    this.harvestStatus = HarvestStatus.notStarted,
+    this.stockedAt,
+    this.harvestedAt,
   }) : seedType = seedType ?? SeedTypeX.fromPlSize(plSize);
 
   /// Returns how many feed rounds apply for the given DOC, respecting
@@ -124,6 +137,11 @@ class Pond {
     String? trayScore,
     String? feedBrandId,
     String? feedBrandName,
+    String? activeCropId,
+    PondLifecycleStatus? pondLifecycleStatus,
+    HarvestStatus? harvestStatus,
+    DateTime? stockedAt,
+    DateTime? harvestedAt,
   }) {
     return Pond(
       id: id ?? this.id,
@@ -154,6 +172,11 @@ class Pond {
       trayScore: trayScore ?? this.trayScore,
       feedBrandId: feedBrandId ?? this.feedBrandId,
       feedBrandName: feedBrandName ?? this.feedBrandName,
+      activeCropId: activeCropId ?? this.activeCropId,
+      pondLifecycleStatus: pondLifecycleStatus ?? this.pondLifecycleStatus,
+      harvestStatus: harvestStatus ?? this.harvestStatus,
+      stockedAt: stockedAt ?? this.stockedAt,
+      harvestedAt: harvestedAt ?? this.harvestedAt,
     );
   }
 
@@ -269,10 +292,18 @@ class FarmNotifier extends StateNotifier<FarmState> {
                 id: p['id']?.toString() ?? '',
                 name: p['name'] ?? '',
                 area: (p['area'] as num?)?.toDouble() ?? 0.0,
-                stockingDate: p['stocking_date'] != null
-                    ? DateTime.tryParse(p['stocking_date'] as String) ??
-                        DateTime.now()
-                    : DateTime.now(),
+                stockingDate: () {
+                  final raw = p['stocking_date'] as String?;
+                  final parsed = raw != null ? DateTime.tryParse(raw) : null;
+                  if (parsed == null) {
+                    // Throw so the outer catch skips this pond entirely.
+                    // Using DateTime.now() would silently set DOC=1 forever,
+                    // causing wrong feed recommendations for the farmer.
+                    throw StateError(
+                        'Pond ${p['id']}: invalid stocking_date "$raw"');
+                  }
+                  return parsed.toUtc();
+                }(),
                 seedCount: p['seed_count'] ?? 100000,
                 plSize: p['pl_size'] ?? 10,
                 numTrays: p['num_trays'] ?? 4,
@@ -305,6 +336,17 @@ class FarmNotifier extends StateNotifier<FarmState> {
                 lastHarvestQty: (p['last_harvest_qty'] as num?)?.toDouble(),
                 aerationType: p['aeration_type'] as String? ?? 'medium',
                 trayScore: p['tray_score'] as String?,
+                activeCropId: p['active_crop_id'] as String?,
+                pondLifecycleStatus: PondLifecycleStatusX.fromDb(
+                    p['pond_status'] as String?),
+                harvestStatus:
+                    HarvestStatusX.fromDb(p['harvest_status'] as String?),
+                stockedAt: p['stocked_at'] != null
+                    ? DateTime.tryParse(p['stocked_at'] as String)
+                    : null,
+                harvestedAt: p['harvested_at'] != null
+                    ? DateTime.tryParse(p['harvested_at'] as String)
+                    : null,
               ));
             } catch (e) {
               AppLogger.error('Failed to parse pond: $e', e);

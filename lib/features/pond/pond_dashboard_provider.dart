@@ -71,6 +71,10 @@ class PondDashboardState {
   /// crashing. Other ponds are unaffected.
   final String? pondSetupError;
 
+  /// Non-null after a feed save that succeeded but depleted stock below zero.
+  /// Screen should show a non-blocking warning banner, then clear it.
+  final String? stockWarning;
+
   PondDashboardState({
     required this.selectedPond,
     required this.doc,
@@ -90,6 +94,7 @@ class PondDashboardState {
     this.feedDebugInfo,
     this.needsAnchorFeedInput = false,
     this.pondSetupError,
+    this.stockWarning,
   });
 
   PondDashboardState copyWith({
@@ -113,6 +118,8 @@ class PondDashboardState {
     bool? needsAnchorFeedInput,
     String? pondSetupError,
     bool clearPondSetupError = false,
+    String? stockWarning,
+    bool clearStockWarning = false,
   }) {
     return PondDashboardState(
       selectedPond: selectedPond ?? this.selectedPond,
@@ -137,6 +144,8 @@ class PondDashboardState {
       needsAnchorFeedInput: needsAnchorFeedInput ?? this.needsAnchorFeedInput,
       pondSetupError:
           clearPondSetupError ? null : (pondSetupError ?? this.pondSetupError),
+      stockWarning:
+          clearStockWarning ? null : (stockWarning ?? this.stockWarning),
     );
   }
 }
@@ -325,6 +334,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
   /// Called by the screen after it has shown the tray-persist-failed notification.
   void clearTrayPersistFailedFlag() {
     state = state.copyWith(trayPersistFailed: false);
+  }
+
+  void clearStockWarning() {
+    state = state.copyWith(clearStockWarning: true);
   }
 
   Future<void> _updateStateForPond(String pondId) async {
@@ -530,6 +543,8 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           state.roundFeedAmounts.values.fold(0.0, (s, v) => s + v);
 
       // Phase 3+6: Attempt DB write; enqueue for offline retry on failure.
+      // InsufficientStockException is thrown AFTER a successful save — handle
+      // it separately so the feed is marked done AND the warning is surfaced.
       try {
         await FeedService().saveFeedEntry(
           pondId: pondId,
@@ -539,6 +554,9 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           isPro: state.recommendation != null,
           operationId: operationId,
         );
+      } on InsufficientStockException catch (e) {
+        // Feed was saved successfully; show a non-blocking warning to the farmer.
+        state = state.copyWith(stockWarning: e.message);
       } catch (e) {
         // Network/server failure — preserve the operation locally so it can
         // be replayed when connectivity is restored. The same operationId

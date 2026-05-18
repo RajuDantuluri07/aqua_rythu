@@ -426,11 +426,14 @@ class FeedService implements FeedCompletionSink {
       throw Exception('Crop completed');
     }
 
-    // Warn if feeding would exhaust stock (never blocks the feed record).
+    // Check stock but never block: capture any warning, complete the save,
+    // then rethrow so the caller can surface it to the farmer.
+    InsufficientStockException? stockWarning;
     try {
       await _checkInventoryStock(pondId, feedKg);
     } on InsufficientStockException catch (e) {
       AppLogger.warn('Low stock for pond $pondId: $e');
+      stockWarning = e;
     }
 
     final logs = await fetchFeedLogs(pondId);
@@ -450,6 +453,9 @@ class FeedService implements FeedCompletionSink {
       createdAt: DateTime.now(),
       operationId: operationId,
     );
+
+    // Rethrow after successful save so the UI can show a non-blocking warning.
+    if (stockWarning != null) throw stockWarning;
   }
 
   /// Phase 1: Idempotent feed completion — implements [FeedCompletionSink].

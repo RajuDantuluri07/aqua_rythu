@@ -396,8 +396,9 @@ class InventoryService {
   }
 
   // Deduct supplement consumption from inventory using best-effort name matching.
-  // Logs a warning and skips silently if no matching item is found.
-  Future<void> recordSupplementConsumption(
+  // Returns null on success, or a human-readable reason string when the deduction
+  // was skipped — callers should surface this to the farmer.
+  Future<String?> recordSupplementConsumption(
     String farmId,
     String itemName,
     double quantity,
@@ -414,7 +415,7 @@ class InventoryService {
       if (results.isEmpty) {
         AppLogger.warn(
             'recordSupplementConsumption: no inventory item matching "$itemName" in farm $farmId — skipping deduction');
-        return;
+        return '"$itemName" not found in inventory — stock not deducted. Add it in Inventory to enable auto-tracking.';
       }
 
       final item = results.first;
@@ -425,7 +426,7 @@ class InventoryService {
       if (inventoryUnit != consumeUnit) {
         AppLogger.warn(
             'recordSupplementConsumption: unit mismatch for "$itemName" — inventory=$inventoryUnit, supplement=$consumeUnit — skipping deduction');
-        return;
+        return '"$itemName" unit mismatch (inventory: $inventoryUnit, supplement: $consumeUnit) — stock not deducted.';
       }
 
       final today = DateTime.now().toIso8601String().split('T')[0];
@@ -437,8 +438,10 @@ class InventoryService {
       });
       AppLogger.info(
           'Deducted $quantity $unit of "$itemName" from inventory (farm $farmId)');
+      return null;
     } catch (e) {
       AppLogger.error('recordSupplementConsumption failed for "$itemName": $e');
+      return null; // DB errors don't produce a farmer-visible warning
     }
   }
 

@@ -543,7 +543,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => AddExpenseScreen(
-                            cropId: farm.id,
                             farmId: farm.id,
                           ),
                         ),

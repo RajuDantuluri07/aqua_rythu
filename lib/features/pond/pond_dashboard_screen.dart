@@ -1106,6 +1106,30 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           );
         }
       }
+
+      // Feed was saved but stock went negative — warn without blocking.
+      if (next.stockWarning != null && next.stockWarning != previous?.stockWarning) {
+        final warning = next.stockWarning!;
+        ref.read(pondDashboardProvider(_selectedPondId).notifier).clearStockWarning();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(warning, style: const TextStyle(fontSize: 13)),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFFB45309),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 8),
+            ),
+          );
+        }
+      }
     });
 
     // Handle route-argument pond switches (e.g. deep link or back-navigation).
@@ -2658,11 +2682,15 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
+                    final farmId =
+                        ref.read(farmProvider).currentFarm?.id ?? '';
                     Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) =>
-                                NewCycleSetupScreen(pondId: pond.id)));
+                            builder: (_) => NewCycleSetupScreen(
+                                  pondId: pond.id,
+                                  farmId: farmId,
+                                )));
                   },
                   icon: const Icon(Icons.rocket_launch_rounded, size: 20),
                   label: const Text("START NEW CYCLE",
