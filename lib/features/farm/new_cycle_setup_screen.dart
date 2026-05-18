@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -12,9 +14,11 @@ import '../growth/growth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/product_provider.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/services/crop_cycle_service.dart';
 import '../../core/models/crop_cycle.dart';
 import '../../core/utils/logger.dart';
+import '../pond/controllers/pond_dashboard_controller.dart';
 
 class NewCycleSetupScreen extends ConsumerStatefulWidget {
   final String pondId;
@@ -130,6 +134,7 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
             ? _cycleNameCtrl.text.trim()
             : null,
       );
+      unawaited(AnalyticsService.instance.logCropCycleStarted(pondId: widget.pondId));
     } catch (e) {
       AppLogger.error('New cycle DB reset failed', e);
       if (mounted) {
@@ -143,6 +148,9 @@ class _NewCycleSetupScreenState extends ConsumerState<NewCycleSetupScreen> {
       }
       return;
     }
+
+    // Flush DOC/feed cache so new cycle starts fresh.
+    pondDashboardController.clearCache();
 
     // Clear in-memory state
     ref.read(farmProvider.notifier).resetPond(

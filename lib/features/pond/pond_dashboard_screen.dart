@@ -1,5 +1,6 @@
 // ignore_for_file: unused_element
 import 'dart:async' show unawaited;
+import 'package:aqua_rythu/core/services/analytics_service.dart';
 import 'package:aqua_rythu/core/services/farm_service.dart';
 import '../supplements/supplement_mix_screen.dart';
 import '../supplements/screens/supplement_item.dart';
@@ -78,6 +79,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(AnalyticsService.instance.trackScreen('pond_dashboard'));
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),

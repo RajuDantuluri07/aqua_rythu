@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +8,7 @@ import '../../core/models/crop_cycle.dart';
 import '../../core/services/pond_service.dart';
 import '../../core/services/crop_cycle_service.dart';
 import '../../core/services/expense_service.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/uuid_generator.dart';
 import 'expense_provider.dart';
@@ -48,6 +51,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(AnalyticsService.instance.trackScreen('add_expense_screen'));
     _loadData();
   }
 
@@ -65,14 +69,29 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         PondService().getPonds(widget.farmId),
       ]);
 
-      final cycles = results[0] as List<CropCycle>;
+      List<CropCycle> cycles = results[0] as List<CropCycle>;
       final ponds = results[1] as List<Map<String, dynamic>>;
+
+      // Fallback: if the crop_cycles status filter returned nothing, infer
+      // active cycles directly from ponds' active_crop_id. This handles farms
+      // where ponds were stocked via older flows that didn't set cycle status.
+      if (cycles.isEmpty) {
+        final cropIds = ponds
+            .where((p) => p['active_crop_id'] != null)
+            .map((p) => p['active_crop_id'] as String)
+            .toSet()
+            .toList();
+        if (cropIds.isNotEmpty) {
+          final fetched = await Future.wait(
+            cropIds.map((id) => CropCycleService().getCycleById(id)),
+          );
+          cycles = fetched.whereType<CropCycle>().toList();
+        }
+      }
 
       String? resolvedCropId = widget.cropId;
 
-      // If no cropId provided, auto-resolve:
-      // - single active cycle → auto-select it (no picker needed)
-      // - multiple → leave null so picker is shown
+      // Single active cycle → auto-select silently; multiple → show picker.
       if (resolvedCropId == null && cycles.length == 1) {
         resolvedCropId = cycles.first.id;
       }
@@ -110,13 +129,30 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedCropId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a crop before saving.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
+      if (_loadingCycles) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Loading crop cycles, please wait…')),
+        );
+        return;
+      }
+      if (_activeCycles.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'No active crop found. Start a crop cycle before adding expenses.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      // Defensive: single cycle should have been auto-selected in _loadData.
+      if (_activeCycles.length == 1) {
+        setState(() => _selectedCropId = _activeCycles.first.id);
+      } else {
+        // Multi-crop — the form validator on _buildCropSelector should have
+        // caught this, but bail gracefully if it somehow didn't.
+        return;
+      }
     }
 
     final amount = double.tryParse(_amountController.text.trim());
@@ -230,7 +266,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         ),
                         items: ExpenseCategory.values.map((c) {
                           return DropdownMenuItem(
-                              value: c, child: Text(c.label));
+                            value: c,
+                            child: Row(
+                              children: [
+                                Icon(c.icon, size: 18, color: c.color),
+                                const SizedBox(width: 10),
+                                Text(c.label),
+                              ],
+                            ),
+                          );
                         }).toList(),
                         onChanged: (v) =>
                             setState(() => _selectedCategory = v!),
@@ -291,6 +335,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                           final n = double.tryParse(v);
                           if (n == null || n <= 0) {
                             return 'Please enter a valid amount greater than 0';
+                          }
+                          if (n > 10000000) {
+                            return 'Amount seems too large — max ₹1 crore';
                           }
                           return null;
                         },
@@ -447,12 +494,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         labelText: 'Pond (Optional)',
         border: OutlineInputBorder(),
         prefixIcon: Icon(Icons.water),
-        helperText: 'Leave empty for a farm-wide expense',
+        helperText: 'Leave empty to apply expense to entire farm',
       ),
       items: [
         const DropdownMenuItem<String?>(
           value: null,
-          child: Text('All Ponds (Farm-wide)'),
+          child: Text('Farm-wide Expense'),
         ),
         ...ponds.map((p) {
           final id = p['id'] as String;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/expense_model.dart';
 import 'expense_provider.dart';
+import 'expense_history_screen.dart';
 import 'add_expense_screen.dart';
 import '../upgrade/subscription_provider.dart';
 import '../upgrade/upgrade_to_pro_screen.dart';
@@ -113,9 +114,9 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
                     Row(
                       children: [
                         Icon(
-                          _getCategoryIcon(category),
+                          category.icon,
                           size: 20,
-                          color: Colors.grey[600],
+                          color: category.color,
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -253,26 +254,6 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
     );
   }
 
-  IconData _getCategoryIcon(ExpenseCategory category) {
-    switch (category) {
-      case ExpenseCategory.feed:
-        return Icons.grain;
-      case ExpenseCategory.supplement:
-        return Icons.science_outlined;
-      case ExpenseCategory.labour:
-        return Icons.people;
-      case ExpenseCategory.electricity:
-        return Icons.bolt;
-      case ExpenseCategory.diesel:
-        return Icons.local_gas_station;
-      case ExpenseCategory.seed:
-        return Icons.grass_rounded;
-      case ExpenseCategory.sampling:
-        return Icons.science;
-      case ExpenseCategory.other:
-        return Icons.more_horiz;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +270,7 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
     }
 
     final summaryAsync = ref.watch(expenseSummaryProvider(widget.cropId));
+    final allExpensesAsync = ref.watch(expensesProvider(widget.cropId));
 
     return Scaffold(
       appBar: AppBar(
@@ -307,6 +289,18 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'View History',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ExpenseHistoryScreen(
+                  cropId: widget.cropId,
+                  farmId: widget.farmId,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -331,7 +325,11 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
         backgroundColor: Colors.blue[600],
         child: const Icon(Icons.add),
       ),
-      body: summaryAsync.when(
+      body: Column(
+        children: [
+          _buildKpiStrip(allExpensesAsync),
+          Expanded(
+            child: summaryAsync.when(
         loading: () => const Center(
           child: CircularProgressIndicator(),
         ),
@@ -431,89 +429,106 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _ProRequired extends StatelessWidget {
-  final VoidCallback onUpgrade;
-
-  const _ProRequired({required this.onUpgrade});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Expense Summary'),
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF4E0),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFE8A33D), width: 2),
-                ),
-                child: const Center(
-                  child: Icon(Icons.workspace_premium_rounded,
-                      size: 36, color: Color(0xFFE8A33D)),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'PRO Feature',
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0E1A1F)),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Log daily expenses and see where your money goes — feed, labour, diesel, and more.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF4A5560),
-                    height: 1.5),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onUpgrade,
-                  icon: const Icon(Icons.workspace_premium_rounded, size: 18),
-                  label: const Text('Upgrade to PRO — ₹999/crop'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8A33D),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Maybe Later',
-                    style: TextStyle(color: Color(0xFF4A5560))),
-              ),
-            ],
           ),
-        ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _buildKpiStrip(AsyncValue<List<Expense>> allExpensesAsync) {
+    final expenses = allExpensesAsync.valueOrNull ?? [];
+    double total = 0, feed = 0;
+    for (final e in expenses) {
+      total += e.amount;
+      if (e.category == ExpenseCategory.feed) feed += e.amount;
+    }
+    final nonFeed = total - feed;
+    final feedPct = total > 0 ? (feed / total * 100) : 0.0;
+
+    return Container(
+      color: Colors.blue.shade600,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: [
+          _kpiCell('Total', total, Colors.white),
+          _kpiDivider(),
+          _kpiCell('Feed', feed, Colors.greenAccent.shade100),
+          _kpiDivider(),
+          _kpiCell('Non-Feed', nonFeed, Colors.orange.shade100),
+          _kpiDivider(),
+          _kpiPctCell(feedPct),
+        ],
+      ),
+    );
+  }
+
+  Widget _kpiCell(String label, double value, Color valueColor) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white60,
+                letterSpacing: 0.4),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _fmtK(value),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kpiPctCell(double pct) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Text(
+            'Feed %',
+            style: TextStyle(
+                fontSize: 10,
+                color: Colors.white60,
+                letterSpacing: 0.4),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${pct.toStringAsFixed(1)}%',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kpiDivider() => Container(
+        width: 1,
+        height: 28,
+        color: Colors.white24,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+      );
+
+  String _fmtK(double v) {
+    if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
+    if (v >= 1000) return '₹${(v / 1000).toStringAsFixed(1)}K';
+    return '₹${v.toStringAsFixed(0)}';
+  }
 }
+
 
 class _FreeExpenseView extends ConsumerWidget {
   final String cropId;

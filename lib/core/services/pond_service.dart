@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_generator.dart';
 import '../utils/logger.dart';
 import 'analytics_service.dart';
+import 'crashlytics_service.dart';
 import '../utils/doc_utils.dart';
 import '../utils/uuid_generator.dart';
 import '../../features/farm/farm_provider.dart';
@@ -199,8 +200,9 @@ class PondService {
             ? DateTime.tryParse(row['harvested_at'] as String)
             : null,
       );
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to fetch pond by ID: $pondId', e);
+      CrashlyticsService.instance.logError(e, st, reason: 'getPondById failed');
       return null;
     }
   }
@@ -347,6 +349,16 @@ class PondService {
     String? feedBrandId,
   }) async {
     try {
+      final uid = supabase.auth.currentUser?.id;
+      if (uid == null) throw Exception('User not logged in');
+      final owned = await supabase
+          .from('ponds')
+          .select('id, farms!inner(user_id)')
+          .eq('id', pondId)
+          .eq('farms.user_id', uid)
+          .maybeSingle();
+      if (owned == null) throw Exception('Pond not found or access denied');
+
       // 1. Delete all historical rows in a single DB transaction via RPC.
       await supabase.rpc('clear_pond_cycle_tables', params: {'p_pond_id': pondId});
 
@@ -374,7 +386,8 @@ class PondService {
       await generateFeedSchedule(pondId);
 
       AppLogger.info('New feed plan generated for pond $pondId');
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'clearPondCycleData failed');
       throw Exception('Failed to start new cycle for pond $pondId: $e');
     }
   }
@@ -385,9 +398,19 @@ class PondService {
 
   Future<void> deletePond(String pondId) async {
     try {
+      final uid = supabase.auth.currentUser?.id;
+      if (uid == null) throw Exception('User not logged in');
+      final owned = await supabase
+          .from('ponds')
+          .select('id, farms!inner(user_id)')
+          .eq('id', pondId)
+          .eq('farms.user_id', uid)
+          .maybeSingle();
+      if (owned == null) throw Exception('Pond not found or access denied');
       await supabase.rpc('delete_pond_cascade', params: {'p_pond_id': pondId});
       AppLogger.info("Pond deleted from DB: $pondId");
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'deletePond failed');
       throw Exception('Failed to delete pond: $e');
     }
   }
@@ -407,7 +430,8 @@ class PondService {
       }).eq('id', pondId);
 
       AppLogger.info("Pond status updated: $pondId → $status");
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'updatePondStatus failed');
       throw Exception('Failed to update pond status: $e');
     }
   }
@@ -429,7 +453,8 @@ class PondService {
 
       AppLogger.info(
           'Anchor feed set for pond $pondId: ${anchorFeed.toStringAsFixed(2)} kg');
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'updateAnchorFeed failed');
       throw Exception('Failed to update anchor feed: $e');
     }
   }
@@ -446,7 +471,8 @@ class PondService {
 
       AppLogger.info(
           "Smart feed status updated for pond $pondId (enabled: $isEnabled)");
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'updateSmartFeedStatus failed');
       throw Exception('Failed to update Smart Feed status: $e');
     }
   }

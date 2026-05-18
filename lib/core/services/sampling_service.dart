@@ -16,6 +16,7 @@ class SamplingService {
   }) async {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('User not logged in');
+    if (averageBodyWeight <= 0) throw ArgumentError('ABW must be > 0 g');
 
     // Deduplicate: skip insert if a sampling log already exists for this
     // pond+doc today. Protects against double-tap and network retries.

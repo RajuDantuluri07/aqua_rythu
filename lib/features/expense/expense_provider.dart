@@ -1,8 +1,69 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/expense_model.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/services/expense_service.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/uuid_generator.dart';
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+
+@immutable
+class ExpenseFilter {
+  final ExpenseCategory? category;
+  final String? pondId;
+  final DateTimeRange? dateRange;
+
+  const ExpenseFilter({this.category, this.pondId, this.dateRange});
+
+  bool get isActive => category != null || pondId != null || dateRange != null;
+
+  int get activeCount =>
+      [category, pondId, dateRange].where((f) => f != null).length;
+
+  bool matches(Expense expense) {
+    if (category != null && expense.category != category) return false;
+    if (pondId != null && expense.pondId != pondId) return false;
+    if (dateRange != null) {
+      final d = DateUtils.dateOnly(expense.date);
+      final start = DateUtils.dateOnly(dateRange!.start);
+      final end = DateUtils.dateOnly(dateRange!.end);
+      if (d.isBefore(start) || d.isAfter(end)) return false;
+    }
+    return true;
+  }
+
+  ExpenseFilter copyWith({
+    Object? category = _sentinel,
+    Object? pondId = _sentinel,
+    Object? dateRange = _sentinel,
+  }) =>
+      ExpenseFilter(
+        category: category == _sentinel
+            ? this.category
+            : category as ExpenseCategory?,
+        pondId: pondId == _sentinel ? this.pondId : pondId as String?,
+        dateRange: dateRange == _sentinel
+            ? this.dateRange
+            : dateRange as DateTimeRange?,
+      );
+
+  ExpenseFilter cleared() => const ExpenseFilter();
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExpenseFilter &&
+      other.category == category &&
+      other.pondId == pondId &&
+      other.dateRange == dateRange;
+
+  @override
+  int get hashCode => Object.hash(category, pondId, dateRange);
+}
+
+const _sentinel = Object();
 
 class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
   final ExpenseService expenseService;
@@ -47,6 +108,11 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
         operationId: generateUuidV4(),
       );
       AppLogger.info('Expense created successfully with ID: $expenseId');
+      unawaited(AnalyticsService.instance.logExpenseAdded(
+        farmId: farmId,
+        category: category.name,
+        amount: amount,
+      ));
 
       await loadExpenses();
       ref.invalidate(expenseSummaryProvider(cropId));
@@ -86,6 +152,7 @@ class ExpenseNotifier extends StateNotifier<AsyncValue<List<Expense>>> {
   Future<void> deleteExpense(String expenseId) async {
     try {
       await expenseService.deleteExpense(expenseId);
+      unawaited(AnalyticsService.instance.logExpenseDeleted());
 
       await loadExpenses();
       ref.invalidate(expenseSummaryProvider(cropId));
@@ -173,3 +240,22 @@ final farmExpensesTotalProvider =
   final svc = ref.watch(expenseServiceProvider);
   return svc.getTotalExpenses(farmId: farmId);
 });
+
+// ── History / Filter providers ────────────────────────────────────────────────
+
+/// Active filter for the expense history screen, keyed by cropId.
+final expenseFilterProvider =
+    StateProvider.family.autoDispose<ExpenseFilter, String>(
+  (ref, cropId) => const ExpenseFilter(),
+);
+
+/// All expenses for a crop, with the active filter applied client-side.
+final filteredExpensesProvider =
+    Provider.family.autoDispose<AsyncValue<List<Expense>>, String>(
+  (ref, cropId) {
+    final filter = ref.watch(expenseFilterProvider(cropId));
+    return ref.watch(expensesProvider(cropId)).whenData(
+          (all) => filter.isActive ? all.where(filter.matches).toList() : all,
+        );
+  },
+);

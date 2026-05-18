@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/access_denied_view.dart';
 import '../../core/constants/spacing.dart';
@@ -42,6 +45,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 // Feed savings: baseline FCR for "expected feed" benchmark.
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(AnalyticsService.instance.trackScreen('home_screen'));
+  }
+
   int _tapCount = 0;
   DateTime? _lastTapTime;
   static const Duration _tapResetTime = Duration(seconds: 3);

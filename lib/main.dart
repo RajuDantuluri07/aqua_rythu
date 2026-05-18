@@ -3,9 +3,11 @@ import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'core/theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/profile/farm_settings_provider.dart';
@@ -23,6 +25,11 @@ import 'core/language/app_localizations.dart';
 import 'core/services/feed_sync_queue.dart';
 import 'core/services/feed_service.dart';
 import 'core/providers/connectivity_provider.dart';
+import 'features/farm/farm_provider.dart';
+import 'features/water/water_provider.dart';
+import 'features/growth/growth_provider.dart';
+import 'features/tray/tray_provider.dart';
+import 'features/harvest/harvest_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +43,10 @@ void main() async {
 
   // Firebase must be initialized before any other service.
   await Firebase.initializeApp();
+
+  // Suppress reports in debug builds — avoids noisy local crash uploads.
+  await FirebaseCrashlytics.instance
+      .setCrashlyticsCollectionEnabled(!kDebugMode);
 
   // Route all Flutter framework errors to Crashlytics (fatal in release).
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -125,6 +136,7 @@ class _AuthGateState extends ConsumerState<AuthGate>
   bool _showFeedSyncWarning = false;
   bool _feedSyncWarningDismissed = false;
   static const _kFeedSyncDismissedKey = 'feed_sync_warning_dismissed';
+  StreamSubscription<AuthState>? _authSub;
 
   @override
   void initState() {
@@ -132,6 +144,11 @@ class _AuthGateState extends ConsumerState<AuthGate>
     WidgetsBinding.instance.addObserver(this);
     _checkOnboarding();
     _checkFeedSyncWarning();
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedOut) {
+        ref.read(authProvider.notifier).logout();
+      }
+    });
   }
 
   Future<void> _checkFeedSyncWarning() async {
@@ -186,6 +203,7 @@ class _AuthGateState extends ConsumerState<AuthGate>
 
   @override
   void dispose() {
+    _authSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -204,7 +222,7 @@ class _AuthGateState extends ConsumerState<AuthGate>
       ref.read(subscriptionProvider.notifier).hydrateFromBackend();
     }
 
-    // Feed sync queue — replay on reconnect, 30 s debounce.
+    // Feed sync queue + pond provider refresh — 30 s debounce.
     if (_lastQueueProcess == null ||
         now.difference(_lastQueueProcess!).inSeconds > 30) {
       _lastQueueProcess = now;
@@ -213,6 +231,19 @@ class _AuthGateState extends ConsumerState<AuthGate>
       }).catchError((e) {
         debugPrint('FeedSyncQueue resume replay failed: $e');
       });
+
+      // Refresh water/growth/tray/harvest data for all active ponds.
+      final pondIds = ref
+          .read(farmProvider)
+          .farms
+          .expand((f) => f.ponds)
+          .map((p) => p.id);
+      for (final id in pondIds) {
+        ref.invalidate(waterProvider(id));
+        ref.invalidate(growthProvider(id));
+        ref.invalidate(trayProvider(id));
+        ref.invalidate(harvestProvider(id));
+      }
     }
   }
 

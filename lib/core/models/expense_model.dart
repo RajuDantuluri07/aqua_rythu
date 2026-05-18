@@ -1,11 +1,19 @@
+import 'package:flutter/material.dart';
+
 enum ExpenseCategory {
   feed('feed', 'Feed'),
-  supplement('supplement', 'Supplement'),
+  seed('seed', 'Seed / PL'),
+  probiotic('probiotic', 'Probiotic'),
+  mineral('mineral', 'Mineral'),
+  medicine('medicine', 'Medicine'),
   labour('labour', 'Labour'),
+  diesel('diesel', 'Diesel / Fuel'),
   electricity('electricity', 'Electricity'),
-  diesel('diesel', 'Diesel/Oil'),
-  seed('seed', 'Seed / PL Cost'),
-  sampling('sampling', 'Sampling'),
+  waterTreatment('water_treatment', 'Water Treatment'),
+  testing('sampling', 'Testing'),
+  equipment('equipment', 'Equipment'),
+  harvest('harvest', 'Harvest'),
+  supplement('supplement', 'Supplement'), // legacy — kept for existing records
   other('other', 'Other');
 
   const ExpenseCategory(this.value, this.label);
@@ -15,10 +23,44 @@ enum ExpenseCategory {
 
   static ExpenseCategory fromString(String value) {
     return ExpenseCategory.values.firstWhere(
-      (category) => category.value == value,
+      (c) => c.value == value,
       orElse: () => ExpenseCategory.other,
     );
   }
+
+  IconData get icon => switch (this) {
+        ExpenseCategory.feed => Icons.grain,
+        ExpenseCategory.seed => Icons.grass_rounded,
+        ExpenseCategory.probiotic => Icons.science_outlined,
+        ExpenseCategory.mineral => Icons.spa_outlined,
+        ExpenseCategory.medicine => Icons.medication_outlined,
+        ExpenseCategory.labour => Icons.people_outline,
+        ExpenseCategory.diesel => Icons.local_gas_station,
+        ExpenseCategory.electricity => Icons.bolt,
+        ExpenseCategory.waterTreatment => Icons.water_drop_outlined,
+        ExpenseCategory.testing => Icons.biotech_outlined,
+        ExpenseCategory.equipment => Icons.build_outlined,
+        ExpenseCategory.harvest => Icons.agriculture,
+        ExpenseCategory.supplement => Icons.science_outlined,
+        ExpenseCategory.other => Icons.more_horiz,
+      };
+
+  Color get color => switch (this) {
+        ExpenseCategory.feed => const Color(0xFF4CAF50),
+        ExpenseCategory.seed => const Color(0xFF8BC34A),
+        ExpenseCategory.probiotic => const Color(0xFF00BCD4),
+        ExpenseCategory.mineral => const Color(0xFF9C27B0),
+        ExpenseCategory.medicine => const Color(0xFFE53935),
+        ExpenseCategory.labour => const Color(0xFF2196F3),
+        ExpenseCategory.diesel => const Color(0xFF795548),
+        ExpenseCategory.electricity => const Color(0xFFFF9800),
+        ExpenseCategory.waterTreatment => const Color(0xFF03A9F4),
+        ExpenseCategory.testing => const Color(0xFF607D8B),
+        ExpenseCategory.equipment => const Color(0xFF78909C),
+        ExpenseCategory.harvest => const Color(0xFF43A047),
+        ExpenseCategory.supplement => const Color(0xFF26C6DA),
+        ExpenseCategory.other => const Color(0xFF9E9E9E),
+      };
 }
 
 class Expense {

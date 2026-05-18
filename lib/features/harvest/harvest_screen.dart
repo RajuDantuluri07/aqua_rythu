@@ -6,6 +6,7 @@ import 'harvest_provider.dart';
 import 'harvest_summary_screen.dart';
 import '../../core/services/pond_harvest_service.dart';
 import '../../core/utils/logger.dart';
+import '../pond/controllers/pond_dashboard_controller.dart';
 
 class HarvestScreen extends ConsumerWidget {
   final String pondId;
@@ -699,8 +700,9 @@ class _HarvestLogModalState extends ConsumerState<_HarvestLogModal> {
             lastHarvestQty: qty,
           );
 
-      // 3. Reload harvest ledger.
+      // 3. Reload harvest ledger and flush feed cache so dashboard recalculates.
       ref.invalidate(harvestProvider(widget.pondId));
+      pondDashboardController.invalidate(widget.pondId);
     } catch (e) {
       AppLogger.error('Failed to save harvest', e);
       if (mounted) {

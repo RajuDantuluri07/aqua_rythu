@@ -12,6 +12,7 @@ import '../features/home/home_screen.dart';
 import '../features/inventory/inventory_setup_screen.dart';
 import '../features/inventory/inventory_dashboard_screen.dart';
 import '../features/expense/expense_summary_screen.dart';
+import '../features/expense/expense_history_screen.dart';
 import '../features/expense/add_expense_screen.dart';
 import '../features/profit/profit_summary_screen.dart';
 import '../core/config/feature_flags.dart';
@@ -29,6 +30,7 @@ class AppRoutes {
   static const inventorySetup = '/inventory_setup';
   static const inventoryDashboard = '/inventory_dashboard';
   static const expenseSummary = '/expense-summary';
+  static const expenseHistory = '/expense-history';
   static const addExpense = '/add-expense';
   static const profitSummary = '/profit-summary';
 
@@ -70,6 +72,24 @@ class AppRoutes {
         );
       }
       return ExpenseSummaryScreen(
+        cropId: args['cropId']!,
+        farmId: args['farmId']!,
+      );
+    },
+    expenseHistory: (context) {
+      if (!FeatureFlags.isExpenseVisible) {
+        return const _FeatureDisabledScreen(featureName: 'Expense');
+      }
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+      if (args == null || args['cropId'] == null || args['farmId'] == null) {
+        return const Scaffold(
+          body: Center(
+            child: Text('Invalid arguments: cropId and farmId required'),
+          ),
+        );
+      }
+      return ExpenseHistoryScreen(
         cropId: args['cropId']!,
         farmId: args['farmId']!,
       );

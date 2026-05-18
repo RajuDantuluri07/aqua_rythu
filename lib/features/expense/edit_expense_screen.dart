@@ -150,7 +150,13 @@ class _EditExpenseScreenState extends ConsumerState<EditExpenseScreen> {
                 items: ExpenseCategory.values.map((category) {
                   return DropdownMenuItem(
                     value: category,
-                    child: Text(category.label),
+                    child: Row(
+                      children: [
+                        Icon(category.icon, size: 18, color: category.color),
+                        const SizedBox(width: 10),
+                        Text(category.label),
+                      ],
+                    ),
                   );
                 }).toList(),
                 onChanged: (value) {

@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense_model.dart';
 import '../utils/logger.dart';
 import '../utils/uuid_generator.dart';
+import 'crashlytics_service.dart';
 
 class ExpenseService {
   final supabase = Supabase.instance.client;
@@ -109,6 +110,7 @@ class ExpenseService {
       return response['id'].toString();
     } catch (e, stackTrace) {
       AppLogger.error('Failed to create expense: $e\nStackTrace: $stackTrace');
+      CrashlyticsService.instance.logError(e, stackTrace, reason: 'createExpense failed');
       rethrow;
     }
   }
@@ -143,8 +145,9 @@ class ExpenseService {
 
       final result = await query.order('date', ascending: false).limit(limit);
       return result.map((item) => Expense.fromMap(item)).toList();
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get expenses: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getExpenses failed');
       return [];
     }
   }
@@ -185,8 +188,9 @@ class ExpenseService {
           count: categoryCounts[entry.key] ?? 0,
         );
       }).toList();
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get daily expenses: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getDailyExpenses failed');
       return [];
     }
   }
@@ -230,8 +234,9 @@ class ExpenseService {
           count: categoryCounts[entry.key] ?? 0,
         );
       }).toList();
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get weekly expenses: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getWeeklyExpenses failed');
       return [];
     }
   }
@@ -298,8 +303,9 @@ class ExpenseService {
         );
       }).toList()
         ..sort((a, b) => a.weekStart.compareTo(b.weekStart));
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get monthly expenses: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getMonthlyExpenses failed');
       return [];
     }
   }
@@ -340,8 +346,9 @@ class ExpenseService {
       }
 
       return total;
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get total expenses: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getTotalExpenses failed');
       return 0.0;
     }
   }
@@ -385,8 +392,9 @@ class ExpenseService {
           .eq('user_id', user.id);
 
       AppLogger.info('Updated expense: $expenseId');
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to update expense: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'updateExpense failed');
       rethrow;
     }
   }
@@ -405,8 +413,9 @@ class ExpenseService {
           .eq('user_id', user.id);
 
       AppLogger.info('Deleted expense: $expenseId');
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to delete expense: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'deleteExpense failed');
       rethrow;
     }
   }

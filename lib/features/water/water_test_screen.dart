@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/analytics_service.dart';
 import '../farm/farm_provider.dart';
 import '../profile/farm_settings_provider.dart';
 import 'water_provider.dart';
@@ -15,6 +18,12 @@ class WaterTestScreen extends ConsumerStatefulWidget {
 }
 
 class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(AnalyticsService.instance.trackScreen('water_test_screen'));
+  }
+
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _ammoniaController = TextEditingController();
   final TextEditingController _phController = TextEditingController();
@@ -86,7 +95,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
     super.dispose();
   }
 
-  void _saveWaterTest() {
+  Future<void> _saveWaterTest() async {
     if (_formKey.currentState?.validate() ?? false) {
       final ph = double.tryParse(_phController.text) ?? 0;
       final doVal = double.tryParse(_doController.text) ?? 0;
@@ -96,15 +105,28 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
       final nitrite = double.tryParse(_nitriteController.text) ?? 0;
       final doc = ref.read(docProvider(widget.pondId));
 
-      ref.read(waterProvider(widget.pondId).notifier).addLog(
-            doc: doc,
-            ph: ph,
-            dissolvedOxygen: doVal,
-            salinity: sal,
-            alkalinity: alk,
-            ammonia: ammonia,
-            nitrite: nitrite,
+      try {
+        await ref.read(waterProvider(widget.pondId).notifier).addLog(
+              doc: doc,
+              ph: ph,
+              dissolvedOxygen: doVal,
+              salinity: sal,
+              alkalinity: alk,
+              ammonia: ammonia,
+              nitrite: nitrite,
+            );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to save water test. Please retry.'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
+        }
+        return;
+      }
 
       // Clear inputs after save
       _phController.clear();
@@ -155,6 +177,7 @@ class _WaterTestScreenState extends ConsumerState<WaterTestScreen> {
         snackIcon = Icons.warning_amber_rounded;
       }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(

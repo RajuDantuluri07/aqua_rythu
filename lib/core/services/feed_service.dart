@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_constants.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../../features/feed/feed_schedule_provider.dart';
 import '../utils/logger.dart';
+import 'analytics_service.dart';
 import 'inventory_service.dart';
 import 'feed_sync_queue.dart';
+import 'crashlytics_service.dart';
 
 // Maximum realistic feed per round (kg). Amounts above this are rejected
 // as data errors before hitting the DB.
@@ -56,9 +60,10 @@ class FeedService implements FeedCompletionSink {
         AppLogger.info(
             'LOW STOCK WARNING: Pond $pondId has ${newStock.toStringAsFixed(1)} kg remaining after feeding');
       }
-    } catch (e) {
+    } catch (e, st) {
       // DB/inventory errors must not block feeding — just log and continue.
       AppLogger.error('Failed to check inventory stock: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'checkInventoryStock failed');
     }
     // Rethrow outside the catch so the block-feeding path is never swallowed.
     if (stockError != null) throw stockError;
@@ -110,7 +115,8 @@ class FeedService implements FeedCompletionSink {
           .eq('pond_id', pondId)
           .order('doc', ascending: true)
           .order('round', ascending: true);
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'getFeedPlans failed');
       throw Exception('Failed to fetch feed plans: $e');
     }
   }
@@ -145,7 +151,8 @@ class FeedService implements FeedCompletionSink {
           .eq('pond_id', pondId)
           .eq('doc', doc)
           .order('round', ascending: true);
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'getFeedPlanForDoc failed');
       throw Exception('Failed to fetch feed plan for DOC $doc: $e');
     }
   }
@@ -329,7 +336,8 @@ class FeedService implements FeedCompletionSink {
 
       AppLogger.info(
           "Feed plans saved for pond $pondId (${feedPlans.length} DOCs × 4 rounds)");
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.logError(e, st, reason: 'saveFeedPlans failed');
       throw Exception('Failed to save feed plans: $e');
     }
   }
@@ -366,9 +374,10 @@ class FeedService implements FeedCompletionSink {
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
-      } catch (e) {
+      } catch (e, st) {
         if (attempt == maxAttempts) {
           AppLogger.error('$tag failed after $maxAttempts attempts', e);
+          CrashlyticsService.instance.logError(e, st, reason: '$tag exhausted retries');
           rethrow;
         }
         AppLogger.warn('$tag attempt $attempt failed, retrying', e);
@@ -496,6 +505,8 @@ class FeedService implements FeedCompletionSink {
     // Phase 5: Validate before touching DB — reject corrupted engine output.
     _validateFeedAmount(amount, pondId: pondId, doc: doc, round: round);
 
+    var shouldEmitAnalytics = false;
+
     await _withRetry(
         'completeFeedRoundWithLog(pond=$pondId doc=$doc round=$round)',
         () async {
@@ -517,6 +528,7 @@ class FeedService implements FeedCompletionSink {
           throw Exception(
               'complete_feed_round_with_log returned false for pond $pondId DOC $doc round $round');
         }
+        shouldEmitAnalytics = true;
         return;
       }
 
@@ -546,9 +558,22 @@ class FeedService implements FeedCompletionSink {
         AppLogger.info(
             'completeFeedRound: round already completed — '
             'feed_logs repaired (pond=$pondId doc=$doc r=$round)');
+      } else {
+        // Genuine new write — mark for analytics emission.
+        shouldEmitAnalytics = true;
       }
-
     });
+
+    // Emit only for genuine new saves; skip idempotency replays.
+    if (shouldEmitAnalytics) {
+      unawaited(AnalyticsService.instance.logFeedRoundCompleted(
+        pondId: pondId,
+        doc: doc,
+        round: round,
+        qty: amount,
+      ));
+    }
+
     // Inventory deduction is now handled atomically inside the
     // complete_feed_round_with_log RPC — no separate app-side call needed.
   }

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
 import '../models/harvest_model.dart';
+import 'crashlytics_service.dart';
 
 class HarvestService {
   final supabase = Supabase.instance.client;
@@ -35,8 +36,9 @@ class HarvestService {
       }
       AppLogger.info('Created harvest: ${response['id']}');
       return response['id'].toString();
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to create harvest: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'createHarvest failed');
       rethrow;
     }
   }
@@ -56,8 +58,9 @@ class HarvestService {
           .order('date', ascending: false);
 
       return result.map((item) => Harvest.fromMap(item)).toList();
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get harvests: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getHarvests failed');
       return [];
     }
   }
@@ -67,8 +70,9 @@ class HarvestService {
     try {
       final harvests = await getHarvests(cropId);
       return harvests.isNotEmpty ? harvests.first : null;
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get latest harvest: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getLatestHarvest failed');
       return null;
     }
   }
@@ -102,8 +106,9 @@ class HarvestService {
           .eq('id', harvestId);
 
       AppLogger.info('Updated harvest: $harvestId');
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to update harvest: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'updateHarvest failed');
       rethrow;
     }
   }
@@ -122,8 +127,9 @@ class HarvestService {
           .eq('id', harvestId);
 
       AppLogger.info('Deleted harvest: $harvestId');
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to delete harvest: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'deleteHarvest failed');
       rethrow;
     }
   }
@@ -138,8 +144,9 @@ class HarvestService {
           .limit(1);
 
       return (result as List?)?.isNotEmpty ?? false;
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to check harvest records: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'hasHarvestRecords failed');
       return false;
     }
   }
@@ -158,8 +165,9 @@ class HarvestService {
       }
 
       return total;
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get total harvest weight: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getTotalHarvestWeight failed');
       return 0.0;
     }
   }
@@ -185,8 +193,9 @@ class HarvestService {
       }
 
       return totalWeight > 0 ? totalRevenue / totalWeight : 0.0;
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to get average price per kg: $e');
+      CrashlyticsService.instance.logError(e, st, reason: 'getAveragePricePerKg failed');
       return 0.0;
     }
   }

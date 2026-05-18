@@ -84,6 +84,74 @@ class AnalyticsService {
         name: 'subscription_tier', value: subscriptionTier);
   }
 
+  Future<void> setUserProperty(String name, String value) async {
+    if (kDebugMode) return;
+    try {
+      await _analytics.setUserProperty(name: name, value: value);
+    } catch (_) {}
+  }
+
+  Future<void> setUserId(String? userId) async {
+    if (kDebugMode) return;
+    try {
+      await _analytics.setUserId(id: userId);
+    } catch (_) {}
+  }
+
+  // ── Generic public API (ticket spec) ─────────────────────────────────────
+  Future<void> track(String eventName, {Map<String, Object?>? params}) =>
+      _log(eventName, params?.cast<String, Object>());
+
+  Future<void> trackScreen(String screenName) async {
+    if (kDebugMode) return;
+    try {
+      await _analytics.logScreenView(screenName: screenName);
+    } catch (_) {}
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────────────────
+  Future<void> logAuthLoginSuccess() => _log('auth_login_success');
+
+  Future<void> logAuthLogout() => _log('auth_logout');
+
+  Future<void> logSessionRestored() => _log('session_restored');
+
+  // ── Farm ─────────────────────────────────────────────────────────────────
+  Future<void> logFarmCreated({required String farmId}) =>
+      _log('farm_created', {'farm_id': farmId});
+
+  // ── Crop cycle ───────────────────────────────────────────────────────────
+  Future<void> logCropCycleStarted({required String pondId}) =>
+      _log('crop_cycle_started', {'pond_id': pondId});
+
+  // ── Harvest ──────────────────────────────────────────────────────────────
+  Future<void> logHarvestSaved({
+    required String pondId,
+    required int doc,
+    required String type,
+    required double quantityKg,
+  }) =>
+      _log('harvest_saved', {
+        'pond_id': pondId,
+        'doc': doc,
+        'type': type,
+        'quantity_kg': quantityKg.toStringAsFixed(1),
+      });
+
+  // ── Expense ──────────────────────────────────────────────────────────────
+  Future<void> logExpenseAdded({
+    required String farmId,
+    required String category,
+    required double amount,
+  }) =>
+      _log('expense_added', {
+        'farm_id': farmId,
+        'category': category,
+        'amount': amount.toStringAsFixed(0),
+      });
+
+  Future<void> logExpenseDeleted() => _log('expense_deleted');
+
   // ── Internal ─────────────────────────────────────────────────────────────
   Future<void> _log(String name, [Map<String, Object>? params]) async {
     if (kDebugMode) return; // keep dashboard clean during development

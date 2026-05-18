@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/farm_settings_provider.dart';
 import '../../core/utils/logger.dart';
 import '../../core/services/analytics_service.dart';
+import '../../core/services/crashlytics_service.dart';
 
 class WaterLog {
   final String id;
@@ -212,8 +213,9 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
       )).toList();
 
       state = logs;
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to load water logs', e);
+      CrashlyticsService.instance.logError(e, st, reason: 'loadWaterLogs failed');
     }
   }
 
@@ -258,8 +260,11 @@ class WaterNotifier extends StateNotifier<List<WaterLog>> {
         'created_at': now.toIso8601String(),
       });
       unawaited(AnalyticsService.instance.logWaterLogAdded(pondId: pondId, doc: doc));
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.error('Failed to save water log', e);
+      CrashlyticsService.instance.logError(e, st, reason: 'addWaterLog failed');
+      state = state.where((l) => l.id != newLog.id).toList();
+      rethrow;
     }
   }
 

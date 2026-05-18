@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile/user_provider.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
 import '../pond/controllers/pond_dashboard_controller.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/utils/logger.dart';
 
 class AppAuthState {
@@ -94,6 +97,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       if (res.user != null) {
         await _syncUserRecord(res.user!);
         state = state.copyWith(isLoading: false, isAuthenticated: true, email: email);
+        unawaited(AnalyticsService.instance.logAuthLoginSuccess());
+        unawaited(AnalyticsService.instance.setUserId(res.user!.id));
         return true;
       }
       return false;
@@ -148,6 +153,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           } catch (e) {
             AppLogger.error('Session sync failed', e);
           }
+          unawaited(AnalyticsService.instance.logSessionRestored());
+          unawaited(AnalyticsService.instance.setUserId(userId));
         }
       }
 
@@ -216,6 +223,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   }
 
   Future<void> logout() async {
+    unawaited(AnalyticsService.instance.logAuthLogout());
+    unawaited(AnalyticsService.instance.setUserId(null));
     await _supabase.auth.signOut();
     pondDashboardController.clearCache();
     ref.invalidate(farmProvider);
@@ -244,6 +253,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       if (res.user != null) {
         await _syncUserRecord(res.user!);
         state = state.copyWith(isLoading: false, isAuthenticated: true);
+        unawaited(AnalyticsService.instance.logAuthLoginSuccess());
+        unawaited(AnalyticsService.instance.setUserId(res.user!.id));
       } else {
         state = state.copyWith(isLoading: false, errorMessage: 'Verification failed. Please try again.');
       }

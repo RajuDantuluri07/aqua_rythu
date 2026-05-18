@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/utils/logger.dart';
 
 /// ================= MODEL =================
@@ -91,6 +94,12 @@ class HarvestNotifier extends StateNotifier<List<HarvestEntry>> {
         'date': entry.date.toIso8601String().split('T')[0],
         'count_per_kg': entry.countPerKg,
       });
+      unawaited(AnalyticsService.instance.logHarvestSaved(
+        pondId: pondId,
+        doc: entry.doc,
+        type: entry.type,
+        quantityKg: entry.quantity,
+      ));
       // Replace optimistic state (local timestamp ID) with canonical DB state.
       await _loadHarvests();
     } catch (e, stackTrace) {

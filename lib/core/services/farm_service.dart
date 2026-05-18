@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/pond_repository.dart';
 import '../repositories/feed_repository.dart';
 import '../repositories/tray_repository.dart';
 import '../../features/pond/controllers/pond_dashboard_controller.dart';
+import 'analytics_service.dart';
 
 class FarmService {
   final pondRepo = PondRepository();
@@ -42,7 +45,9 @@ class FarmService {
       if (response == null) {
         throw Exception('Failed to create farm: insert returned no data');
       }
-      return response['id'].toString();
+      final farmId = response['id'].toString();
+      unawaited(AnalyticsService.instance.logFarmCreated(farmId: farmId));
+      return farmId;
     } catch (e) {
       throw Exception('Failed to create farm: $e');
     }

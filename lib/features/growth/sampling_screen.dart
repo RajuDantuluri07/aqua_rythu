@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../core/services/analytics_service.dart';
 import 'growth_provider.dart';
 import 'sampling_log.dart';
 import '../farm/farm_provider.dart';
@@ -72,6 +75,7 @@ class _SamplingScreenState extends ConsumerState<SamplingScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(AnalyticsService.instance.trackScreen('sampling_screen'));
     _weightKgCtrl.addListener(() => _recalculate());
     _countGroupsCtrl.addListener(() => _recalculate());
   }
