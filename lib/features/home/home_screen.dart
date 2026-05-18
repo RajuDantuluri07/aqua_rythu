@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
@@ -485,9 +484,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     final gate = ref.watch(featureGateProvider);
-    final minDoc = ponds.isNotEmpty
-        ? ponds.map((p) => p.doc).reduce(math.min)
-        : 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -501,8 +497,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   _AppBar(
                     farmName: farm.name,
-                    doc: minDoc,
-                    pondCount: ponds.length,
                     isPro: gate.isPro,
                     onIconSecretTap: _handleFarmNameTap,
                     onNameTap: () => FarmSwitcherSheet.show(context),
@@ -572,8 +566,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 class _AppBar extends StatelessWidget {
   final String farmName;
-  final int doc;
-  final int pondCount;
   final bool isPro;
   final VoidCallback onNameTap;
   final VoidCallback onIconSecretTap;
@@ -581,8 +573,6 @@ class _AppBar extends StatelessWidget {
 
   const _AppBar({
     required this.farmName,
-    required this.doc,
-    required this.pondCount,
     required this.isPro,
     required this.onNameTap,
     required this.onIconSecretTap,
@@ -598,17 +588,11 @@ class _AppBar extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onIconSecretTap,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: _greenSoft,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: _greenHi.withOpacity(0.2)),
-              ),
-              child: const Center(
-                child: Icon(Icons.set_meal_rounded, color: _greenHi, size: 20),
-              ),
+            child: Image.asset(
+              'assets/images/logo.png',
+              height: 40,
+              width: 130,
+              fit: BoxFit.contain,
             ),
           ),
           const SizedBox(width: Spacing.sm),
@@ -637,14 +621,6 @@ class _AppBar extends StatelessWidget {
                         color: AppColors.textSecondary,
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'DOC ${doc.toString().padLeft(2, '0')} · $pondCount ACTIVE POND${pondCount != 1 ? 'S' : ''}',
-                    style: AppTextStyles.secondaryText.copyWith(
-                      color: AppColors.textSecondary,
-                      fontFamily: 'monospace',
-                    ),
                   ),
                 ],
               ),

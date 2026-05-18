@@ -10,6 +10,8 @@ class FeedMasterProduct {
   final double? bagWeightKg;
   final String? feedType;
   final bool active;
+  final double? bagPrice;
+  final double? pricePerKg;
 
   const FeedMasterProduct({
     required this.id,
@@ -23,6 +25,8 @@ class FeedMasterProduct {
     this.bagWeightKg,
     this.feedType,
     this.active = true,
+    this.bagPrice,
+    this.pricePerKg,
   });
 
   String get displayName => '$brand $productName';
@@ -40,6 +44,8 @@ class FeedMasterProduct {
       bagWeightKg: (json['bag_weight_kg'] as num?)?.toDouble(),
       feedType: json['feed_type'] as String?,
       active: json['active'] as bool? ?? true,
+      bagPrice: (json['bag_price'] as num?)?.toDouble(),
+      pricePerKg: (json['price_per_kg'] as num?)?.toDouble(),
     );
   }
 
@@ -55,5 +61,7 @@ class FeedMasterProduct {
         'bag_weight_kg': bagWeightKg,
         'feed_type': feedType,
         'active': active,
+        'bag_price': bagPrice,
+        'price_per_kg': pricePerKg,
       };
 }

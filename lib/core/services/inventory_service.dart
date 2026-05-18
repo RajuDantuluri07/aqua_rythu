@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
+import '../utils/uuid_generator.dart';
 
 class InventoryService {
   final SupabaseClient supabase;
@@ -438,6 +439,169 @@ class InventoryService {
           'Deducted $quantity $unit of "$itemName" from inventory (farm $farmId)');
     } catch (e) {
       AppLogger.error('recordSupplementConsumption failed for "$itemName": $e');
+    }
+  }
+
+  // Save an inventory batch header (one per Save Inventory session).
+  Future<void> saveBatch({
+    required String batchId,
+    required String farmId,
+    required String userId,
+    required DateTime purchaseDate,
+    required int totalProducts,
+    double? totalCost,
+  }) async {
+    try {
+      await supabase.from('inventory_batches').insert({
+        'id': batchId,
+        'farm_id': farmId,
+        'user_id': userId,
+        'purchase_date': purchaseDate.toIso8601String().split('T')[0],
+        'total_products': totalProducts,
+        'total_cost': totalCost,
+      });
+      AppLogger.info('Saved inventory batch $batchId');
+    } catch (e) {
+      AppLogger.error('Failed to save inventory batch: $e');
+      rethrow;
+    }
+  }
+
+  // Post feed and/or supplement costs to the expenses table for crop tracking.
+  // crop_id is null because purchases are farm-level (not tied to a specific crop).
+  Future<void> recordInventoryExpenses({
+    required String farmId,
+    required String userId,
+    required DateTime purchaseDate,
+    double? feedCost,
+    double? supplementCost,
+  }) async {
+    final inserts = <Map<String, dynamic>>[];
+    final dateStr = purchaseDate.toIso8601String().split('T')[0];
+
+    if (feedCost != null && feedCost > 0) {
+      inserts.add({
+        'id': generateUuidV4(),
+        'user_id': userId,
+        'farm_id': farmId,
+        'category': 'feed',
+        'amount': feedCost,
+        'date': dateStr,
+        'notes': 'Inventory purchase',
+      });
+    }
+    if (supplementCost != null && supplementCost > 0) {
+      inserts.add({
+        'id': generateUuidV4(),
+        'user_id': userId,
+        'farm_id': farmId,
+        'category': 'supplement',
+        'amount': supplementCost,
+        'date': dateStr,
+        'notes': 'Inventory purchase',
+      });
+    }
+    if (inserts.isEmpty) return;
+
+    try {
+      await supabase.from('expenses').insert(inserts);
+      AppLogger.info('Recorded inventory expenses: feed=$feedCost, supplement=$supplementCost');
+    } catch (e) {
+      AppLogger.error('Failed to record inventory expenses: $e');
+      rethrow;
+    }
+  }
+
+  // Delete a batch and all its line-item entries.
+  Future<void> deleteBatch(String batchId) async {
+    try {
+      await supabase.from('inventory_entries').delete().eq('batch_id', batchId);
+      await supabase.from('inventory_batches').delete().eq('id', batchId);
+      AppLogger.info('Deleted batch $batchId');
+    } catch (e) {
+      AppLogger.error('Failed to delete batch $batchId: $e');
+      rethrow;
+    }
+  }
+
+  // Update batch purchase date + individual entry quantities / prices.
+  // entries: list of {id, qty, bag_price} for each inventory_entry row.
+  Future<void> updateBatch({
+    required String batchId,
+    required DateTime purchaseDate,
+    required List<Map<String, dynamic>> entries,
+  }) async {
+    final dateStr = purchaseDate.toIso8601String().split('T')[0];
+
+    double? newTotalCost;
+    for (final e in entries) {
+      final qty = (e['qty'] as num).toInt();
+      final price = e['bag_price'] as double?;
+      if (price != null) {
+        newTotalCost = (newTotalCost ?? 0) + qty * price;
+      }
+    }
+
+    for (final e in entries) {
+      final qty = (e['qty'] as num).toInt();
+      final bagPrice = e['bag_price'] as double?;
+      await supabase.from('inventory_entries').update({
+        'quantity_purchased': qty,
+        'bag_price': bagPrice,
+        'total_cost': bagPrice != null ? qty * bagPrice : null,
+        'actual_stock': e['actual_stock'],
+        'purchase_date': dateStr,
+      }).eq('id', e['id'] as String);
+    }
+
+    await supabase.from('inventory_batches').update({
+      'purchase_date': dateStr,
+      'total_cost': newTotalCost,
+      'total_products': entries.length,
+    }).eq('id', batchId);
+
+    AppLogger.info('Updated batch $batchId');
+  }
+
+  // Fetch recent inventory batches with their line-item entries.
+  // Each returned map has all inventory_batches columns plus an 'entries' key
+  // containing a List<Map<String, dynamic>> of the matching inventory_entries rows.
+  Future<List<Map<String, dynamic>>> getBatchesWithEntries(
+    String farmId, {
+    int limit = 20,
+  }) async {
+    try {
+      final batches = await supabase
+          .from('inventory_batches')
+          .select('*')
+          .eq('farm_id', farmId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      if (batches.isEmpty) return [];
+
+      final batchIds = batches.map((b) => b['id'] as String).toList();
+      final entries = await supabase
+          .from('inventory_entries')
+          .select('*')
+          .inFilter('batch_id', batchIds)
+          .order('created_at');
+
+      final entriesByBatch = <String, List<Map<String, dynamic>>>{};
+      for (final e in entries) {
+        final bid = e['batch_id'] as String?;
+        if (bid != null) {
+          entriesByBatch.putIfAbsent(bid, () => []).add(Map<String, dynamic>.from(e));
+        }
+      }
+
+      return batches.map((b) => {
+        ...Map<String, dynamic>.from(b),
+        'entries': entriesByBatch[b['id']] ?? <Map<String, dynamic>>[],
+      }).toList();
+    } catch (e) {
+      AppLogger.error('Failed to get batches with entries: $e');
+      return [];
     }
   }
 

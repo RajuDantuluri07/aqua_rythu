@@ -95,10 +95,9 @@ class ExpenseService {
 
       AppLogger.info('Expense payload: $expenseData');
 
-      // ON CONFLICT on operation_id returns the existing row instead of error.
       final response = await supabase
           .from('expenses')
-          .upsert(expenseData, onConflict: 'operation_id')
+          .insert(expenseData)
           .select()
           .maybeSingle();
 

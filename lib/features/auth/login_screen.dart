@@ -86,25 +86,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               children: [
                 const SizedBox(height: AppSpacing.xl),
-                // Hero logo for smooth transition from SplashScreen
                 Hero(
                   tag: 'app_logo',
                   child: Image.asset(
-                    'assets/images/logo.png',
-                    height: 90,
+                    'assets/images/signup.png',
+                    height: 220,
                     errorBuilder: (context, error, stackTrace) => Icon(
                       Icons.water_drop_rounded,
                       size: 60,
                       color: theme.primaryColor,
                     ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.s),
-                Text(
-                  "AquaRythu",
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    color: theme.primaryColor,
-                    fontSize: 32,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s),

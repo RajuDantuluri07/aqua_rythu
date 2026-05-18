@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +8,7 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import 'package:aqua_rythu/features/pond/controllers/pond_dashboard_controller.dart';
 import 'package:aqua_rythu/core/constants/app_constants.dart';
+import 'package:aqua_rythu/core/constants/app_images.dart';
 import 'package:aqua_rythu/features/dashboard/widgets/feed_savings_card.dart';
 import 'package:aqua_rythu/core/services/feed_savings_service.dart';
 import 'package:aqua_rythu/features/dashboard/providers/dashboard_metrics_provider.dart';
@@ -185,7 +188,12 @@ class DashboardScreen extends ConsumerWidget {
     return FutureBuilder<List<_PondRow>>(
       future: buildPondRows(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        // Only show loading on the very first load (no cached data yet).
+        // On subsequent rebuilds FutureBuilder retains snapshot.data while
+        // the new future resolves, so _KpiGrid stays mounted and its
+        // auto-rotate timer keeps running.
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return _loadingView();
         }
 
@@ -252,7 +260,16 @@ class DashboardScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── 2×2 KPI grid ──────────────────────────────────────
+                        // ── Farm Intelligence KPI carousel ────────────────
+                        const Text(
+                          'Farm Intelligence',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: _textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         _KpiGrid(
                           totalFeedFarm: totalFeedFarm,
                           feedToday: feedToday,
@@ -260,6 +277,7 @@ class DashboardScreen extends ConsumerWidget {
                           totalFeedCost: totalFeedCost,
                           totalBiomass: totalBiomass,
                           biomassStatus: biomassStatus,
+                          rows: rows,
                         ),
 
                         // ── Feed Savings Card ─────────────────────────────────────
@@ -618,7 +636,7 @@ class DashboardScreen extends ConsumerWidget {
 // ══════════════════════════════════════════════════
 // HEADER
 // ══════════════════════════════════════════════════════
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   final FarmState farmState;
   final dynamic currentFarm;
   final void Function(String) onSelectFarm;
@@ -632,27 +650,23 @@ class _Header extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPro = ref.watch(subscriptionProvider).isPro;
     return Container(
       color: _white,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Farm icon
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: _green.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child:
-                const Icon(Icons.agriculture_rounded, color: _green, size: 22),
+          // Logo
+          Image.asset(
+            AppImages.logo,
+            height: 36,
+            fit: BoxFit.contain,
           ),
           const SizedBox(width: 10),
 
-          // Farm name + attention label
+          // Farm name switcher
           Expanded(
             child: PopupMenuButton<String>(
               offset: const Offset(0, 40),
@@ -717,33 +731,58 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ],
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          currentFarm.name,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: _textPrimary,
-                            letterSpacing: -0.3,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  Flexible(
+                    child: Text(
+                      currentFarm.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: _textPrimary,
+                        letterSpacing: -0.3,
                       ),
-                      const SizedBox(width: 2),
-                      const Icon(Icons.keyboard_arrow_down_rounded,
-                          size: 18, color: _textSub),
-                    ],
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 18, color: _textSub),
                 ],
               ),
             ),
+          ),
+
+          // Pro badge
+          if (isPro)
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF16A34A), Color(0xFF059669)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'PRO',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+
+          // Notification icon
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined,
+                color: _textSub, size: 24),
+            onPressed: () {},
+            splashRadius: 20,
+            tooltip: 'Notifications',
           ),
         ],
       ),
@@ -752,15 +791,16 @@ class _Header extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════
-// KPI GRID  (2 × 2)
+// KPI GRID  — auto-scrolling carousel (2 pages × 4 KPIs)
 // ════════════════════════════════════════════════════════
-class _KpiGrid extends StatelessWidget {
+class _KpiGrid extends StatefulWidget {
   final double totalFeedFarm;
   final double feedToday;
   final double feedChangePct;
   final double totalFeedCost;
   final double totalBiomass;
   final String biomassStatus;
+  final List<_PondRow> rows;
 
   const _KpiGrid({
     required this.totalFeedFarm,
@@ -769,60 +809,197 @@ class _KpiGrid extends StatelessWidget {
     required this.totalFeedCost,
     required this.totalBiomass,
     required this.biomassStatus,
+    required this.rows,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final hasFeedChange = feedChangePct != 0 && feedToday > 0;
-    final biomassOk = biomassStatus == 'Within optimal range';
+  State<_KpiGrid> createState() => _KpiGridState();
+}
+
+class _KpiGridState extends State<_KpiGrid> {
+  late final PageController _pageController;
+  Timer? _timer;
+  // Logical page index (0 or 1) for dot indicator
+  int _dotPage = 0;
+  static const int _pageCount = 2;
+  // Large item count so forward scroll always goes right→left without wrapping
+  static const int _virtualCount = 10000;
+  static const int _startPage = 5000;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _startPage);
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted) return;
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildPage(bool isPage1) {
+    final hasFeedChange = widget.feedChangePct != 0 && widget.feedToday > 0;
+    final biomassOk = widget.biomassStatus == 'Within optimal range';
     final nf = NumberFormat('#,###');
+    final rows = widget.rows;
+
+    if (isPage1) {
+      return Column(
+        children: [
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _KpiCard(
+                    label: 'TOTAL FEED\n(TILL DATE)',
+                    value: nf.format(widget.totalFeedFarm.round()),
+                    unit: 'kg',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _KpiCard(
+                    label: 'TODAY FEED\n(ALL PONDS)',
+                    value: nf.format(widget.feedToday.round()),
+                    unit: 'kg',
+                    sub: hasFeedChange
+                        ? '${widget.feedChangePct > 0 ? '↑' : '↓'} ${widget.feedChangePct.abs().toStringAsFixed(0)}% vs yesterday'
+                        : null,
+                    subColor: widget.feedChangePct > 0 ? _red : _green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _KpiCard(
+                    label: 'TOTAL FEED\nCOST (₹)',
+                    value: _fmtCurrency(widget.totalFeedCost),
+                    valueColor: _green,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _KpiCard(
+                    label: 'ESTIMATED\nBIOMASS',
+                    value: nf.format(widget.totalBiomass.round()),
+                    unit: 'kg',
+                    sub: widget.biomassStatus,
+                    subColor: biomassOk ? _green : _amber,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Page 2 derived metrics
+    final abwRows = rows.where((r) => r.hasAbwData).toList();
+    final avgAbw = abwRows.isEmpty
+        ? 0.0
+        : abwRows.map((r) => r.abw).reduce((a, b) => a + b) / abwRows.length;
+    final totalArea = rows.fold(0.0, (s, r) => s + r.area);
+    final totalSeeds = rows.fold(0, (s, r) => s + r.seedCount);
 
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _KpiCard(
-                label: 'TOTAL FEED\\n(TILL DATE)',
-                value: nf.format(totalFeedFarm.round()),
-                unit: 'kg',
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _KpiCard(
+                  label: 'AVG ABW\n(ALL PONDS)',
+                  value: abwRows.isEmpty ? '-' : avgAbw.toStringAsFixed(1),
+                  unit: abwRows.isEmpty ? null : 'g',
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _KpiCard(
-                label: 'TODAY FEED\\n(ALL PONDS)',
-                value: nf.format(feedToday.round()),
-                unit: 'kg',
-                sub: hasFeedChange
-                    ? '${feedChangePct > 0 ? '↑' : '↓'} ${feedChangePct.abs().toStringAsFixed(0)}% vs yesterday'
-                    : null,
-                subColor: feedChangePct > 0 ? _red : _green,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _KpiCard(
+                  label: 'TOTAL AREA\n(ACRES)',
+                  value: totalArea.toStringAsFixed(1),
+                  unit: 'ac',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 12),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _KpiCard(
+                  label: 'TOTAL\nSEEDS',
+                  value: NumberFormat('#,###').format(totalSeeds),
+                  unit: 'pcs',
+                  valueColor: _green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _KpiCard(
+                  label: 'TOTAL FEED\nCOST (₹)',
+                  value: _fmtCurrency(widget.totalFeedCost),
+                  valueColor: _green,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 220,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _virtualCount,
+            onPageChanged: (i) =>
+                setState(() => _dotPage = i % _pageCount),
+            itemBuilder: (_, i) => _buildPage(i % _pageCount == 0),
+          ),
+        ),
+        const SizedBox(height: 10),
         Row(
-          children: [
-            Expanded(
-              child: _KpiCard(
-                label: 'TOTAL FEED COST\\n(₹)',
-                value: _fmtCurrency(totalFeedCost),
-                valueColor: _green,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            _pageCount,
+            (i) => AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: _dotPage == i ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: _dotPage == i ? _green : _green.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _KpiCard(
-                label: 'ESTIMATED\\nBIOMASS',
-                value: nf.format(totalBiomass.round()),
-                unit: 'kg',
-                sub: biomassStatus,
-                subColor: biomassOk ? _green : _amber,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );

@@ -9,3 +9,10 @@ final inventoryProvider =
     return rows.map(InventoryItem.fromView).toList();
   },
 );
+
+final inventoryBatchesProvider =
+    FutureProvider.family.autoDispose<List<Map<String, dynamic>>, String>(
+  (ref, farmId) async {
+    return InventoryService().getBatchesWithEntries(farmId);
+  },
+);

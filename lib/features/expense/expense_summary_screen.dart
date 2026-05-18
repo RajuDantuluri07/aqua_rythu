@@ -255,6 +255,10 @@ class _ExpenseSummaryScreenState extends ConsumerState<ExpenseSummaryScreen>
 
   IconData _getCategoryIcon(ExpenseCategory category) {
     switch (category) {
+      case ExpenseCategory.feed:
+        return Icons.grain;
+      case ExpenseCategory.supplement:
+        return Icons.science_outlined;
       case ExpenseCategory.labour:
         return Icons.people;
       case ExpenseCategory.electricity:

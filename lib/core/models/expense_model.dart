@@ -1,4 +1,6 @@
 enum ExpenseCategory {
+  feed('feed', 'Feed'),
+  supplement('supplement', 'Supplement'),
   labour('labour', 'Labour'),
   electricity('electricity', 'Electricity'),
   diesel('diesel', 'Diesel/Oil'),

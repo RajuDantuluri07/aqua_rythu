@@ -130,145 +130,166 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Add Expense'),
         backgroundColor: Colors.blue[600],
         foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Category Dropdown
-              DropdownButtonFormField<ExpenseCategory>(
-                value: _selectedCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category),
-                ),
-                items: ExpenseCategory.values.map((category) {
-                  return DropdownMenuItem(
-                    value: category,
-                    child: Text(category.label),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value!;
-                  });
-                },
-                validator: (value) {
-                  if (value == null) {
-                    return 'Please select a category';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Pond Selection Dropdown (Optional)
-              _buildPondDropdown(),
-              const SizedBox(height: 16),
-
-              // Amount Field
-              TextFormField(
-                controller: _amountController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Amount (₹)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.currency_rupee),
-                ),
-                autofocus: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter an amount';
-                  }
-                  final amount = double.tryParse(value);
-                  if (amount == null || amount <= 0) {
-                    return 'Please enter a valid amount greater than 0';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Date Field
-              InkWell(
-                onTap: () async {
-                  final date = await showDatePicker(
-                    context: context,
-                    initialDate: _selectedDate,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now().add(const Duration(days: 30)),
-                  );
-                  if (date != null) {
-                    setState(() {
-                      _selectedDate = date;
-                    });
-                  }
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Date',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.calendar_today),
-                  ),
-                  child: Text(
-                    DateFormat('MMM dd, yyyy').format(_selectedDate),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Notes Field (Optional)
-              TextFormField(
-                controller: _notesController,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.note),
-                ),
-                maxLines: 3,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _submitExpense(),
-              ),
-              const SizedBox(height: 24),
-
-              // Submit Button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submitExpense,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[600],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Category Dropdown
+                      DropdownButtonFormField<ExpenseCategory>(
+                        value: _selectedCategory,
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.category),
                         ),
-                      )
-                    : const Text(
-                        'Add Expense',
-                        style: TextStyle(fontSize: 16),
+                        items: ExpenseCategory.values.map((category) {
+                          return DropdownMenuItem(
+                            value: category,
+                            child: Text(category.label),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCategory = value!;
+                          });
+                        },
+                        validator: (value) {
+                          if (value == null) {
+                            return 'Please select a category';
+                          }
+                          return null;
+                        },
                       ),
+                      const SizedBox(height: 16),
+
+                      // Pond Selection Dropdown (Optional)
+                      _buildPondDropdown(),
+                      const SizedBox(height: 16),
+
+                      // Amount Field
+                      TextFormField(
+                        controller: _amountController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Amount (₹)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.currency_rupee),
+                        ),
+                        autofocus: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter an amount';
+                          }
+                          final amount = double.tryParse(value);
+                          if (amount == null || amount <= 0) {
+                            return 'Please enter a valid amount greater than 0';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Date Field
+                      InkWell(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate:
+                                DateTime.now().add(const Duration(days: 30)),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              _selectedDate = date;
+                            });
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Date',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.calendar_today),
+                          ),
+                          child: Text(
+                            DateFormat('MMM dd, yyyy').format(_selectedDate),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Notes Field (Optional)
+                      TextFormField(
+                        controller: _notesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Notes (Optional)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.note),
+                        ),
+                        maxLines: 3,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submitExpense(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
+            ),
+
+            // Sticky CTA — stays visible above keyboard
+            AnimatedPadding(
+              duration: const Duration(milliseconds: 100),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset > 0 ? bottomInset + 8 : 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _submitExpense,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Add Expense',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

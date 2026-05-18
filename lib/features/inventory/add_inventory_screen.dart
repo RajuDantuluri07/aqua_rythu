@@ -9,112 +9,141 @@ import '../../core/models/product_master.dart';
 import '../../core/providers/product_provider.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/uuid_generator.dart';
 import '../farm/farm_provider.dart';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 const _green = Color(0xFF1B5E20);
-const _bg = Color(0xFFF2F4F0);
+const _greenLight = Color(0xFFE8F5E9);
+const _bg = Color(0xFFF5F6F3);
 
-// ── Application type label derived from ProductMaster category ────────────────
+String _fmtRupees(double amount) {
+  final n = amount.round();
+  if (n >= 10000000) return '₹${(n / 10000000).toStringAsFixed(1)}Cr';
+  if (n >= 100000) return '₹${(n / 100000).toStringAsFixed(1)}L';
+  // Indian comma: XX,XX,XXX
+  final s = n.toString();
+  if (s.length <= 3) return '₹$s';
+  final last3 = s.substring(s.length - 3);
+  final rest = s.substring(0, s.length - 3);
+  final buf = StringBuffer();
+  for (var i = 0; i < rest.length; i++) {
+    if (i > 0 && (rest.length - i) % 2 == 0) buf.write(',');
+    buf.write(rest[i]);
+  }
+  return '₹$buf,$last3';
+}
 
-String _appTypeLabel(String category) => switch (category) {
-      'Feed Supplement' => 'Feed Mix',
-      'Water Supplement' => 'Water Mix',
-      'Probiotic' => 'Water Mix',
-      'Mineral' => 'Water Mix',
-      'Water Treatment' => 'Water Mix',
-      'Disinfectant' => 'Water Mix',
-      'Pond Preparation' => 'Water Mix',
-      _ => 'Both',
-    };
-
-// ── Draft item state ──────────────────────────────────────────────────────────
+// ── Draft item ────────────────────────────────────────────────────────────────
 
 class _DraftItem {
   final int key;
   FeedMasterProduct? feedProduct;
   ProductMaster? supplementProduct;
-  final TextEditingController qtyCtrl = TextEditingController();
+  int qty;
+  double? unitCost;
 
-  _DraftItem(this.key);
+  _DraftItem(this.key) : qty = 1;
 
   bool get hasProduct => feedProduct != null || supplementProduct != null;
+
+  double? get totalCost => unitCost != null ? qty * unitCost! : null;
 
   String get displayName =>
       feedProduct?.displayName ?? supplementProduct?.displayName ?? '';
 
   String get productId => feedProduct?.id ?? supplementProduct?.id ?? '';
-
   String get productType => feedProduct != null ? 'feed' : 'supplement';
 
-  /// Physical unit (kg, L, g, etc.) for one package of this product.
   String get packageUnit {
     if (feedProduct != null) return 'kg';
     final sp = supplementProduct;
     if (sp != null) {
-      if (sp.unitType != null && sp.unitType!.isNotEmpty) return sp.unitType!;
-      if (sp.baseUnit != null && sp.baseUnit!.isNotEmpty) return sp.baseUnit!;
+      if (sp.unitType?.isNotEmpty == true) return sp.unitType!;
+      if (sp.baseUnit?.isNotEmpty == true) return sp.baseUnit!;
     }
     return 'unit';
   }
 
-  /// Weight/volume of one package in [packageUnit]. Null if unknown.
   double? get packageSize {
     if (feedProduct != null) return feedProduct!.bagWeightKg;
     return supplementProduct?.packageSize;
   }
 
-  /// Dynamic label shown above the quantity input (e.g. "No. of Bags Purchased").
-  String get qtyLabel {
-    if (feedProduct != null) return 'No. of Bags Purchased';
-    final form = supplementProduct?.form?.toLowerCase();
-    return switch (form) {
-      'bottle' || 'liquid' => 'No. of Bottles Purchased',
-      'packet' || 'powder' || 'granule' => 'No. of Packets Purchased',
-      'bag' => 'No. of Bags Purchased',
-      'box' => 'No. of Boxes Purchased',
-      'tablet' || 'strip' => 'No. of Strips Purchased',
-      _ => 'No. of Units Purchased',
+  double get addedStock {
+    final pSize = packageSize;
+    return pSize != null ? qty * pSize : qty.toDouble();
+  }
+
+  String get unitLabel {
+    final form = feedProduct != null ? 'bag' : supplementProduct?.form;
+    return switch (form?.toLowerCase()) {
+      'bottle' || 'liquid' => qty == 1 ? 'Bottle' : 'Bottles',
+      'packet' || 'powder' || 'granule' => qty == 1 ? 'Packet' : 'Packets',
+      'bag' => qty == 1 ? 'Bag' : 'Bags',
+      'box' => qty == 1 ? 'Box' : 'Boxes',
+      'tablet' || 'strip' => qty == 1 ? 'Strip' : 'Strips',
+      'bucket' => qty == 1 ? 'Bucket' : 'Buckets',
+      _ => qty == 1 ? 'Unit' : 'Units',
     };
+  }
+
+  String get subtitle {
+    if (feedProduct != null) {
+      final f = feedProduct!;
+      final parts = <String>[];
+      if (f.stage?.isNotEmpty == true) parts.add(f.stage!);
+      if (f.bagWeightKg != null) parts.add('${f.bagWeightKg}kg bag');
+      return parts.join(' • ');
+    }
+    if (supplementProduct != null) {
+      final s = supplementProduct!;
+      final parts = <String>[s.category];
+      if (s.packageSize != null) {
+        final unit = s.unitType?.isNotEmpty == true
+            ? s.unitType!
+            : (s.baseUnit?.isNotEmpty == true ? s.baseUnit! : '');
+        if (unit.isNotEmpty) {
+          final form = s.form?.isNotEmpty == true ? ' ${s.form}' : '';
+          parts.add('${s.packageSize}$unit$form');
+        }
+      }
+      return parts.join(' • ');
+    }
+    return '';
   }
 
   void setFeedProduct(FeedMasterProduct p) {
     feedProduct = p;
     supplementProduct = null;
+    unitCost = p.bagPrice;
   }
 
   void setSupplementProduct(ProductMaster p) {
     supplementProduct = p;
     feedProduct = null;
+    unitCost = p.actualPrice;
   }
 
-  void clearProduct() {
-    feedProduct = null;
-    supplementProduct = null;
-  }
-
-  Map<String, dynamic> toEntry(String farmId, String userId, DateTime purchaseDate) {
-    final packageCount = int.parse(qtyCtrl.text.trim());
+  Map<String, dynamic> toEntry(
+      String farmId, String userId, DateTime purchaseDate, String batchId) {
     final pSize = packageSize;
-    final actualStock =
-        pSize != null ? packageCount * pSize : packageCount.toDouble();
+    final actualStock = pSize != null ? qty * pSize : qty.toDouble();
     return {
       'farm_id': farmId,
       'user_id': userId,
       'product_id': productId,
       'product_type': productType,
-      'quantity_purchased': packageCount,
+      'quantity_purchased': qty,
       'package_size': pSize,
       'package_unit': packageUnit,
       'actual_stock': actualStock,
       'quantity_unit': packageUnit,
       'purchase_date': DateFormat('yyyy-MM-dd').format(purchaseDate),
+      'bag_price': unitCost,
+      'total_cost': totalCost,
+      'batch_id': batchId,
+      'product_name': displayName,
     };
-  }
-
-  void dispose() {
-    qtyCtrl.dispose();
   }
 }
 
@@ -128,421 +157,622 @@ class AddInventoryScreen extends ConsumerStatefulWidget {
 }
 
 class _AddInventoryScreenState extends ConsumerState<AddInventoryScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _service = InventoryService();
   final List<_DraftItem> _items = [];
   int _nextKey = 0;
   bool _saving = false;
-  DateTime _sharedPurchaseDate = DateTime.now();
+  DateTime _purchaseDate = DateTime.now();
 
-  @override
-  void initState() {
-    super.initState();
-    _addItem();
-  }
+  bool get _canAdd => _items.isEmpty || _items.last.hasProduct;
+  bool get _canSave =>
+      !_saving && _items.isNotEmpty && _items.every((i) => i.hasProduct);
 
-  @override
-  void dispose() {
-    for (final i in _items) {
-      i.dispose();
-    }
-    super.dispose();
-  }
-
-  void _addItem() => setState(() => _items.add(_DraftItem(_nextKey++)));
-
-  void _removeItem(int index) {
-    if (_items.length <= 1) return;
+  Future<void> _pickAndAdd() async {
+    if (!_canAdd) return;
+    final result = await showUnifiedProductPickerSheet(context);
+    if (result == null || !mounted) return;
     setState(() {
-      _items[index].dispose();
-      _items.removeAt(index);
+      final item = _DraftItem(_nextKey++);
+      if (result is FeedMasterProduct) {
+        item.setFeedProduct(result);
+      } else if (result is ProductMaster) {
+        item.setSupplementProduct(result);
+      }
+      _items.add(item);
     });
   }
 
-  Future<void> _save() async {
-    final missing = _items.where((i) => !i.hasProduct).toList();
-    if (missing.isNotEmpty) {
-      _toast('Select a product for every item', isError: true);
-      return;
-    }
-    if (!_formKey.currentState!.validate()) return;
+  void _remove(int index) => setState(() => _items.removeAt(index));
 
+  void _setQty(int index, int qty) {
+    if (qty < 1) return;
+    setState(() => _items[index].qty = qty);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _purchaseDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _purchaseDate = picked);
+  }
+
+  double? get _totalCost {
+    double total = 0;
+    bool any = false;
+    for (final item in _items) {
+      final c = item.totalCost;
+      if (c != null) {
+        total += c;
+        any = true;
+      }
+    }
+    return any ? total : null;
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
     setState(() => _saving = true);
     try {
       final user = Supabase.instance.client.auth.currentUser;
       final farm = ref.read(farmProvider).currentFarm;
       if (user == null || farm == null) throw Exception('Session error');
 
+      final batchId = generateUuidV4();
+
       final entries = _items
-          .map((i) => i.toEntry(farm.id, user.id, _sharedPurchaseDate))
+          .map((i) => i.toEntry(farm.id, user.id, _purchaseDate, batchId))
           .toList();
+
+      // 1. Save batch header
+      await _service.saveBatch(
+        batchId: batchId,
+        farmId: farm.id,
+        userId: user.id,
+        purchaseDate: _purchaseDate,
+        totalProducts: _items.length,
+        totalCost: _totalCost,
+      );
+
+      // 2. Save line items with snapshotted costs
       await _service.createInventoryEntries(entries);
 
+      // 3. Post to expenses for crop cost tracking (best-effort)
+      final feedCost = _items
+          .where((i) => i.feedProduct != null && i.totalCost != null)
+          .fold<double>(0, (s, i) => s + i.totalCost!);
+      final suppCost = _items
+          .where((i) => i.supplementProduct != null && i.totalCost != null)
+          .fold<double>(0, (s, i) => s + i.totalCost!);
+      if (feedCost > 0 || suppCost > 0) {
+        await _service.recordInventoryExpenses(
+          farmId: farm.id,
+          userId: user.id,
+          purchaseDate: _purchaseDate,
+          feedCost: feedCost > 0 ? feedCost : null,
+          supplementCost: suppCost > 0 ? suppCost : null,
+        );
+      }
+
       if (!mounted) return;
-      _toast('${entries.length} item${entries.length == 1 ? '' : 's'} saved');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Inventory Added Successfully'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ));
       Navigator.of(context).pop(true);
     } catch (e) {
+      debugPrint('Inventory save error: $e');
       if (!mounted) return;
-      _toast('Failed to save: $e', isError: true);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Unable to save inventory. Please try again.'),
+        backgroundColor: Colors.red.shade700,
+      ));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  void _toast(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
-    ));
+  String _summaryText() {
+    final count = _items.length;
+    if (count == 0) return 'No products added';
+    final label = '$count Product${count == 1 ? '' : 's'}';
+    final cost = _totalCost;
+    if (cost != null && cost > 0) return '$label • ${_fmtRupees(cost)}';
+    final feedKg = _items
+        .where((i) => i.feedProduct != null)
+        .fold<double>(0, (s, i) => s + i.addedStock);
+    if (feedKg > 0) {
+      final kg = feedKg == feedKg.roundToDouble()
+          ? '${feedKg.round()} kg'
+          : '${feedKg.toStringAsFixed(1)} kg';
+      return '$label • $kg feed';
+    }
+    return label;
   }
 
   @override
   Widget build(BuildContext context) {
-    final itemCount = _items.length;
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
         title: const Text('Add Inventory'),
         backgroundColor: _green,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Text(
-                    'Select products you purchased and enter the number of packages. '
-                    'Stock calculates automatically from package size.',
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  ..._items.asMap().entries.map(
-                        (e) => _ItemCard(
-                          key: ValueKey(e.value.key),
-                          item: e.value,
-                          index: e.key,
-                          total: itemCount,
-                          onRemove: () => _removeItem(e.key),
-                          onProductPick: () => _pickProduct(e.value),
-                          onChanged: () => setState(() {}),
-                        ),
-                      ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _addItem,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Another Item'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _green,
-                      side: const BorderSide(color: _green),
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _DateField(
-                    label: 'Purchase Date',
-                    date: _sharedPurchaseDate,
-                    onChanged: (d) => setState(() => _sharedPurchaseDate = d),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _saving
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            'Save $itemCount Item${itemCount == 1 ? '' : 's'}',
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickProduct(_DraftItem item) async {
-    final result = await showUnifiedProductPickerSheet(context);
-    if (result == null || !mounted) return;
-    setState(() {
-      if (result is FeedMasterProduct) {
-        item.setFeedProduct(result);
-      } else if (result is ProductMaster) {
-        item.setSupplementProduct(result);
-      }
-    });
-  }
-}
-
-// ── Item card widget ──────────────────────────────────────────────────────────
-
-class _ItemCard extends StatelessWidget {
-  final _DraftItem item;
-  final int index;
-  final int total;
-  final VoidCallback onRemove;
-  final VoidCallback onProductPick;
-  final VoidCallback onChanged;
-
-  const _ItemCard({
-    super.key,
-    required this.item,
-    required this.index,
-    required this.total,
-    required this.onRemove,
-    required this.onProductPick,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Item ${index + 1}',
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700)),
-                const Spacer(),
-                if (total > 1)
-                  GestureDetector(
-                    onTap: onRemove,
-                    child: const Icon(Icons.close, color: Colors.red, size: 20),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            if (!item.hasProduct)
-              _pickButton()
-            else ...[
-              _selectedTile(),
-              const SizedBox(height: 14),
-              _metadataSection(),
-            ],
-
-            const SizedBox(height: 14),
-
-            TextFormField(
-              controller: item.qtyCtrl,
-              decoration: InputDecoration(
-                labelText: item.hasProduct ? item.qtyLabel : 'No. of Units Purchased',
-                hintText: '10',
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (_) => onChanged(),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Required';
-                final n = int.tryParse(v.trim());
-                if (n == null || n < 1) return 'Enter at least 1';
-                return null;
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pickButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: onProductPick,
-        icon: const Icon(Icons.search),
-        label: const Text('Select Product'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: _green,
-          side: const BorderSide(color: _green),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-        ),
-      ),
-    );
-  }
-
-  Widget _selectedTile() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.shade200),
-      ),
-      child: Row(
+      body: Column(
         children: [
-          const Icon(Icons.check_circle, color: Colors.green, size: 18),
-          const SizedBox(width: 8),
+          _DateRow(date: _purchaseDate, onTap: _pickDate),
           Expanded(
-            child: Text(
-              item.displayName,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
+            child: _items.isEmpty
+                ? _EmptyState(onAdd: _pickAndAdd)
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: Color(0xFFEEEEEE)),
+                    itemBuilder: (_, i) => _CompactProductRow(
+                      key: ValueKey(_items[i].key),
+                      item: _items[i],
+                      onRemove: () => _remove(i),
+                      onQtyChanged: (q) => _setQty(i, q),
+                    ),
+                  ),
           ),
-          TextButton(
-            onPressed: onProductPick,
-            style: TextButton.styleFrom(
-              foregroundColor: _green,
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text('Change'),
+          if (_items.isNotEmpty)
+            _AddMoreButton(enabled: _canAdd, onTap: _pickAndAdd),
+          _BottomBar(
+            summary: _summaryText(),
+            canSave: _canSave,
+            saving: _saving,
+            onSave: _save,
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _metadataSection() {
-    final feed = item.feedProduct;
-    final supp = item.supplementProduct;
-    final rows = <_MetaRow>[];
+// ── Date Row ──────────────────────────────────────────────────────────────────
 
-    if (feed != null) {
-      rows.addAll([
-        _MetaRow('Brand', feed.brand),
-        if (feed.productCode != null) _MetaRow('Code', feed.productCode!),
-        if (feed.stage != null) _MetaRow('Stage', feed.stage!),
-        if (feed.proteinPercent != null)
-          _MetaRow('Protein', '${feed.proteinPercent}%'),
-        if (feed.pelletSizeMm != null)
-          _MetaRow('Pellet Size', feed.pelletSizeMm!),
-        if (feed.bagWeightKg != null)
-          _MetaRow('Bag Weight', '${feed.bagWeightKg} kg'),
-        if (feed.cultureType != null) _MetaRow('Culture', feed.cultureType!),
-      ]);
-    } else if (supp != null) {
-      final effectiveUnit = supp.unitType?.isNotEmpty == true
-          ? supp.unitType!
-          : (supp.baseUnit?.isNotEmpty == true ? supp.baseUnit! : '');
-      rows.addAll([
-        _MetaRow('Category', supp.category),
-        if (supp.brand != null && supp.brand!.isNotEmpty)
-          _MetaRow('Company', supp.brand!),
-        if (supp.form != null) _MetaRow('Form', supp.form!),
-        if (effectiveUnit.isNotEmpty) _MetaRow('Unit', effectiveUnit),
-        if (supp.packageSize != null)
-          _MetaRow(
-            'Package Size',
-            effectiveUnit.isNotEmpty
-                ? '${supp.packageSize} $effectiveUnit'
-                : '${supp.packageSize}',
-          ),
-      ]);
-    }
+class _DateRow extends StatelessWidget {
+  final DateTime date;
+  final VoidCallback onTap;
 
-    if (rows.isEmpty) return const SizedBox.shrink();
+  const _DateRow({required this.date, required this.onTap});
 
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9F8),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFEEEEEE)),
-      ),
-      child: Wrap(
-        spacing: 24,
-        runSpacing: 8,
-        children: rows.map((r) => _MetaChip(r)).toList(),
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today_outlined,
+              size: 15, color: Colors.grey.shade500),
+          const SizedBox(width: 6),
+          Text('Purchase Date: ',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          GestureDetector(
+            onTap: onTap,
+            child: Text(
+              DateFormat('d MMM yyyy').format(date),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _green,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Metadata helpers ──────────────────────────────────────────────────────────
+// ── Empty State ───────────────────────────────────────────────────────────────
 
-class _MetaRow {
-  final String label;
-  final String value;
-  const _MetaRow(this.label, this.value);
-}
-
-class _MetaChip extends StatelessWidget {
-  final _MetaRow row;
-  const _MetaChip(this.row);
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _EmptyState({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(row.label,
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-        Text(row.value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.inventory_2_outlined,
+              size: 56, color: Colors.grey.shade300),
+          const SizedBox(height: 12),
+          Text(
+            'No products added yet',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Search and add inventory items to begin.',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: const Text('Add Product'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _green,
+              foregroundColor: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Add More Button ───────────────────────────────────────────────────────────
+
+class _AddMoreButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _AddMoreButton({required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: TextButton.icon(
+        onPressed: enabled ? onTap : null,
+        icon: const Icon(Icons.add, size: 16),
+        label: const Text('Add Another Product'),
+        style: TextButton.styleFrom(
+          foregroundColor: _green,
+          disabledForegroundColor: Colors.grey.shade400,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bottom Bar ────────────────────────────────────────────────────────────────
+
+class _BottomBar extends StatelessWidget {
+  final String summary;
+  final bool canSave;
+  final bool saving;
+  final VoidCallback onSave;
+
+  const _BottomBar({
+    required this.summary,
+    required this.canSave,
+    required this.saving,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                summary,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: 46,
+              child: ElevatedButton(
+                onPressed: canSave ? onSave : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _green,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                child: saving
+                    ? const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text('Saving...',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 15)),
+                        ],
+                      )
+                    : const Text(
+                        'Save Inventory',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Compact Product Row ───────────────────────────────────────────────────────
+
+class _CompactProductRow extends StatefulWidget {
+  final _DraftItem item;
+  final VoidCallback onRemove;
+  final ValueChanged<int> onQtyChanged;
+
+  const _CompactProductRow({
+    super.key,
+    required this.item,
+    required this.onRemove,
+    required this.onQtyChanged,
+  });
+
+  @override
+  State<_CompactProductRow> createState() => _CompactProductRowState();
+}
+
+class _CompactProductRowState extends State<_CompactProductRow> {
+  String get _stockStr {
+    final stock = widget.item.addedStock;
+    final unit = widget.item.packageUnit;
+    final val = stock == stock.roundToDouble()
+        ? '${stock.round()}'
+        : stock.toStringAsFixed(1);
+    return '$val $unit';
+  }
+
+  Future<void> _editQty() async {
+    final result = await showDialog<int>(
+      context: context,
+      builder: (_) => _QtyEditDialog(
+        initial: widget.item.qty,
+        unitLabel: widget.item.unitLabel,
+      ),
+    );
+    if (!mounted) return;
+    if (result != null) widget.onQtyChanged(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Name + remove
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.item.displayName,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              GestureDetector(
+                onTap: widget.onRemove,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(Icons.close,
+                      size: 16, color: Colors.grey.shade500),
+                ),
+              ),
+            ],
+          ),
+          // Subtitle: stage • package size
+          if (widget.item.subtitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              widget.item.subtitle,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 8),
+          // Stepper + added stock
+          Row(
+            children: [
+              _StepBtn(
+                icon: Icons.remove,
+                onTap: widget.item.qty > 1
+                    ? () => widget.onQtyChanged(widget.item.qty - 1)
+                    : null,
+              ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: _editQty,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 80),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    '${widget.item.qty} ${widget.item.unitLabel}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              _StepBtn(
+                icon: Icons.add,
+                onTap: () => widget.onQtyChanged(widget.item.qty + 1),
+              ),
+              const Spacer(),
+              Text(
+                'Stock: $_stockStr',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Cost display
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (widget.item.totalCost != null)
+                Text(
+                  _fmtRupees(widget.item.totalCost!),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green.shade800,
+                  ),
+                )
+              else
+                Text(
+                  'Price unavailable',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Qty Edit Dialog ───────────────────────────────────────────────────────────
+
+class _QtyEditDialog extends StatefulWidget {
+  final int initial;
+  final String unitLabel;
+
+  const _QtyEditDialog({required this.initial, required this.unitLabel});
+
+  @override
+  State<_QtyEditDialog> createState() => _QtyEditDialogState();
+}
+
+class _QtyEditDialogState extends State<_QtyEditDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: '${widget.initial}');
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    final v = int.tryParse(_ctrl.text.trim());
+    if (v != null && v >= 1) Navigator.pop(context, v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Enter ${widget.unitLabel}',
+          style: const TextStyle(fontSize: 16)),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: InputDecoration(
+          hintText: 'Quantity',
+          suffixText: widget.unitLabel,
+          border: const OutlineInputBorder(),
+        ),
+        onSubmitted: (_) => _confirm(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _confirm,
+          style: ElevatedButton.styleFrom(
+              backgroundColor: _green, foregroundColor: Colors.white),
+          child: const Text('OK'),
+        ),
       ],
     );
   }
 }
 
-// ── Date field ────────────────────────────────────────────────────────────────
+// ── Step Button ───────────────────────────────────────────────────────────────
 
-class _DateField extends StatelessWidget {
-  final String label;
-  final DateTime date;
-  final ValueChanged<DateTime> onChanged;
+class _StepBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
 
-  const _DateField({
-    required this.label,
-    required this.date,
-    required this.onChanged,
-  });
+  const _StepBtn({required this.icon, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: date,
-          firstDate: DateTime(2020),
-          lastDate: DateTime.now(),
-        );
-        if (picked != null) onChanged(picked);
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
-          border: const OutlineInputBorder(),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: onTap != null ? _greenLight : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          DateFormat('d MMM yyyy').format(date),
-          style: const TextStyle(fontSize: 14),
+        child: Icon(
+          icon,
+          size: 16,
+          color: onTap != null ? _green : Colors.grey.shade400,
         ),
       ),
     );
@@ -580,7 +810,10 @@ class _UnifiedProductPickerSheetState
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
-    _tabCtrl.addListener(() => setState(() => _query = ''));
+    _tabCtrl.addListener(() => setState(() {
+          _query = '';
+          _searchCtrl.clear();
+        }));
   }
 
   @override
@@ -620,7 +853,8 @@ class _UnifiedProductPickerSheetState
             child: Row(
               children: [
                 const Text('Select Product',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close),
@@ -635,8 +869,8 @@ class _UnifiedProductPickerSheetState
             unselectedLabelColor: Colors.grey,
             indicatorColor: _green,
             tabs: const [
-              Tab(text: 'Feed Products'),
-              Tab(text: 'Supplements & Medicines'),
+              Tab(text: 'Feed'),
+              Tab(text: 'Supplements'),
             ],
           ),
           Padding(
@@ -646,8 +880,8 @@ class _UnifiedProductPickerSheetState
               autofocus: true,
               decoration: InputDecoration(
                 hintText: _tabCtrl.index == 0
-                    ? 'Search by name, brand or code…'
-                    : 'Search by name or category…',
+                    ? 'Search feed products…'
+                    : 'Search supplements…',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.grey.shade100,
@@ -696,7 +930,8 @@ class _UnifiedProductPickerSheetState
         if (items.isEmpty) return _empty();
         return ListView.separated(
           itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1, indent: 16),
+          separatorBuilder: (_, __) =>
+              const Divider(height: 1, indent: 16),
           itemBuilder: (_, i) => _feedTile(items[i]),
         );
       },
@@ -715,7 +950,8 @@ class _UnifiedProductPickerSheetState
         if (items.isEmpty) return _empty();
         return ListView.separated(
           itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1, indent: 16),
+          separatorBuilder: (_, __) =>
+              const Divider(height: 1, indent: 16),
           itemBuilder: (_, i) => _suppTile(items[i]),
         );
       },
@@ -757,8 +993,13 @@ class _UnifiedProductPickerSheetState
   }
 
   Widget _feedTile(FeedMasterProduct p) {
+    final sub = <String>[p.brand];
+    if (p.stage?.isNotEmpty == true) sub.add(p.stage!);
+    if (p.bagWeightKg != null) sub.add('${p.bagWeightKg}kg/bag');
+
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
         width: 36,
         height: 36,
@@ -771,13 +1012,11 @@ class _UnifiedProductPickerSheetState
       title: Text(p.productName,
           style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
-        [
-          p.brand,
-          if (p.productCode != null) 'Code: ${p.productCode}',
-        ].join(' · '),
+        sub.join(' · '),
         style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
       ),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.primary),
+      trailing:
+          const Icon(Icons.chevron_right, color: AppColors.primary),
       onTap: () => Navigator.pop(context, p),
     );
   }
@@ -786,14 +1025,15 @@ class _UnifiedProductPickerSheetState
     final unit = p.unitType?.isNotEmpty == true
         ? p.unitType!
         : (p.baseUnit?.isNotEmpty == true ? p.baseUnit! : null);
-    final sub = [
-      p.category,
-      if (unit != null) unit,
-      if (p.form != null) p.form!,
-      if (p.packageSize != null && unit != null) '${p.packageSize} $unit',
-    ].join(' · ');
+    final sub = <String>[p.category];
+    if (p.form?.isNotEmpty == true) sub.add(p.form!);
+    if (p.packageSize != null && unit != null) {
+      sub.add('${p.packageSize}$unit');
+    }
+
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
         width: 36,
         height: 36,
@@ -801,13 +1041,17 @@ class _UnifiedProductPickerSheetState
           color: Colors.blue.shade50,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Icon(Icons.science_outlined, size: 20, color: Colors.blue),
+        child: const Icon(Icons.science_outlined,
+            size: 20, color: Colors.blue),
       ),
       title: Text(p.productName,
           style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(sub,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.primary),
+      subtitle: Text(
+        sub.join(' · '),
+        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      ),
+      trailing:
+          const Icon(Icons.chevron_right, color: AppColors.primary),
       onTap: () => Navigator.pop(context, p),
     );
   }

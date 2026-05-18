@@ -9,6 +9,7 @@ class ProductMaster {
   final double? packageSize;
   final String? baseUnit;
   final bool active;
+  final double? actualPrice;
 
   const ProductMaster({
     required this.id,
@@ -21,6 +22,7 @@ class ProductMaster {
     this.packageSize,
     this.baseUnit,
     this.active = true,
+    this.actualPrice,
   });
 
   String get displayName =>
@@ -38,6 +40,7 @@ class ProductMaster {
       packageSize: (json['package_size'] as num?)?.toDouble(),
       baseUnit: json['base_unit'] as String?,
       active: json['active'] as bool? ?? true,
+      actualPrice: (json['actual_price'] as num?)?.toDouble(),
     );
   }
 
@@ -52,6 +55,7 @@ class ProductMaster {
         'package_size': packageSize,
         'base_unit': baseUnit,
         'active': active,
+        'actual_price': actualPrice,
       };
 }
 
