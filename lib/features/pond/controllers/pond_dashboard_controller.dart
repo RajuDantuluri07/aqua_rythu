@@ -148,15 +148,17 @@ class PondDashboardController {
       // Run feed engine using MasterFeedEngine (single source of truth)
       OrchestratorResult? feedResult;
       feedResult = await _computeFeedViaEngine(pondId, doc, pond);
+      // Nursery blind phase ends at DOC 10; hatchery at DOC 30.
+      final smartModeMinDoc = pond.seedType == SeedType.nurseryBig ? 10 : 30;
       // Inject smart recommendation for pending rounds (only if smart mode)
-      if (doc >= 31) {
+      if (doc > smartModeMinDoc) {
         _injectSmartFeed(pondId, feedData, feedResult, doc);
       }
 
       // Check for auto-recovery (blind mode schedule regeneration)
       // Only run if DB truly empty (not just amounts map empty)
       bool didAutoRecover = false;
-      if (feedData.amounts.isEmpty && doc < 31) {
+      if (feedData.amounts.isEmpty && doc <= smartModeMinDoc) {
         // Verify DB is truly empty by checking feed rounds directly
         final dbRounds = await _feedService.getFeedRounds(pondId, doc);
         if (dbRounds.isEmpty) {
@@ -427,7 +429,9 @@ class PondDashboardController {
       final alreadyDone = feedData.statuses[r] == 'completed';
       final isActive = r - 1 < config.splits.length && config.splits[r - 1] > 0;
 
-      if (!alreadyDone && isActive) {
+      // Only inject if no DB row exists — preserves Day 1 operational rounds
+      // (persisted by generateTodayOperationalRounds) and farmer edits.
+      if (!alreadyDone && isActive && !feedData.ids.containsKey(r)) {
         feedData.amounts[r] = double.parse(
           (safeFinalFeed * config.splits[r - 1]).toStringAsFixed(3),
         );

@@ -6,10 +6,12 @@ import '../farm/farm_provider.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import 'package:aqua_rythu/core/utils/uuid_generator.dart';
+import 'package:aqua_rythu/core/utils/doc_utils.dart';
 import '../../routes/app_routes.dart';
 import 'enums/seed_type.dart';
 import 'package:aqua_rythu/features/upgrade/widgets/pond_limit_bottom_sheet.dart';
 import '../../core/providers/product_provider.dart';
+import '../upgrade/subscription_provider.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -176,6 +178,60 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
 
       try {
         final pondService = PondService();
+
+        // Determine whether the stocking date puts the pond past the blind
+        // feeding phase. If so, skip historical feed round generation and
+        // route the farmer through Smart Feed Initialization instead.
+        final doc = calculateDocFromStockingDateLegacy(_stockingDate);
+        final needsSmartInit =
+            (_seedType == SeedType.nurseryBig && doc > 10) ||
+            (_seedType == SeedType.hatcherySmall && doc > 30);
+
+        if (needsSmartInit) {
+          final isPro = ref.read(isProProvider);
+          final pondId = await pondService.createPondAndReturnId(
+            farmId: selectedFarmId,
+            name: _nameController.text.trim(),
+            area: area,
+            stockingDate: _stockingDate,
+            seedCount: seedCount,
+            plSize: plSize,
+            numTrays: _numTrays,
+            seedType: _seedType,
+            feedBrandId: _selectedFeedBrandId,
+            operationId: _operationId,
+            skipFeedRounds: true,
+          );
+
+          await ref
+              .read(farmProvider.notifier)
+              .loadFarms(setAsSelectedId: selectedFarmId);
+
+          if (!mounted) return;
+
+          if (isPro) {
+            Navigator.pushReplacementNamed(
+              context,
+              AppRoutes.smartFeedInitialization,
+              arguments: {
+                'pondId': pondId!,
+                'farmId': selectedFarmId,
+                'doc': doc,
+              },
+            );
+          } else {
+            await pondService.generateTodayOperationalRounds(
+              pondId: pondId!,
+              doc: doc,
+              roundsPerDay: 4,
+              seedCount: seedCount,
+              seedType: _seedType,
+            );
+            if (!mounted) return;
+            Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
+          }
+          return;
+        }
 
         await pondService.createPondAndReturnId(
           farmId: selectedFarmId,

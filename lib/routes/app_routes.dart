@@ -5,6 +5,7 @@ import '../features/profile/profile_screen.dart';
 import '../features/farm/add_farm_screen.dart';
 import '../features/pond/add_pond_screen.dart';
 import '../features/pond/edit_pond_screen.dart';
+import '../features/pond/smart_feed_initialization_screen.dart';
 import '../features/dashboard/dashboard_screen_fixed.dart';
 import '../features/pond/pond_dashboard_screen.dart';
 import '../features/feed/feed_schedule_screen.dart';
@@ -33,6 +34,7 @@ class AppRoutes {
   static const expenseHistory = '/expense-history';
   static const addExpense = '/add-expense';
   static const profitSummary = '/profit-summary';
+  static const smartFeedInitialization = '/smart-feed-init';
 
   static Map<String, Widget Function(BuildContext)> routes = {
     login: (context) => const LoginScreen(),
@@ -110,6 +112,18 @@ class AppRoutes {
       return AddExpenseScreen(
         cropId: args['cropId'], // optional — screen resolves if null
         farmId: args['farmId']!,
+      );
+    },
+    smartFeedInitialization: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments
+          as Map<String, dynamic>?;
+      if (args == null || args['pondId'] == null) {
+        return const PondDashboardScreen();
+      }
+      return SmartFeedInitializationScreen(
+        pondId: args['pondId'] as String,
+        farmId: args['farmId'] as String,
+        doc: args['doc'] as int,
       );
     },
     profitSummary: (context) {

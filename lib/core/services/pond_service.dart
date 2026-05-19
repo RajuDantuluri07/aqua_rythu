@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../systems/planning/feed_plan_generator.dart';
+import '../../systems/planning/feed_plan_constants.dart';
+import '../../systems/feed/blind_feeding_engine.dart';
 import '../utils/logger.dart';
 import 'analytics_service.dart';
 import 'crashlytics_service.dart';
@@ -29,6 +31,7 @@ class PondService {
     SeedType? seedType,
     String? feedBrandId,
     String? operationId,
+    bool skipFeedRounds = false,
   }) async {
     await createPondAndReturnId(
       farmId: farmId,
@@ -41,12 +44,16 @@ class PondService {
       seedType: seedType,
       feedBrandId: feedBrandId,
       operationId: operationId,
+      skipFeedRounds: skipFeedRounds,
     );
   }
 
   /// Creates a pond + blind-phase feed schedule atomically via a single DB RPC.
   /// Returns the new pond ID. Passing [operationId] makes the call idempotent —
   /// a second call with the same ID returns the existing pond without a duplicate.
+  ///
+  /// Set [skipFeedRounds] to true for smart-init ponds (DOC past blind phase)
+  /// so no fake historical feed rows are created.
   Future<String?> createPondAndReturnId({
     required String farmId,
     required String name,
@@ -58,6 +65,7 @@ class PondService {
     SeedType? seedType,
     String? feedBrandId,
     String? operationId,
+    bool skipFeedRounds = false,
   }) async {
     if (supabase.auth.currentUser == null) {
       throw Exception('User not logged in');
@@ -80,6 +88,9 @@ class PondService {
     if (feedBrandId != null) {
       params['p_feed_brand_id'] = feedBrandId;
     }
+    if (skipFeedRounds) {
+      params['p_skip_feed_rounds'] = true;
+    }
 
     final result = await supabase.rpc('create_pond_with_feed_plan', params: params);
     final response = Map<String, dynamic>.from(result as Map);
@@ -100,6 +111,113 @@ class PondService {
       unawaited(AnalyticsService.instance.logPondCreated(pondId: pondId));
     }
     return pondId;
+  }
+
+  // ================================
+  // ✅ SMART FEED INITIALIZATION
+  // ================================
+
+  /// Activates smart feeding for a pond that joined after the blind phase.
+  /// Stores the farmer's current operating data as the intelligence baseline
+  /// and sets is_smart_feed_enabled = true immediately.
+  Future<void> initializeSmartFeedPond({
+    required String pondId,
+    required int doc,
+    required double currentFeedKg,
+    double? abw,
+    double? survivalPct,
+    required int roundsPerDay,
+    DateTime? lastSamplingDate,
+  }) async {
+    try {
+      final updateData = <String, dynamic>{
+        'anchor_feed': currentFeedKg,
+        'is_anchor_initialized': true,
+        if (abw != null) 'current_abw': abw,
+        if (survivalPct != null) 'survival_pct': survivalPct,
+        'post_week_feed_rounds': roundsPerDay,
+        'is_custom_feed_plan': true,
+        'is_smart_feed_enabled': true,
+        'smart_feed_initialized': true,
+        'initialization_doc': doc,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (lastSamplingDate != null) {
+        updateData['latest_sample_date'] = lastSamplingDate.toIso8601String();
+      }
+      await supabase.from('ponds').update(updateData).eq('id', pondId);
+      AppLogger.info(
+        'Smart feed initialized for pond $pondId — '
+        'DOC $doc, anchor ${currentFeedKg.toStringAsFixed(1)} kg, '
+        'ABW ${abw?.toStringAsFixed(1) ?? '-'} g, survival ${survivalPct?.toStringAsFixed(0) ?? '-'}%, '
+        '$roundsPerDay rounds/day',
+      );
+    } catch (e, st) {
+      CrashlyticsService.instance
+          .logError(e, st, reason: 'initializeSmartFeedPond failed');
+      throw Exception('Failed to initialize smart feed for pond $pondId: $e');
+    }
+  }
+
+  // ================================
+  // ✅ TODAY OPERATIONAL ROUNDS
+  // ================================
+
+  /// Writes today's feed rounds to the DB for a post-blind-feed pond.
+  ///
+  /// PRO path: pass [totalFeedKg] from the farmer's initialization input.
+  /// FREE path: omit [totalFeedKg] (defaults to 0) — the method computes a
+  /// reasonable starting amount from the blind-feed formula at the cap DOC
+  /// (DOC 10 for nursery, DOC 30 for hatchery) scaled to [seedCount].
+  ///
+  /// Uses UPSERT so the call is idempotent — safe to retry on connectivity failure.
+  Future<void> generateTodayOperationalRounds({
+    required String pondId,
+    required int doc,
+    required int roundsPerDay,
+    double totalFeedKg = 0.0,
+    int seedCount = 100000,
+    SeedType? seedType,
+  }) async {
+    try {
+      double feedPerDay = totalFeedKg;
+      if (feedPerDay <= 0) {
+        final capDoc = (seedType == SeedType.nurseryBig) ? 10 : 30;
+        feedPerDay = BlindFeedingEngine.calculateBlindFeed(
+          doc: capDoc,
+          seedCount: seedCount,
+          seedType: seedType?.dbValue ?? 'hatchery',
+        );
+      }
+
+      final perRound =
+          double.parse((feedPerDay / roundsPerDay).toStringAsFixed(2));
+
+      await supabase.from('feed_rounds').upsert(
+        [
+          for (int r = 1; r <= roundsPerDay; r++)
+            {
+              'pond_id': pondId,
+              'doc': doc,
+              'round': r,
+              'planned_amount': perRound,
+              'base_feed': perRound,
+              'feed_type': getFeedType(doc),
+              'status': 'pending',
+            },
+        ],
+        onConflict: 'pond_id,doc,round',
+      );
+
+      AppLogger.info(
+        'Today operational rounds created: pond=$pondId doc=$doc '
+        '${roundsPerDay}×${perRound.toStringAsFixed(2)}kg',
+      );
+    } catch (e, st) {
+      CrashlyticsService.instance
+          .logError(e, st, reason: 'generateTodayOperationalRounds failed');
+      rethrow;
+    }
   }
 
   // ================================
@@ -329,8 +447,21 @@ class PondService {
     if (feedBrandId != null) updateData['feed_brand_id'] = feedBrandId;
     await supabase.from('ponds').update(updateData).eq('id', pondId);
 
-    // 4. Regenerate feed plan.
-    await generateFeedSchedule(pondId);
+    // 4. Regenerate feed plan — skip if DOC already past blind phase.
+    // Generating DOC 1–N blind rounds for a mid-cycle stocking date creates
+    // fake historical data. The farmer must initialize via SmartFeedInit instead.
+    final resolvedSeedType = SeedTypeX.fromPlSize(plSize);
+    final doc = calculateDocFromStockingDateLegacy(stockingDate);
+    final needsSmartInit =
+        (resolvedSeedType == SeedType.nurseryBig && doc > 10) ||
+        (resolvedSeedType == SeedType.hatcherySmall && doc > 30);
+    if (!needsSmartInit) {
+      await generateFeedSchedule(pondId);
+    } else {
+      AppLogger.info(
+          'New cycle for pond $pondId is DOC $doc (past blind phase) — '
+          'skipping blind round generation; farmer must run smart init');
+    }
     AppLogger.info('New crop cycle started: ${cycle.id} for pond $pondId');
 
     return cycle;

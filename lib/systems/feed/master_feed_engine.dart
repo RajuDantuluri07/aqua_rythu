@@ -61,8 +61,8 @@ const double kAbsoluteMinFeed = 0.1;
 /// Global hard ceiling — final feed never above this value (kg).
 const double kAbsoluteMaxFeed = 50.0;
 
-/// Minimum DOC for smart-mode corrections (SmartFeedEngineV2, FCR, intelligence).
-/// DOC ≤ this value = blind phase; DOC > this value = smart phase.
+/// Default smart-mode DOC floor for hatchery ponds.
+/// Nursery ponds use 10 (computed per-call from StockingType in orchestrate()).
 const int kSmartModeMinDoc = 30;
 
 // ── VALIDATION MODEL ───────────────────────────────────────────────────────────
@@ -366,10 +366,13 @@ class MasterFeedEngine {
     );
 
     // ── STEP 2: DOC Rule Enforcement ───────────────────────────────────────
-    final bool isBlindPhase = input.doc <= 30;
+    // Nursery blind phase ends at DOC 10; hatchery at DOC 30.
+    final int smartModeMinDoc =
+        input.stockingType == StockingType.nursery ? 10 : 30;
+    final bool isBlindPhase = input.doc <= smartModeMinDoc;
 
-    // Smart feeding activates when: DOC > 30 (sampling removed)
-    final bool shouldUseSmartFeeding = !isBlindPhase && input.doc > 30;
+    // Smart feeding activates when: DOC > smartModeMinDoc
+    final bool shouldUseSmartFeeding = !isBlindPhase && input.doc > smartModeMinDoc;
 
     // Force blind feeding if admin disabled smart feed
     final bool useBlindFeeding = forceBlindFeeding || !shouldUseSmartFeeding;
@@ -575,8 +578,8 @@ class MasterFeedEngine {
     final String instruction;
     if (finalFeed == 0.0) {
       instruction = 'Do not feed';
-    } else if (input.doc == 31 && !useBlindFeeding) {
-      // DOC 31: Smart feed activation moment (PRO + smart enabled only)
+    } else if (input.doc == smartModeMinDoc + 1 && !useBlindFeeding) {
+      // First smart-phase DOC: activation moment (PRO + smart enabled only)
       instruction =
           'Smart Mode Active\nFeed ${perMealFeed.toStringAsFixed(1)} kg '
           '($feedsPerDay meals/day)\nSet baseline feed in Settings if not done';

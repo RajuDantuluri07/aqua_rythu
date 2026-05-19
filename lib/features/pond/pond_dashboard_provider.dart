@@ -9,8 +9,10 @@ import '../../core/services/feed_sync_queue.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/tray_service.dart';
 import 'package:aqua_rythu/core/services/tray_check_service.dart';
+import '../../core/services/crashlytics_service.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../../features/tray/tray_model.dart';
+import '../pond/enums/seed_type.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../farm/farm_provider.dart';
 import '../feed/feed_history_provider.dart';
@@ -218,9 +220,12 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
       final currentDoc = ref.read(docProvider(pondId));
 
-      // Activate smart feed if needed
-      final needsAnchor = currentDoc >= 31 && !pond.isAnchorInitialized;
-      if (currentDoc >= 31 && !pond.isSmartFeedEnabled) {
+      // Activate smart feed if needed.
+      // Nursery blind phase ends at DOC 10; hatchery at DOC 30.
+      final smartModeMinDoc =
+          pond.seedType == SeedType.nurseryBig ? 10 : 30;
+      final needsAnchor = currentDoc > smartModeMinDoc && !pond.isAnchorInitialized;
+      if (currentDoc > smartModeMinDoc && !pond.isSmartFeedEnabled) {
         try {
           await PondService()
               .updateSmartFeedStatus(pondId: pondId, isEnabled: true);
@@ -855,9 +860,15 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         round: round,
       );
       if (feedRoundId == null) {
-        AppLogger.warn(
-          'logTray: no feed_round for pond=$pondId doc=$doc round=$round '
-          '— tray_check not linked (orphan risk)',
+        // No feed_round row exists for this (pondId, doc, round) — tray check
+        // cannot be linked. This is a data-integrity gap that must be tracked.
+        final msg = 'tray_check_link_failed: no feed_round found — '
+            'tray check will be orphaned | pond=$pondId doc=$doc round=$round';
+        AppLogger.error(msg);
+        CrashlyticsService.instance.logError(
+          msg,
+          StackTrace.current,
+          reason: 'tray_check_link_failed: feed_round lookup returned null',
         );
         return;
       }
@@ -868,11 +879,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         observations: observations,
         checkedAt: checkedAt,
       );
-    } catch (e) {
-      AppLogger.warn(
-        'logTray: tray_check dual-write failed (non-blocking) '
-        'pond=$pondId doc=$doc round=$round: $e',
-      );
+    } catch (e, st) {
+      // Failure is non-blocking (farmer data already in tray_logs) but must
+      // be tracked — silent failures here cause split-brain analytics.
+      final msg = 'tray_check_link_failed: dual-write threw exception | '
+          'pond=$pondId doc=$doc round=$round';
+      AppLogger.error(msg, e, st);
+      CrashlyticsService.instance.logError(e, st, reason: msg);
     }
   }
 

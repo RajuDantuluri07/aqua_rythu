@@ -77,6 +77,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   final _scheduleRepo = ScheduleRepository();
   // Current pond key for the .family provider — updated via _setSelectedPond().
   String _selectedPondId = '';
+  // Set to true once farm data is resolved (even if no ponds exist), so the
+  // loader doesn't spin forever when the user has no ponds yet.
+  bool _farmDataChecked = false;
   // Tracks water mix supplement IDs confirmed-applied this session.
   final Set<String> _appliedWaterScheduleIds = {};
 
@@ -165,32 +168,32 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   }
 
   /// Returns the next round that needs action (feed or tray).
-  /// DOC ≤ 30 / FREE: first round where feed is not done.
-  /// DOC ≥ 31 PRO: first round where feed is not done, or previous tray
-  ///               is not logged (tray data drives smart recalculation).
+  /// Blind phase / FREE: first round where feed is not done.
+  /// Smart phase PRO: first round where feed is not done, or previous tray
+  ///                  is not logged (tray data drives smart recalculation).
   int _getCurrentRound(int doc, Map<int, bool> feedDone,
       Map<int, bool> trayDone, int totalRounds,
-      {bool isPro = false}) {
+      {bool isPro = false, int smartModeMinDoc = 30}) {
     for (int i = 1; i <= totalRounds; i++) {
       if (!(feedDone[i] ?? false)) return i;
-      // Tray blocks next round only for PRO users in smart mode (DOC ≥ 31).
-      if (doc >= 31 && isPro && !(trayDone[i] ?? false)) return i;
+      // Tray blocks next round only for PRO users in smart phase.
+      if (doc > smartModeMinDoc && isPro && !(trayDone[i] ?? false)) return i;
     }
     return totalRounds + 1;
   }
 
   /// A round is locked when the previous round is not fully cleared.
-  /// DOC ≤ 30 / FREE: cleared = feed done.
-  /// DOC ≥ 31 PRO: cleared = feed done AND tray logged.
+  /// Blind phase / FREE: cleared = feed done.
+  /// Smart phase PRO: cleared = feed done AND tray logged.
   bool _isLocked(
       int doc, int round, Map<int, bool> feedDone, Map<int, bool> trayDone,
-      {bool isPro = false}) {
+      {bool isPro = false, int smartModeMinDoc = 30}) {
     if (round <= 1) return false;
     final prev = round - 1;
     final prevFeedDone = feedDone[prev] ?? false;
     if (!prevFeedDone) return true;
-    // Tray mandatory-block only for PRO users in smart mode (DOC ≥ 31).
-    if (doc >= 31 && isPro && !(trayDone[prev] ?? false)) return true;
+    // Tray mandatory-block only for PRO users in smart phase.
+    if (doc > smartModeMinDoc && isPro && !(trayDone[prev] ?? false)) return true;
     return false;
   }
 
@@ -792,7 +795,9 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           onLogTray: onLogTray,
           onEdit: null,
           isNext: isNext,
-          isSmartFeed: doc > 30,
+          isSmartFeed: pond?.seedType == SeedType.nurseryBig
+              ? doc > 10
+              : doc > 30,
         ),
       );
     }
@@ -976,18 +981,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       ref.read(pondDashboardProvider(selectedPond).notifier).logTray(round);
 
       final isPro = ref.read(subscriptionProvider).isPro;
-      if (isPro) {
-        _showSuccessPopup(
-          context: context,
-          title: 'Tray Check Saved',
-          message: 'Round $round tray log recorded. Feed adjusted.',
-        );
-      } else {
-        AccessControlHooks.showUpgradeDialog(
-          context,
-          FeatureIds.trayBasedCorrection,
-        );
-      }
+      _showSuccessPopup(
+        context: context,
+        title: 'Tray Check Saved',
+        message: isPro
+            ? 'Round $round tray log recorded. Feed adjusted.'
+            : 'Round $round tray log recorded.',
+      );
     }
     return result;
   }
@@ -1170,7 +1170,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   @override
   Widget build(BuildContext context) {
     // Guard: pondId not yet resolved from route args — show splash.
-    if (_selectedPondId.isEmpty) {
+    if (_selectedPondId.isEmpty && !_farmDataChecked) {
       // Resolve from route args on the first frame.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -1180,7 +1180,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           _setSelectedPond(args);
         } else {
           final ponds = ref.read(farmProvider).currentFarm?.ponds ?? [];
-          if (ponds.isNotEmpty) _setSelectedPond(ponds.first.id);
+          if (ponds.isNotEmpty) {
+            _setSelectedPond(ponds.first.id);
+          } else {
+            // Farm data is loaded but there are no ponds — stop spinning and
+            // let the build fall through to the empty-state / add-pond CTA.
+            setState(() => _farmDataChecked = true);
+          }
         }
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
