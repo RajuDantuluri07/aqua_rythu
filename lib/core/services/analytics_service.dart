@@ -152,6 +152,53 @@ class AnalyticsService {
 
   Future<void> logExpenseDeleted() => _log('expense_deleted');
 
+  // ── Tray ─────────────────────────────────────────────────────────────────
+  Future<void> logTraySaveStarted({
+    required String pondId,
+    required int doc,
+    required int round,
+    required bool hasObservations,
+  }) =>
+      _log('tray_save_started', {
+        'pond_id': pondId,
+        'doc': doc,
+        'round': round,
+        'has_observations': hasObservations ? 1 : 0,
+      });
+
+  Future<void> logTraySaveSuccess({
+    required String pondId,
+    required int doc,
+    required int round,
+  }) =>
+      _log('tray_save_success', {
+        'pond_id': pondId,
+        'doc': doc,
+        'round': round,
+      });
+
+  Future<void> logTraySaveFailed({
+    required String pondId,
+    required int doc,
+    required int round,
+    required String reason,
+  }) =>
+      _log('tray_save_failed', {
+        'pond_id': pondId,
+        'doc': doc,
+        'round': round,
+        'reason': reason.length > 100 ? reason.substring(0, 100) : reason,
+      });
+
+  Future<void> logTrayProviderInvalidated({
+    required String pondId,
+    required String trigger,
+  }) =>
+      _log('tray_provider_invalidated', {
+        'pond_id': pondId,
+        'trigger': trigger,
+      });
+
   // ── Internal ─────────────────────────────────────────────────────────────
   Future<void> _log(String name, [Map<String, Object>? params]) async {
     if (kDebugMode) return; // keep dashboard clean during development

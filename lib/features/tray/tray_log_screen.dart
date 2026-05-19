@@ -4,19 +4,24 @@ import '../../features/tray/enums/tray_status.dart';
 import 'tray_provider.dart';
 import 'tray_model.dart';
 import '../farm/farm_provider.dart';
-import '../upgrade/access_control_hooks.dart';
-import '../upgrade/subscription_provider.dart';
 import '../../core/utils/logger.dart';
 
 class TrayLogScreen extends ConsumerStatefulWidget {
   final String pondId;
   final int doc;
   final int round;
-  const TrayLogScreen(
-      {super.key,
-      required this.pondId,
-      required this.doc,
-      required this.round});
+  /// ID of the parent feed_round row. Required by the unified architecture so
+  /// tray observations are always linked to a feed round (no orphan checks).
+  /// Null is accepted for legacy callers but triggers a warning log.
+  final String? feedRoundId;
+
+  const TrayLogScreen({
+    super.key,
+    required this.pondId,
+    required this.doc,
+    required this.round,
+    this.feedRoundId,
+  });
   @override
   ConsumerState<TrayLogScreen> createState() => _TrayLogScreenState();
 }
@@ -90,6 +95,14 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
   }
 
   void _finishAndSave() {
+    if (widget.feedRoundId == null) {
+      AppLogger.warn(
+        'TrayLogScreen: feedRoundId is null for pond=${widget.pondId} '
+        'doc=${widget.doc} round=${widget.round}. '
+        'Tray check will be saved to tray_logs only (orphan risk).',
+      );
+    }
+
     final observationMap = _observations.map((key, value) {
       return MapEntry(key, value.toList());
     });
@@ -105,18 +118,9 @@ class _TrayLogScreenState extends ConsumerState<TrayLogScreen> {
 
     ref.read(trayProvider(widget.pondId).notifier).addTrayLog(log);
 
-    // FREE users: log is saved (basic farm op preserved) but the
-    // correction-engine result screen is gated. Trigger the paywall
-    // before popping back, so the upgrade context is "tray result".
-    final isPro = ref.read(subscriptionProvider).isPro;
-    if (!isPro) {
-      AccessControlHooks.showUpgradeDialog(
-        context,
-        FeatureIds.trayBasedCorrection,
-      );
-    }
-
-    Navigator.pop(context, "Logged $_totalTrays trays");
+    // Always pop with result so the dashboard can persist to DB and show feedback.
+    // feedRoundId is passed back so logTray() can link to the parent feed_round.
+    Navigator.pop(context, widget.feedRoundId ?? "Logged $_totalTrays trays");
   }
 
   @override

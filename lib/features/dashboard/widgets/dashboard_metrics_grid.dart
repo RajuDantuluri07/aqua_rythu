@@ -8,6 +8,7 @@ import '../models/dashboard_metrics_model.dart';
 import 'dashboard_metric_card.dart';
 import 'locked_dashboard_metric_card.dart';
 import '../../upgrade/upgrade_to_pro_screen.dart';
+import '../../../routes/app_routes.dart';
 
 class DashboardMetricsGrid extends ConsumerStatefulWidget {
   final String farmId;
@@ -280,6 +281,24 @@ class _EmptyState extends StatelessWidget {
               style: AppTextStyles.secondaryText
                   .copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Spacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    Navigator.pushNamed(context, AppRoutes.addPond),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Pond'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: Spacing.md),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
             ),
           ],
         ),

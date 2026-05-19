@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../feed/feed_schedule_screen.dart';
 import 'pond_dashboard_provider.dart';
 import 'package:aqua_rythu/features/tray/tray_log_screen.dart';
+import 'package:aqua_rythu/core/services/tray_check_service.dart';
 import '../../features/tray/tray_provider.dart';
 import '../tray/tray_model.dart';
 import '../../features/tray/enums/tray_status.dart';
@@ -28,6 +29,7 @@ import 'package:aqua_rythu/widgets/app_bottom_bar.dart';
 import 'package:aqua_rythu/routes/app_routes.dart';
 import '../feed/feed_timeline_card.dart';
 import '../feed/feed_history_screen.dart';
+import '../../systems/timeline/timeline_priority.dart';
 import '../harvest/harvest_screen.dart';
 import '../growth/sampling_screen.dart';
 import '../farm/new_cycle_setup_screen.dart';
@@ -655,18 +657,27 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       }
     }
 
-    // Collect active water mix schedules sorted by scheduled time.
-    // Schedules without a scheduledTime are placed after all feed rounds.
+    // Collect active water mix schedules sorted by time, then by
+    // TimelinePriority (all water treatments share the same type so this
+    // keeps the order deterministic when two mixes share the same time).
     final waterMixSchedules = todaySchedules
         .where((s) => s.applicationType == 'water_mix' && s.isActiveOnDate(today))
         .toList()
       ..sort((a, b) {
         final aTime = _parseTime24(a.scheduledTime);
         final bTime = _parseTime24(b.scheduledTime);
-        if (aTime == null && bTime == null) return 0;
+        if (aTime == null && bTime == null) {
+          return a.createdAt.compareTo(b.createdAt);
+        }
         if (aTime == null) return 1;
         if (bTime == null) return -1;
-        return aTime.compareTo(bTime);
+        final timeCmp = aTime.compareTo(bTime);
+        if (timeCmp != 0) return timeCmp;
+        // Same time: both are waterTreatment, fall back to creation order
+        final priorityCmp = TimelinePriority.of(TimelineEventType.waterTreatment)
+            .compareTo(TimelinePriority.of(TimelineEventType.waterTreatment));
+        if (priorityCmp != 0) return priorityCmp;
+        return a.createdAt.compareTo(b.createdAt);
       });
     int waterIdx = 0;
 
@@ -901,6 +912,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
     final selectedPond = _selectedPondId;
     final doc = ref.read(docProvider(selectedPond));
+    final feedRoundId = await TrayCheckService().getFeedRoundId(
+      pondId: selectedPond,
+      doc: doc,
+      round: round,
+    );
+
+    if (!mounted) return;
 
     final result = await Navigator.push(
       context,
@@ -909,6 +927,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           pondId: selectedPond,
           doc: doc,
           round: round,
+          feedRoundId: feedRoundId,
         ),
       ),
     );
@@ -929,6 +948,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
     final selectedPond = _selectedPondId;
     final doc = ref.read(docProvider(selectedPond));
+    final feedRoundId = await TrayCheckService().getFeedRoundId(
+      pondId: selectedPond,
+      doc: doc,
+      round: round,
+    );
+
+    if (!mounted) return null;
 
     final result = await Navigator.push(
       context,
@@ -937,6 +963,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           pondId: selectedPond,
           doc: doc,
           round: round,
+          feedRoundId: feedRoundId,
         ),
       ),
     );
@@ -947,6 +974,20 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
     if (result != null) {
       ref.read(pondDashboardProvider(selectedPond).notifier).logTray(round);
+
+      final isPro = ref.read(subscriptionProvider).isPro;
+      if (isPro) {
+        _showSuccessPopup(
+          context: context,
+          title: 'Tray Check Saved',
+          message: 'Round $round tray log recorded. Feed adjusted.',
+        );
+      } else {
+        AccessControlHooks.showUpgradeDialog(
+          context,
+          FeatureIds.trayBasedCorrection,
+        );
+      }
     }
     return result;
   }

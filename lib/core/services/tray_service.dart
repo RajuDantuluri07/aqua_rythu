@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../../features/tray/tray_model.dart';
@@ -5,6 +7,37 @@ import '../utils/logger.dart';
 
 class TrayService {
   final _supabase = Supabase.instance.client;
+
+  /// Converts `Map<int, List<String>>?` to a JSON-safe `Map<String, dynamic>`.
+  ///
+  /// - Null/empty → `{}`
+  /// - Integer keys → stringified
+  /// - Falls back to `{}` if the result still can't encode (corrupt types, circular refs)
+  static Map<String, dynamic> sanitizeObservations(
+      Map<int, List<String>>? obs) {
+    try {
+      if (obs == null || obs.isEmpty) return {};
+      final result = <String, dynamic>{};
+      for (final entry in obs.entries) {
+        result[entry.key.toString()] = List<String>.from(entry.value);
+      }
+      jsonEncode(result); // validate — throws if not encodable
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Returns true when the device has at least one active network interface.
+  static Future<bool> _hasConnectivity() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      return result.isNotEmpty &&
+          result.any((r) => r != ConnectivityResult.none);
+    } catch (_) {
+      return true; // assume online if check fails
+    }
+  }
 
   /// Persists a tray log to Supabase and triggers smart feed adjustment.
   ///
@@ -25,9 +58,25 @@ class TrayService {
       }
     }
 
+    final today = log.time.toIso8601String().split('T')[0];
+    final obsJson = sanitizeObservations(log.observations);
+    final payload = {
+      'pond_id': log.pondId,
+      'date': today,
+      'doc': log.doc,
+      'round_number': log.round,
+      'tray_statuses': log.trays.map((e) => e.name).toList(),
+      'observations': obsJson,
+    };
+
     try {
+      // Offline check — fail fast with a clear message before hitting Supabase.
+      final online = await _hasConnectivity();
+      if (!online) {
+        throw Exception('No internet connection. Tray log could not be saved.');
+      }
+
       // Deduplicate: skip if a tray log already exists for this round today.
-      final today = log.time.toIso8601String().split('T')[0];
       final existing = await _supabase
           .from('tray_logs')
           .select('id')
@@ -42,19 +91,16 @@ class TrayService {
         return;
       }
 
-      await _supabase.from('tray_logs').insert({
-        'pond_id': log.pondId,
-        'date': today,
-        'doc': log.doc,
-        'round_number': log.round,
-        'tray_statuses': log.trays.map((e) => e.name).toList(),
-        'observations': log.observations,
-      });
-
+      await _supabase.from('tray_logs').insert(payload);
       AppLogger.info('Tray log saved for pond ${log.pondId} at DOC ${log.doc}');
     } catch (e, stack) {
       AppLogger.error(
-          'TrayService.saveTrayLog failed for pond ${log.pondId}', e, stack);
+        'TrayService.saveTrayLog failed | '
+        'pond=${log.pondId} doc=${log.doc} round=${log.round} '
+        'date=$today trays=${payload['tray_statuses']} obs=$obsJson',
+        e,
+        stack,
+      );
       rethrow;
     }
   }

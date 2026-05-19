@@ -20,6 +20,9 @@ const _kRepeatOptions = [
   (label: 'Every 30 days',  days: 30),
 ];
 
+// Quantity unit options for inventory hook
+const _kQtyUnits = ['g', 'kg', 'ml', 'L'];
+
 class AddSupplementScreen extends ConsumerStatefulWidget {
   final String pondId;
   final String? farmId;
@@ -57,6 +60,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   DateTime _waterDate = DateTime.now();
   int _frequencyDays = 0; // 0 = one-time
   TimeOfDay? _scheduledTime;
+
+  // Inventory hook: optional quantity metadata (T3)
+  final _quantityController = TextEditingController();
+  String _qtyUnit = 'kg';
 
   bool _isSaving = false;
 
@@ -102,6 +109,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   void dispose() {
     _itemDoseController.dispose();
     _notesController.dispose();
+    _quantityController.dispose();
     super.dispose();
   }
 
@@ -172,10 +180,27 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   }
 
   DateTime _computeEndDate() {
-    // One-time: endDate == startDate (isActiveOnDate range covers just that day)
+    // One-time: endDate == startDate.
     if (_frequencyDays == 0) return _waterDate;
-    // Recurring: run for 1 year; farmer can delete the schedule to stop
-    return _waterDate.add(const Duration(days: 365));
+    // Recurring: sentinel far-future date; stopDate field controls actual end.
+    return DateTime(2099, 12, 31);
+  }
+
+  // T6: Compute upcoming occurrence dates for the preview strip.
+  List<DateTime> _upcomingOccurrences() {
+    if (_frequencyDays == 0) return [];
+    // Build a temporary schedule purely for calculation — no DB round-trip.
+    final temp = SupplementSchedule(
+      id: '',
+      pondId: '',
+      applicationType: 'water_mix',
+      startDate: _waterDate,
+      endDate: _computeEndDate(),
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      frequencyDays: _frequencyDays,
+    );
+    return temp.getUpcomingOccurrences(fromDate: _waterDate, limit: 3);
   }
 
   Future<void> _savePlan() async {
@@ -237,6 +262,12 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 ? _formatTimeOfDay(_scheduledTime!)
                 : null,
         frequencyDays: isWater ? (_frequencyDays == 0 ? null : _frequencyDays) : null,
+        quantity: isWater
+            ? double.tryParse(_quantityController.text.trim())
+            : null,
+        unit: isWater && _quantityController.text.trim().isNotEmpty
+            ? _qtyUnit
+            : null,
       );
 
       if (isUpdate) {
@@ -438,6 +469,8 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               _buildFrequencySelector(),
+              // T6: Upcoming dates preview (hidden for one-time)
+              if (_frequencyDays > 0) _buildUpcomingPreview(),
               AppSpacing.hBase,
               const Text('Application Time',
                   style: TextStyle(fontWeight: FontWeight.bold)),
@@ -469,6 +502,51 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                 'Card appears in the feed timeline at this time',
                 style:
                     TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+            ],
+
+            // ── Quantity for inventory hook (water mix only, optional) ─────
+            if (_selectedType == SupplementType.waterMix) ...[
+              AppSpacing.hBase,
+              const Text('Quantity per Application (Optional)',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _quantityController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. 5',
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      value: _qtyUnit,
+                      decoration: const InputDecoration(),
+                      items: _kQtyUnits
+                          .map((u) =>
+                              DropdownMenuItem(value: u, child: Text(u)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _qtyUnit = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Used for future inventory tracking',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
               ),
             ],
 
@@ -532,6 +610,48 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w900, fontSize: 16),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // T6: Preview strip — shows next 3 repeat dates so farmer can confirm
+  Widget _buildUpcomingPreview() {
+    final dates = _upcomingOccurrences();
+    if (dates.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D9488).withOpacity(0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF0D9488).withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.repeat_rounded, size: 14, color: Color(0xFF0D9488)),
+            const SizedBox(width: 8),
+            Text(
+              'Will repeat on:  ',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                dates.map((d) => DateFormat('d MMM').format(d)).join('  ·  '),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0D9488),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

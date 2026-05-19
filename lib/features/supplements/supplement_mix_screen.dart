@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/models/supplement_schedule.dart';
 import '../../core/providers/product_provider.dart';
+import '../../core/repositories/schedule_repository.dart';
 import '../../core/theme/app_theme.dart';
 import 'screens/add_supplement_screen.dart';
 import 'supplement_provider.dart';
@@ -25,6 +26,65 @@ class SupplementMixScreen extends ConsumerStatefulWidget {
 
 class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
   SupplementType? _filterType;
+  final _scheduleRepo = ScheduleRepository();
+
+  Future<void> _pauseSchedule(SupplementSchedule s) async {
+    await _scheduleRepo.updateSchedule(
+      s.copyWith(isPaused: true, updatedAt: DateTime.now()),
+    );
+    ref.invalidate(supplementSchedulesProvider(widget.pondId));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Schedule paused'), behavior: SnackBarBehavior.floating),
+      );
+    }
+  }
+
+  Future<void> _resumeSchedule(SupplementSchedule s) async {
+    await _scheduleRepo.updateSchedule(
+      s.copyWith(isPaused: false, updatedAt: DateTime.now()),
+    );
+    ref.invalidate(supplementSchedulesProvider(widget.pondId));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Schedule resumed'), behavior: SnackBarBehavior.floating),
+      );
+    }
+  }
+
+  Future<void> _stopSchedule(SupplementSchedule s) async {
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Stop Schedule?'),
+            content: Text(
+              "Stop '${s.productName ?? s.categoryName ?? 'this treatment'}' from today? "
+              'You can re-add it later if needed.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Stop', style: TextStyle(color: AppColors.danger)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirm || !mounted) return;
+    await _scheduleRepo.updateSchedule(
+      s.copyWith(stopDate: DateTime.now(), updatedAt: DateTime.now()),
+    );
+    ref.invalidate(supplementSchedulesProvider(widget.pondId));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Schedule stopped'), behavior: SnackBarBehavior.floating),
+      );
+    }
+  }
 
   Future<void> _openPlanEditor(Supplement plan) async {
     await Navigator.push(
@@ -182,7 +242,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
                       ),
                       ...activeSchedules
                           .map((schedule) =>
-                              _ScheduleCard(schedule: schedule, pondId: widget.pondId)),
+                              _ScheduleCard(schedule: schedule, pondId: widget.pondId, onPause: _pauseSchedule, onResume: _resumeSchedule, onStop: _stopSchedule)),
                     ] else ...[
                       _emptyState("No active schedules for today."),
                     ],
@@ -203,7 +263,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
                       ),
                       ...upcomingSchedules
                           .map((schedule) =>
-                              _ScheduleCard(schedule: schedule, pondId: widget.pondId)),
+                              _ScheduleCard(schedule: schedule, pondId: widget.pondId, onPause: _pauseSchedule, onResume: _resumeSchedule, onStop: _stopSchedule)),
                     ],
 
                     // Past Schedules (collapsible)
@@ -748,100 +808,161 @@ class _ApplicationLogRow extends StatelessWidget {
 class _ScheduleCard extends StatelessWidget {
   final SupplementSchedule schedule;
   final String pondId;
+  final Future<void> Function(SupplementSchedule)? onPause;
+  final Future<void> Function(SupplementSchedule)? onResume;
+  final Future<void> Function(SupplementSchedule)? onStop;
 
   const _ScheduleCard({
     required this.schedule,
     required this.pondId,
+    this.onPause,
+    this.onResume,
+    this.onStop,
   });
 
   @override
   Widget build(BuildContext context) {
     final isFeed = schedule.applicationType == 'feed_mix';
     final accent = isFeed ? Colors.indigo : Colors.teal;
+    final isStopped = schedule.stopDate != null &&
+        !DateTime.now().isBefore(schedule.stopDate!);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: accent.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      schedule.productName ?? schedule.categoryName ?? "Supplement",
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+    return Opacity(
+      opacity: (schedule.isPaused || isStopped) ? 0.6 : 1.0,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: accent.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        schedule.productName ??
+                            schedule.categoryName ??
+                            'Supplement',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "${DateFormat('dd MMM').format(schedule.startDate)} - ${DateFormat('dd MMM').format(schedule.endDate)}",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
+                      const SizedBox(height: 4),
+                      // Date + recurrence label
+                      Text(
+                        isFeed
+                            ? '${DateFormat('dd MMM').format(schedule.startDate)} – ${DateFormat('dd MMM').format(schedule.endDate)}'
+                            : '${DateFormat('dd MMM yyyy').format(schedule.startDate)}  ·  ${schedule.recurrenceLabel()}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  isFeed ? "FEED" : "WATER",
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    color: accent,
+                      if (schedule.isPaused) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'PAUSED',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.orange.shade700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ] else if (isStopped) ...[
+                        const SizedBox(height: 4),
+                        const Text(
+                          'STOPPED',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.red,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        isFeed ? 'FEED' : 'WATER',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: accent),
+                      ),
+                    ),
+                    if (!isStopped)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert,
+                            size: 18, color: Colors.grey.shade500),
+                        itemBuilder: (_) => [
+                          if (schedule.isPaused)
+                            const PopupMenuItem(
+                              value: 'resume',
+                              child: Text('Resume Schedule'),
+                            )
+                          else
+                            const PopupMenuItem(
+                              value: 'pause',
+                              child: Text('Pause Schedule'),
+                            ),
+                          const PopupMenuItem(
+                            value: 'stop',
+                            child: Text('Stop Schedule',
+                                style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                        onSelected: (action) {
+                          if (action == 'pause') onPause?.call(schedule);
+                          if (action == 'resume') onResume?.call(schedule);
+                          if (action == 'stop') onStop?.call(schedule);
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            if (isFeed && schedule.selectedFeedRounds.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                children: schedule.selectedFeedRounds
+                    .map((round) => Chip(
+                          label: Text(round,
+                              style: const TextStyle(fontSize: 10)),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: accent.withOpacity(0.1),
+                          labelStyle: TextStyle(color: accent),
+                        ))
+                    .toList(),
               ),
             ],
-          ),
-          if (isFeed && schedule.selectedFeedRounds.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              children: schedule.selectedFeedRounds
-                  .map(
-                    (round) => Chip(
-                      label: Text(
-                        round,
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: accent.withOpacity(0.1),
-                      labelStyle: TextStyle(color: accent),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ],
-          if (schedule.notes != null && schedule.notes!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              schedule.notes!,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade600,
-                fontStyle: FontStyle.italic,
+            if (schedule.notes != null && schedule.notes!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                schedule.notes!,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

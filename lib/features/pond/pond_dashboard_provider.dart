@@ -8,6 +8,7 @@ import '../../core/models/feed_pending_operation.dart';
 import '../../core/services/feed_sync_queue.dart';
 import 'package:aqua_rythu/core/services/pond_service.dart';
 import 'package:aqua_rythu/core/services/tray_service.dart';
+import 'package:aqua_rythu/core/services/tray_check_service.dart';
 import '../../features/tray/enums/tray_status.dart';
 import '../../features/tray/tray_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +47,9 @@ class PondDashboardState {
   /// Set to true when a tray log fails to persist to DB.
   /// Screen listens and shows a non-blocking retry banner.
   final bool trayPersistFailed;
+
+  /// True while a tray save is in flight — prevents double-submit.
+  final bool isTraySaving;
 
   /// Final feed amounts per round (after manual edits)
   final Map<int, double> roundFinalFeedAmounts;
@@ -87,6 +91,7 @@ class PondDashboardState {
     this.feedAutoRecovered = false,
     this.lastFeedTime,
     this.trayPersistFailed = false,
+    this.isTraySaving = false,
     this.roundFinalFeedAmounts = const {},
     this.roundIsManuallyEdited = const {},
     this.recommendation,
@@ -110,6 +115,7 @@ class PondDashboardState {
     DateTime? lastFeedTime,
     bool clearLastFeedTime = false,
     bool? trayPersistFailed,
+    bool? isTraySaving,
     Map<int, double>? roundFinalFeedAmounts,
     Map<int, bool>? roundIsManuallyEdited,
     FeedRecommendation? recommendation,
@@ -134,6 +140,7 @@ class PondDashboardState {
       lastFeedTime:
           clearLastFeedTime ? null : (lastFeedTime ?? this.lastFeedTime),
       trayPersistFailed: trayPersistFailed ?? this.trayPersistFailed,
+      isTraySaving: isTraySaving ?? this.isTraySaving,
       roundFinalFeedAmounts:
           roundFinalFeedAmounts ?? this.roundFinalFeedAmounts,
       roundIsManuallyEdited:
@@ -670,6 +677,12 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     final pondId = state.selectedPond;
     final lockKey = '${pondId}_log_tray_$round';
 
+    // Prevent double-submit: both the in-process lock and the isTraySaving flag
+    if (state.isTraySaving) {
+      AppLogger.warn('Tray save already in flight, ignoring duplicate call');
+      return;
+    }
+
     // Prevent concurrent tray logging for the same round
     if (!_tryAcquireLock(lockKey)) {
       AppLogger.warn(
@@ -677,6 +690,7 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       return;
     }
 
+    state = state.copyWith(isTraySaving: true);
     try {
       final trayLogs = ref.read(trayProvider(state.selectedPond));
       if (trayLogs.isEmpty) return;
@@ -738,6 +752,14 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // called trayProvider.notifier.addTrayLog() before popping.
       final pondId = state.selectedPond;
       final doc = state.doc;
+
+      AnalyticsService.instance.logTraySaveStarted(
+        pondId: pondId,
+        doc: doc,
+        round: round,
+        hasObservations: latest.observations?.isNotEmpty ?? false,
+      );
+
       try {
         final trayLog = TrayLog(
           pondId: pondId,
@@ -750,41 +772,107 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         );
         await TrayService().saveTrayLog(trayLog);
 
-        // 🔄 CACHE INVALIDATION: Tray update affects smart feed calculations
-        // This ensures the controller fetches fresh tray data next load
+        // Unified architecture: also write to tray_checks (linked to feed_round).
+        // This is a best-effort dual-write — failure does NOT revert the primary
+        // tray_logs save so the farmer's data is never lost.
+        unawaited(_saveTrayCheckLinked(
+          pondId: pondId,
+          doc: doc,
+          round: round,
+          trays: trayStatuses,
+          observations: trayLog.observations,
+          checkedAt: trayLog.time,
+        ));
+
+        AnalyticsService.instance.logTraySaveSuccess(
+          pondId: pondId,
+          doc: doc,
+          round: round,
+        );
+
+        // Tray update affects smart feed calculations — reload from DB.
         _controller.invalidate(pondId);
-
-        // CRITICAL: After tray is logged, SmartFeedEngine updates feed_rounds
-        // with new factor adjustments. Reload feed amounts to display new suggestion.
-        // Without this, feed_rounds table is updated but UI shows stale data.
         ref.invalidate(trayProvider(pondId));
+        AnalyticsService.instance.logTrayProviderInvalidated(
+          pondId: pondId,
+          trigger: 'save_success',
+        );
 
-        // 🔥 FIX: Reload feed data so next feed suggestion shows SmartFeedEngine's adjustment
-        // 🔒 FIX #6: Ensure engine runs AFTER DB update with proper await
         await loadTodayFeed(pondId);
 
-        // Update currentFeed in state after reload
         final totalFeed =
             state.roundFeedAmounts.values.fold(0.0, (sum, v) => sum + v);
         state = state.copyWith(currentFeed: totalFeed);
       } catch (e) {
+        final reason = e.toString();
         AppLogger.error(
             'Failed to persist tray log for pond $pondId, reverting UI state',
             e);
 
-        // 🔴 CRITICAL: Revert UI state on failure
+        AnalyticsService.instance.logTraySaveFailed(
+          pondId: pondId,
+          doc: doc,
+          round: round,
+          reason: reason,
+        );
+
+        // Revert UI state and flush the in-memory addTrayLog entry so
+        // isPendingTray=true immediately — farmer can retry without restart.
         state = state.copyWith(
           trayResults: originalTrayResults,
           trayPersistFailed: true,
         );
-
-        // Note: Feed history provider revert would require more complex logic
-        // The main UI state revert above is sufficient for most cases
+        ref.invalidate(trayProvider(pondId));
+        AnalyticsService.instance.logTrayProviderInvalidated(
+          pondId: pondId,
+          trigger: 'save_failed_revert',
+        );
       }
     } catch (e) {
       AppLogger.error('Tray logging failed for pond $pondId round $round', e);
     } finally {
+      state = state.copyWith(isTraySaving: false);
       _releaseLock(lockKey);
+    }
+  }
+
+  /// Best-effort dual-write to tray_checks (unified architecture).
+  /// Looks up the feed_round_id then saves the tray check under it.
+  /// Never throws — failures are logged but must not revert the primary save.
+  Future<void> _saveTrayCheckLinked({
+    required String pondId,
+    required int doc,
+    required int round,
+    required List<TrayStatus> trays,
+    required Map<int, List<String>>? observations,
+    required DateTime checkedAt,
+  }) async {
+    try {
+      final svc = TrayCheckService();
+      final feedRoundId = await svc.getFeedRoundId(
+        pondId: pondId,
+        doc: doc,
+        round: round,
+      );
+      if (feedRoundId == null) {
+        AppLogger.warn(
+          'logTray: no feed_round for pond=$pondId doc=$doc round=$round '
+          '— tray_check not linked (orphan risk)',
+        );
+        return;
+      }
+      await svc.saveTrayCheck(
+        feedRoundId: feedRoundId,
+        pondId: pondId,
+        trays: trays,
+        observations: observations,
+        checkedAt: checkedAt,
+      );
+    } catch (e) {
+      AppLogger.warn(
+        'logTray: tray_check dual-write failed (non-blocking) '
+        'pond=$pondId doc=$doc round=$round: $e',
+      );
     }
   }
 
