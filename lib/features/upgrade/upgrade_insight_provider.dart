@@ -181,7 +181,7 @@ final upgradeLossInsightProvider =
   try {
     feedCost = await FeedEngineConstants.getFeedCostPerKg(farmId: farm?.id);
   } catch (e) {
-    debugPrint('Upgrade feed cost fallback used: $e');
+    if (kDebugMode) debugPrint('Upgrade feed cost fallback used: $e');
   }
 
   final todayLog = _todayFeedLog(history[pond.id] ?? const []);
@@ -249,7 +249,7 @@ double _expectedFeedFromEngine(Pond pond) {
 
 class UpgradeMetrics {
   static void track(String event, Map<String, Object?> properties) {
-    debugPrint('[upgrade_metric] $event $properties');
+    if (kDebugMode) debugPrint('[upgrade_metric] $event $properties');
   }
 
   static void trackCtaClick({

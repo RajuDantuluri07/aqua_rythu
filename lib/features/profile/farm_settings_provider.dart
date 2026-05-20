@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../core/utils/logger.dart';
 
+const _sentinel = Object();
+
 class FarmSettings {
   final String farmType; // "Semi-Intensive" or "Intensive"
   final int feedsPerDay; // 2, 3, 4, or 5
@@ -13,6 +15,7 @@ class FarmSettings {
   final double trayCalibration30_60; // % of feed for DOC 30-60
   final double trayCalibration60_90; // % of feed for DOC 60-90
   final double trayCalibration90Plus; // % of feed for DOC 90+
+  final String? feedBrandId; // Default feed brand for new ponds
 
   FarmSettings({
     this.farmType = "Semi-Intensive",
@@ -24,6 +27,7 @@ class FarmSettings {
     this.trayCalibration30_60 = 0.3,
     this.trayCalibration60_90 = 0.6,
     this.trayCalibration90Plus = 1.0,
+    this.feedBrandId,
   });
 
   FarmSettings copyWith({
@@ -36,6 +40,7 @@ class FarmSettings {
     double? trayCalibration30_60,
     double? trayCalibration60_90,
     double? trayCalibration90Plus,
+    Object? feedBrandId = _sentinel,
   }) {
     return FarmSettings(
       farmType: farmType ?? this.farmType,
@@ -47,6 +52,7 @@ class FarmSettings {
       trayCalibration30_60: trayCalibration30_60 ?? this.trayCalibration30_60,
       trayCalibration60_90: trayCalibration60_90 ?? this.trayCalibration60_90,
       trayCalibration90Plus: trayCalibration90Plus ?? this.trayCalibration90Plus,
+      feedBrandId: feedBrandId == _sentinel ? this.feedBrandId : feedBrandId as String?,
     );
   }
 
@@ -61,6 +67,7 @@ class FarmSettings {
     'trayCalibration30_60': trayCalibration30_60,
     'trayCalibration60_90': trayCalibration60_90,
     'trayCalibration90Plus': trayCalibration90Plus,
+    if (feedBrandId != null) 'feedBrandId': feedBrandId,
   };
 
   // Deserialize from storage
@@ -75,6 +82,7 @@ class FarmSettings {
       trayCalibration30_60: (json['trayCalibration30_60'] ?? 0.3).toDouble(),
       trayCalibration60_90: (json['trayCalibration60_90'] ?? 0.6).toDouble(),
       trayCalibration90Plus: (json['trayCalibration90Plus'] ?? 1.0).toDouble(),
+      feedBrandId: json['feedBrandId'] as String?,
     );
   }
 }
@@ -158,6 +166,11 @@ class FarmSettingsNotifier extends StateNotifier<FarmSettings> {
     await _saveSettings();
   }
 
+  void setFeedBrandId(String? id) async {
+    state = state.copyWith(feedBrandId: id);
+    await _saveSettings();
+  }
+
   Future<void> saveAllSettings({
     required String farmType,
     required int feedsPerDay,
@@ -179,6 +192,7 @@ class FarmSettingsNotifier extends StateNotifier<FarmSettings> {
       trayCalibration30_60: trayCalibration30_60,
       trayCalibration60_90: trayCalibration60_90,
       trayCalibration90Plus: trayCalibration90Plus,
+      feedBrandId: state.feedBrandId,
     );
     await _saveSettings();
   }

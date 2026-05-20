@@ -10,8 +10,7 @@ import 'package:aqua_rythu/core/utils/doc_utils.dart';
 import '../../routes/app_routes.dart';
 import 'enums/seed_type.dart';
 import 'package:aqua_rythu/features/upgrade/widgets/pond_limit_bottom_sheet.dart';
-import '../../core/providers/product_provider.dart';
-import '../upgrade/subscription_provider.dart';
+import '../../features/profile/farm_settings_provider.dart';
 
 class AddPondScreen extends ConsumerStatefulWidget {
   final String? farmId;
@@ -31,7 +30,6 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
   DateTime _stockingDate = DateTime.now();
   int _numTrays = 4;
   SeedType _seedType = SeedType.hatcherySmall;
-  String? _selectedFeedBrandId;
   bool _isLoading = false;
   late String _operationId;
 
@@ -179,16 +177,16 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
       try {
         final pondService = PondService();
 
-        // Determine whether the stocking date puts the pond past the blind
-        // feeding phase. If so, skip historical feed round generation and
-        // route the farmer through Smart Feed Initialization instead.
         final doc = calculateDocFromStockingDateLegacy(_stockingDate);
-        final needsSmartInit =
+        final isPostBlind =
             (_seedType == SeedType.nurseryBig && doc > 10) ||
-            (_seedType == SeedType.hatcherySmall && doc > 30);
+            (_seedType == SeedType.hatcherySmall && doc > 25);
 
-        if (needsSmartInit) {
-          final isPro = ref.read(isProProvider);
+        if (isPostBlind) {
+          // Mid-crop join: create pond without pre-generated feed rounds,
+          // then immediately write today's empty manual operational rounds.
+          // Farmer enters actual feed amounts per round on the dashboard.
+          // Smart feed initialization is a future explicit PRO action — NOT here.
           final pondId = await pondService.createPondAndReturnId(
             farmId: selectedFarmId,
             name: _nameController.text.trim(),
@@ -198,9 +196,15 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
             plSize: plSize,
             numTrays: _numTrays,
             seedType: _seedType,
-            feedBrandId: _selectedFeedBrandId,
+            feedBrandId: ref.read(farmSettingsProvider).feedBrandId,
             operationId: _operationId,
             skipFeedRounds: true,
+          );
+
+          await pondService.generateManualOperationalRounds(
+            pondId: pondId!,
+            doc: doc,
+            roundsPerDay: 4,
           );
 
           await ref
@@ -209,27 +213,17 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
 
           if (!mounted) return;
 
-          if (isPro) {
-            Navigator.pushReplacementNamed(
-              context,
-              AppRoutes.smartFeedInitialization,
-              arguments: {
-                'pondId': pondId!,
-                'farmId': selectedFarmId,
-                'doc': doc,
-              },
-            );
-          } else {
-            await pondService.generateTodayOperationalRounds(
-              pondId: pondId!,
-              doc: doc,
-              roundsPerDay: 4,
-              seedCount: seedCount,
-              seedType: _seedType,
-            );
-            if (!mounted) return;
-            Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Pond created successfully'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              backgroundColor: Colors.green.shade600,
+            ),
+          );
+
+          Navigator.pushReplacementNamed(context, AppRoutes.pondDashboard);
           return;
         }
 
@@ -242,7 +236,7 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
           plSize: plSize,
           numTrays: _numTrays,
           seedType: _seedType,
-          feedBrandId: _selectedFeedBrandId,
+          feedBrandId: ref.read(farmSettingsProvider).feedBrandId,
           operationId: _operationId,
         );
 
@@ -328,70 +322,6 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
               )),
         ],
       ),
-    );
-  }
-
-  Widget _buildFeedBrandDropdown() {
-    final feedBrandsAsync = ref.watch(feedBrandsProvider);
-
-    return feedBrandsAsync.when(
-      loading: () => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.white,
-        ),
-        child: const SizedBox(
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-      error: (e, st) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.red.shade300),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.red.shade50,
-        ),
-        child: Text(
-          'Error loading feed brands',
-          style: TextStyle(color: Colors.red.shade700),
-        ),
-      ),
-      data: (brands) {
-        return DropdownButtonFormField<String>(
-          value: _selectedFeedBrandId,
-          decoration: InputDecoration(
-            labelText: "Feed Brand",
-            hintText: "Select a feed brand",
-            prefixIcon: Icon(Icons.store_rounded,
-                color: Theme.of(context).primaryColor),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  BorderSide(color: Theme.of(context).primaryColor, width: 2),
-            ),
-          ),
-          items: brands
-              .map((brand) => DropdownMenuItem(
-                    value: brand.id,
-                    child: Text(brand.name),
-                  ))
-              .toList(),
-          onChanged: (value) {
-            setState(() => _selectedFeedBrandId = value);
-          },
-        );
-      },
     );
   }
 
@@ -548,8 +478,6 @@ class _AddPondScreenState extends ConsumerState<AddPondScreen> {
                     ),
                     const SizedBox(height: 20),
                     _buildSeedTypeSelector(),
-                    const SizedBox(height: 20),
-                    _buildFeedBrandDropdown(),
                     const SizedBox(height: 20),
                     InkWell(
                       onTap: () => _selectDate(context),

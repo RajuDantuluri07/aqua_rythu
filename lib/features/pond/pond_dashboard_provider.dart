@@ -220,23 +220,13 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
 
       final currentDoc = ref.read(docProvider(pondId));
 
-      // Activate smart feed if needed.
-      // Nursery blind phase ends at DOC 10; hatchery at DOC 30.
+      // Smart feed activation is an explicit PRO user action (future feature).
+      // DOC crossing a threshold must NOT auto-enable smart feed at launch.
       final smartModeMinDoc =
           pond.seedType == SeedType.nurseryBig ? 10 : 30;
-      final needsAnchor = currentDoc > smartModeMinDoc && !pond.isAnchorInitialized;
-      if (currentDoc > smartModeMinDoc && !pond.isSmartFeedEnabled) {
-        try {
-          await PondService()
-              .updateSmartFeedStatus(pondId: pondId, isEnabled: true);
-          ref.read(farmProvider.notifier).updateSmartFeedStatus(pondId, true);
-        } catch (e) {
-          AppLogger.error('Failed to activate smart feed for pond $pondId', e);
-        }
-      }
 
       // ✅ SINGLE SOURCE OF TRUTH: Controller orchestrates all data loading
-      final viewState = await _controller.load(pondId, knownDoc: currentDoc);
+      var viewState = await _controller.load(pondId, knownDoc: currentDoc);
 
       if (viewState.error != null) {
         AppLogger.error(
@@ -250,6 +240,26 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         return;
       }
 
+      // Mid-crop ponds: if no rounds exist for today's DOC, generate empty
+      // manual rounds so the farmer can enter actual amounts per round.
+      // This handles the day-N+1 case where DOC advances but no rows exist yet.
+      if (currentDoc > smartModeMinDoc && viewState.roundToFeedId.isEmpty) {
+        try {
+          final roundsPerDay =
+              (pond.postWeekFeedRounds > 0) ? pond.postWeekFeedRounds : 4;
+          await PondService().generateManualOperationalRounds(
+            pondId: pondId,
+            doc: currentDoc,
+            roundsPerDay: roundsPerDay,
+          );
+          _controller.invalidateDoc(pondId, currentDoc);
+          viewState = await _controller.load(pondId, knownDoc: currentDoc);
+        } catch (e) {
+          AppLogger.error(
+              'Failed to generate manual rounds for pond $pondId', e);
+        }
+      }
+
       // Fetch last feed time for gap check
       final persistedLastFeedTime =
           await FeedService().fetchLatestFeedTimeForDoc(
@@ -261,6 +271,10 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
                   state.lastFeedTime!.isAfter(persistedLastFeedTime))
           ? state.lastFeedTime
           : persistedLastFeedTime;
+
+      // Smart feed anchor popup: disabled for launch.
+      // Smart feed activation is a future explicit PRO action only.
+      const needsAnchor = false;
 
       // Equality guards: only replace when values actually changed
       final newRecommendation =
@@ -322,15 +336,39 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
     state = state.copyWith(needsAnchorFeedInput: false);
   }
 
-  /// Save farmer-entered anchor feed to DB + update in-memory Pond state.
+  /// Save farmer-entered anchor feed to DB, persist today's rounds from the
+  /// same value (FIX 2 — single source of truth), then reload.
   Future<void> updateAnchorFeed(double anchorFeed) async {
     final pondId = state.selectedPond;
     if (pondId.isEmpty) return;
 
     try {
+      // Persist anchor feed first so the engine can read it.
       await PondService()
           .updateAnchorFeed(pondId: pondId, anchorFeed: anchorFeed);
       ref.read(farmProvider.notifier).updateAnchorFeed(pondId, anchorFeed);
+
+      // Resolve pond config needed for round generation.
+      final farmState = ref.read(farmProvider);
+      Pond? pond;
+      for (final farm in farmState.farms) {
+        final idx = farm.ponds.indexWhere((p) => p.id == pondId);
+        if (idx != -1) { pond = farm.ponds[idx]; break; }
+      }
+      final roundsPerDay = pond?.postWeekFeedRounds ?? 4;
+      final currentDoc = ref.read(docProvider(pondId));
+
+      // Generate today's rounds from the same anchor value (FIX 2).
+      // Guard inside generateTodayOperationalRounds prevents duplicates (FIX 3).
+      await PondService().generateTodayOperationalRounds(
+        pondId: pondId,
+        doc: currentDoc,
+        roundsPerDay: roundsPerDay,
+        totalFeedKg: anchorFeed,
+        seedCount: pond?.seedCount ?? 100000,
+        seedType: pond?.seedType,
+      );
+
       state = state.copyWith(needsAnchorFeedInput: false);
       await loadTodayFeed(pondId);
     } catch (e) {
@@ -596,11 +634,16 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
       // ─── Step 3: Post-save — state refresh + history ───────────────────────
       // Mark round completed immediately — feed IS in DB regardless of what
       // happens during the refresh steps below.
+      // Also update roundFeedAmounts with the actual qty so the done card shows
+      // the correct amount before the async DB reload completes.
       {
         final updatedStatus = Map<int, String>.from(state.roundFeedStatus);
         updatedStatus[round] = 'completed';
+        final updatedAmounts = Map<int, double>.from(state.roundFeedAmounts);
+        updatedAmounts[round] = qty;
         state = state.copyWith(
           roundFeedStatus: updatedStatus,
+          roundFeedAmounts: updatedAmounts,
           lastFeedTime: DateTime.now(),
         );
       }
@@ -619,6 +662,22 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
         unawaited(AnalyticsService.instance.logFeedRoundCompleted(
           pondId: pondId, doc: doc, round: round, qty: actualDbFeedSaved,
         ));
+        // Trust funnel: compare logged qty vs engine recommendation.
+        // Only meaningful outside blind phase (where amounts are formula, not intelligence).
+        if (plannedQty > 0 && state.feedDebugInfo?.feedStage != 'blind') {
+          final deltaPct = (actualDbFeedSaved - plannedQty).abs() / plannedQty;
+          if (deltaPct <= 0.10) {
+            unawaited(AnalyticsService.instance.logRecommendationAccepted(
+              pondId: pondId, doc: doc,
+              recommendedKg: plannedQty, loggedKg: actualDbFeedSaved,
+            ));
+          } else {
+            unawaited(AnalyticsService.instance.logRecommendationOverridden(
+              pondId: pondId, doc: doc,
+              recommendedKg: plannedQty, loggedKg: actualDbFeedSaved,
+            ));
+          }
+        }
         await ref.read(feedHistoryProvider.notifier).logFeeding(
               pondId: pondId,
               doc: doc,
@@ -789,11 +848,15 @@ class PondDashboardNotifier extends StateNotifier<PondDashboardState> {
           checkedAt: trayLog.time,
         ));
 
-        AnalyticsService.instance.logTraySaveSuccess(
+        unawaited(AnalyticsService.instance.logTraySaveSuccess(
           pondId: pondId,
           doc: doc,
           round: round,
-        );
+        ));
+        unawaited(AnalyticsService.instance.logFirstTrayCompleted(
+          pondId: pondId,
+          doc: doc,
+        ));
 
         // Tray update affects smart feed calculations — reload from DB.
         _controller.invalidate(pondId);

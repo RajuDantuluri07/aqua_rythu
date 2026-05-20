@@ -109,6 +109,22 @@ class PondService {
     );
     if (!isDuplicate) {
       unawaited(AnalyticsService.instance.logPondCreated(pondId: pondId));
+      final doc = calculateDocFromStockingDateLegacy(stockingDate);
+      if (seedCount > 0) {
+        unawaited(AnalyticsService.instance.logStockingAdded(
+          pondId: pondId,
+          seedType: resolvedSeedType.dbValue,
+          seedCount: seedCount,
+          plSizeMm: plSize.toDouble(),
+          doc: doc,
+        ));
+      }
+      if (roundsCreated > 0) {
+        unawaited(AnalyticsService.instance.logFeedSetupCompleted(
+          pondId: pondId,
+          seedType: resolvedSeedType.dbValue,
+        ));
+      }
     }
     return pondId;
   }
@@ -139,6 +155,7 @@ class PondService {
         'is_custom_feed_plan': true,
         'is_smart_feed_enabled': true,
         'smart_feed_initialized': true,
+        'smart_feed_initialized_at': DateTime.now().toUtc().toIso8601String(),
         'initialization_doc': doc,
         'updated_at': DateTime.now().toIso8601String(),
       };
@@ -146,6 +163,7 @@ class PondService {
         updateData['latest_sample_date'] = lastSamplingDate.toIso8601String();
       }
       await supabase.from('ponds').update(updateData).eq('id', pondId);
+      unawaited(AnalyticsService.instance.logSmartFeedInitialized(pondId: pondId, doc: doc));
       AppLogger.info(
         'Smart feed initialized for pond $pondId — '
         'DOC $doc, anchor ${currentFeedKg.toStringAsFixed(1)} kg, '
@@ -170,7 +188,17 @@ class PondService {
   /// reasonable starting amount from the blind-feed formula at the cap DOC
   /// (DOC 10 for nursery, DOC 30 for hatchery) scaled to [seedCount].
   ///
-  /// Uses UPSERT so the call is idempotent — safe to retry on connectivity failure.
+  /// Writes today's operational feed rounds to the DB.
+  ///
+  /// FIX 3 — Generation guard: if rows already exist for (pond_id, doc) they
+  /// are returned as-is. Nothing is overwritten — farmer edits and completed
+  /// rounds are preserved.
+  ///
+  /// FIX 2 — Single source of truth: the same [totalFeedKg] value is used to
+  /// compute every round amount. No separate recalculation elsewhere.
+  ///
+  /// FIX 4 — Rounding fix: the remainder after integer-cent division is added
+  /// to the last round so SUM(planned_amount) == totalFeedKg exactly (±0.01 kg).
   Future<void> generateTodayOperationalRounds({
     required String pondId,
     required int doc,
@@ -180,6 +208,20 @@ class PondService {
     SeedType? seedType,
   }) async {
     try {
+      // FIX 3: Guard — return existing rounds, never overwrite them.
+      final existing = await supabase
+          .from('feed_rounds')
+          .select('id')
+          .eq('pond_id', pondId)
+          .eq('doc', doc)
+          .limit(1);
+      if (existing.isNotEmpty) {
+        AppLogger.info(
+            'generateTodayOperationalRounds: rounds already exist for pond=$pondId doc=$doc — skipping');
+        return;
+      }
+
+      // Determine total feed for the day.
       double feedPerDay = totalFeedKg;
       if (feedPerDay <= 0) {
         final capDoc = (seedType == SeedType.nurseryBig) ? 10 : 30;
@@ -190,32 +232,101 @@ class PondService {
         );
       }
 
-      final perRound =
-          double.parse((feedPerDay / roundsPerDay).toStringAsFixed(2));
+      // FIX 4: Distribute evenly to 2 decimal places; add remainder to last round
+      // so SUM(rounds) == feedPerDay exactly.
+      final basePerRound = (feedPerDay / roundsPerDay * 100).floor() / 100.0;
+      final roundAmounts = List.generate(roundsPerDay, (i) {
+        if (i == roundsPerDay - 1) {
+          // Last round absorbs rounding remainder.
+          final sum = double.parse(
+              (basePerRound * (roundsPerDay - 1)).toStringAsFixed(2));
+          return double.parse((feedPerDay - sum).toStringAsFixed(2));
+        }
+        return basePerRound;
+      });
 
-      await supabase.from('feed_rounds').upsert(
+      await supabase.from('feed_rounds').insert(
         [
           for (int r = 1; r <= roundsPerDay; r++)
             {
               'pond_id': pondId,
               'doc': doc,
               'round': r,
-              'planned_amount': perRound,
-              'base_feed': perRound,
+              'planned_amount': roundAmounts[r - 1],
+              'base_feed': roundAmounts[r - 1],
               'feed_type': getFeedType(doc),
               'status': 'pending',
             },
         ],
-        onConflict: 'pond_id,doc,round',
       );
 
+      // FIX 4: Validate that the rounds sum to the intended daily target.
+      final actualSum = roundAmounts.fold(0.0, (s, v) => s + v);
+      final delta = (actualSum - feedPerDay).abs();
+      if (delta > 0.01) {
+        final msg =
+            'Feed round sum mismatch: expected ${feedPerDay.toStringAsFixed(3)} kg, '
+            'got ${actualSum.toStringAsFixed(3)} kg (Δ${delta.toStringAsFixed(3)}) '
+            '— pond=$pondId doc=$doc rounds=$roundsPerDay';
+        AppLogger.error(msg);
+        CrashlyticsService.instance.logError(
+          Exception(msg),
+          StackTrace.current,
+          reason: 'feed_round_sum_mismatch',
+        );
+      }
+
       AppLogger.info(
-        'Today operational rounds created: pond=$pondId doc=$doc '
-        '${roundsPerDay}×${perRound.toStringAsFixed(2)}kg',
+        'Operational rounds created: pond=$pondId doc=$doc '
+        '${roundAmounts.map((a) => a.toStringAsFixed(2)).join(' + ')} kg '
+        '= ${actualSum.toStringAsFixed(2)} kg',
       );
     } catch (e, st) {
       CrashlyticsService.instance
           .logError(e, st, reason: 'generateTodayOperationalRounds failed');
+      rethrow;
+    }
+  }
+
+  /// Creates today's feed rounds for a mid-crop pond with planned_amount = 0.
+  /// Farmer manually enters each round's actual amount at confirmation time.
+  /// Guard: skips if rounds already exist for (pond_id, doc).
+  Future<void> generateManualOperationalRounds({
+    required String pondId,
+    required int doc,
+    required int roundsPerDay,
+  }) async {
+    try {
+      final existing = await supabase
+          .from('feed_rounds')
+          .select('id')
+          .eq('pond_id', pondId)
+          .eq('doc', doc)
+          .limit(1);
+      if (existing.isNotEmpty) {
+        AppLogger.info(
+            'generateManualOperationalRounds: rounds exist for pond=$pondId doc=$doc — skipping');
+        return;
+      }
+
+      await supabase.from('feed_rounds').insert([
+        for (int r = 1; r <= roundsPerDay; r++)
+          {
+            'pond_id': pondId,
+            'doc': doc,
+            'round': r,
+            'planned_amount': 0.0,
+            'base_feed': 0.0,
+            'feed_type': getFeedType(doc),
+            'status': 'pending',
+          },
+      ]);
+
+      AppLogger.info(
+          'Manual rounds created: pond=$pondId doc=$doc rounds=$roundsPerDay');
+    } catch (e, st) {
+      CrashlyticsService.instance
+          .logError(e, st, reason: 'generateManualOperationalRounds failed');
       rethrow;
     }
   }
@@ -250,7 +361,7 @@ class PondService {
       endDoc: endDoc,
       stockingCount: pond['seed_count'] ?? 100000,
       pondArea: (pond['area'] as num?)?.toDouble() ?? 1.0,
-      stockingDate: DateTime.parse(pond['stocking_date']).toUtc(),
+      stockingDate: DateTime.parse(pond['stocking_date']),
       stockingType: stockingType,
     );
 
@@ -277,6 +388,8 @@ class PondService {
             is_smart_feed_enabled,
             anchor_feed,
             is_anchor_initialized,
+            smart_feed_initialized,
+            smart_feed_initialized_at,
             stocking_type,
             feed_brand_id,
             active_crop_id,
@@ -292,7 +405,7 @@ class PondService {
         id: row['id'] as String,
         name: row['name'] as String,
         area: (row['area'] as num?)?.toDouble() ?? 0.0,
-        stockingDate: DateTime.parse(row['stocking_date'] as String).toUtc(),
+        stockingDate: DateTime.parse(row['stocking_date'] as String),
         seedCount: row['seed_count'] ?? 100000,
         plSize: row['pl_size'] ?? 10,
         numTrays: row['num_trays'] ?? 4,
@@ -304,6 +417,10 @@ class PondService {
         isSmartFeedEnabled: row['is_smart_feed_enabled'] ?? false,
         anchorFeed: (row['anchor_feed'] as num?)?.toDouble(),
         isAnchorInitialized: row['is_anchor_initialized'] ?? false,
+        smartFeedInitialized: row['smart_feed_initialized'] ?? false,
+        smartFeedInitializedAt: row['smart_feed_initialized_at'] != null
+            ? DateTime.tryParse(row['smart_feed_initialized_at'] as String)
+            : null,
         seedType: SeedTypeX.fromDb(row['stocking_type'] as String?),
         feedBrandId: row['feed_brand_id'] as String?,
         activeCropId: row['active_crop_id'] as String?,
@@ -353,7 +470,7 @@ class PondService {
     required String pondId,
     required String stockingDate,
   }) async {
-    final stockDate = DateTime.parse(stockingDate).toUtc();
+    final stockDate = DateTime.parse(stockingDate);
     final doc = calculateDocFromStockingDateLegacy(stockDate);
 
     AppLogger.debug("Calculated DOC: $doc for pond $pondId");

@@ -9,16 +9,39 @@ class ScheduleRepository {
 
   // ── Schedules ────────────────────────────────────────────────────────────
 
-  Future<List<SupplementSchedule>> fetchSchedulesByPond(String pondId) async {
+  Future<List<SupplementSchedule>> fetchSchedulesByPond(
+    String pondId, {
+    String? farmId,
+  }) async {
     try {
-      final response = await _supabase
+      // Q1: schedules explicitly targeting this pond (current_pond type)
+      final q1 = await _supabase
           .from('supplement_schedules')
           .select()
           .eq('pond_id', pondId)
           .order('created_at', ascending: false);
 
-      return (response as List)
-          .map((json) => SupplementSchedule.fromJson(json as Map<String, dynamic>))
+      // Q2: farm-wide (all_ponds) and multi-pond (selected_ponds) schedules.
+      // RLS already scopes these to farms the user belongs to.
+      // Optional farmId filter prevents showing another farm's "all ponds"
+      // schedules when a user is a member of multiple farms.
+      var q2Builder = _supabase
+          .from('supplement_schedules')
+          .select()
+          .inFilter('target_type', ['all_ponds', 'selected_ponds'])
+          .neq('pond_id', pondId); // exclude duplicates already in q1
+      if (farmId != null && farmId.isNotEmpty) {
+        q2Builder = q2Builder.eq('farm_id', farmId);
+      }
+      final q2 = await q2Builder.order('created_at', ascending: false);
+
+      final seen = <String>{};
+      final all = [
+        ...(q1 as List).map((j) => SupplementSchedule.fromJson(j as Map<String, dynamic>)),
+        ...(q2 as List).map((j) => SupplementSchedule.fromJson(j as Map<String, dynamic>)),
+      ];
+      return all
+          .where((s) => seen.add(s.id) && s.appliesToPond(pondId))
           .toList();
     } catch (e) {
       AppLogger.error('ScheduleRepository.fetchSchedulesByPond failed: $e');
@@ -26,17 +49,36 @@ class ScheduleRepository {
     }
   }
 
-  Future<List<SupplementSchedule>> fetchActiveSchedulesByPond(String pondId) async {
+  Future<List<SupplementSchedule>> fetchActiveSchedulesByPond(
+    String pondId, {
+    String? farmId,
+  }) async {
     try {
-      final response = await _supabase
+      final q1 = await _supabase
           .from('supplement_schedules')
           .select()
           .eq('pond_id', pondId)
           .eq('status', 'active')
           .order('created_at', ascending: false);
 
-      return (response as List)
-          .map((json) => SupplementSchedule.fromJson(json as Map<String, dynamic>))
+      var q2Builder = _supabase
+          .from('supplement_schedules')
+          .select()
+          .eq('status', 'active')
+          .inFilter('target_type', ['all_ponds', 'selected_ponds'])
+          .neq('pond_id', pondId);
+      if (farmId != null && farmId.isNotEmpty) {
+        q2Builder = q2Builder.eq('farm_id', farmId);
+      }
+      final q2 = await q2Builder.order('created_at', ascending: false);
+
+      final seen = <String>{};
+      final all = [
+        ...(q1 as List).map((j) => SupplementSchedule.fromJson(j as Map<String, dynamic>)),
+        ...(q2 as List).map((j) => SupplementSchedule.fromJson(j as Map<String, dynamic>)),
+      ];
+      return all
+          .where((s) => seen.add(s.id) && s.appliesToPond(pondId))
           .toList();
     } catch (e) {
       AppLogger.error('ScheduleRepository.fetchActiveSchedulesByPond failed: $e');

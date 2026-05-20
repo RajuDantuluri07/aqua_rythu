@@ -124,6 +124,7 @@ class AppRoutes {
         pondId: args['pondId'] as String,
         farmId: args['farmId'] as String,
         doc: args['doc'] as int,
+        isPro: args['isPro'] as bool? ?? true,
       );
     },
     profitSummary: (context) {

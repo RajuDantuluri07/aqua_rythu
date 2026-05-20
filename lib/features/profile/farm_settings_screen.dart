@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'farm_settings_provider.dart';
+import '../../core/providers/product_provider.dart';
 
 class FarmSettingsScreen extends ConsumerStatefulWidget {
   const FarmSettingsScreen({super.key});
@@ -133,6 +134,10 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
 
           const SizedBox(height: 10),
 
+          _buildFeedBrandDropdown(settings),
+
+          const SizedBox(height: 10),
+
           _input("Blind Feeding Duration (days)", blindDaysController),
 
           const SizedBox(height: 10),
@@ -194,6 +199,40 @@ class _FarmSettingsScreenState extends ConsumerState<FarmSettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFeedBrandDropdown(FarmSettings settings) {
+    final feedBrandsAsync = ref.watch(feedBrandsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Feed Company",
+            style: TextStyle(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 5),
+        feedBrandsAsync.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (_, __) => Text("Error loading feed brands",
+              style: TextStyle(color: Colors.red.shade700)),
+          data: (brands) => DropdownButtonFormField<String>(
+            value: settings.feedBrandId,
+            items: [
+              const DropdownMenuItem(value: null, child: Text("None")),
+              ...brands.map((b) =>
+                  DropdownMenuItem(value: b.id, child: Text(b.name))),
+            ],
+            onChanged: (v) =>
+                ref.read(farmSettingsProvider.notifier).setFeedBrandId(v),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

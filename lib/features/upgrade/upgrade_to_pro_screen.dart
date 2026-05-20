@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:aqua_rythu/core/models/subscription_plans.dart';
+import 'package:aqua_rythu/core/services/analytics_service.dart';
 import 'subscription_provider.dart';
 import 'upgrade_insight_provider.dart';
 
@@ -31,6 +33,7 @@ class _State extends ConsumerState<UpgradeToProScreen> {
   void initState() {
     super.initState();
     UpgradeMetrics.track('paywall_view', {'screen': 'upgrade_to_pro'});
+    unawaited(AnalyticsService.instance.logPaywallViewed(triggerSource: 'manual'));
   }
 
   @override

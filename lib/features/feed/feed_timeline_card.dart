@@ -101,6 +101,15 @@ class FeedTimelineCard extends StatefulWidget {
   /// When provided, the card shows "Base Feed (Your input)" + "Adjusted Feed (Tray-based)".
   final double? anchorFeedKg;
 
+  /// True for mid-crop manual-tracking rounds (planned_amount = 0).
+  /// Card shows a text field for the farmer to enter the actual feed amount
+  /// instead of displaying a pre-calculated planned quantity.
+  final bool isManualEntry;
+
+  /// Called with the farmer-entered amount when [isManualEntry] is true and
+  /// the farmer taps "Confirm Feed". Null for normal (blind-feed) rounds.
+  final Future<void> Function(double qty)? onManualConfirm;
+
   const FeedTimelineCard({
     super.key,
     required this.round,
@@ -137,6 +146,8 @@ class FeedTimelineCard extends StatefulWidget {
     this.recommendationInstruction,
     this.isCurrent = false,
     this.anchorFeedKg,
+    this.isManualEntry = false,
+    this.onManualConfirm,
   });
 
   @override
@@ -148,6 +159,10 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   // T13 — Feedback state for done card
   bool _feedbackGiven = false;
+
+  // ── Manual entry (mid-crop tracking mode) ────────────────────────────────
+  final _manualAmountController = TextEditingController();
+  bool _isManualConfirming = false;
 
   // ── Live countdown timer ──────────────────────────────────────────────────
   Timer? _timer;
@@ -172,6 +187,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   @override
   void dispose() {
     _timer?.cancel();
+    _manualAmountController.dispose();
     super.dispose();
   }
 
@@ -463,7 +479,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
           if (widget.scheduleSupplements.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(Spacing.lg, 0, Spacing.lg, Spacing.md),
-              child: _buildSupplementChips(),
+              child: _buildSupplementChips(isDone: true),
             ),
 
           // ── Tray skipped banner ──────────────────────────────────────
@@ -517,6 +533,9 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   // ═══════════════════════════════════════════════════════════════════
 
   Widget _smartCurrentCard() {
+    if (widget.isManualEntry && widget.onManualConfirm != null) {
+      return _midCropActiveCard();
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: Spacing.sm),
       decoration: BoxDecoration(
@@ -719,6 +738,134 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                       : widget.recommendedFeedKg <= 0
                           ? "Confirm No Feed"
                           : "Confirm Feed",
+                  style: AppTextStyles.body.copyWith(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _midCropActiveCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: Spacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.success, width: 2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(Spacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  "ROUND ${widget.round}",
+                  style: AppTextStyles.heading.copyWith(
+                    color: AppColors.success,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: Spacing.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: Spacing.sm, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "ACTIVE",
+                    style: AppTextStyles.caption.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.success,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Spacing.xs),
+            Text(
+              widget.time,
+              style: AppTextStyles.subheading
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: Spacing.md),
+            Text(
+              'Enter actual feed given:',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: Spacing.sm),
+            TextField(
+              controller: _manualAmountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Feed Amount (kg)',
+                hintText: 'e.g. 5.0',
+                suffixText: 'kg',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.success, width: 2),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            if (widget.scheduleSupplements.isNotEmpty) ...[
+              const SizedBox(height: Spacing.md),
+              _buildSupplementChips(),
+            ],
+            const SizedBox(height: Spacing.md),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _isManualConfirming
+                    ? null
+                    : () async {
+                        final raw = _manualAmountController.text
+                            .trim()
+                            .replaceAll(',', '.');
+                        final qty = double.tryParse(raw);
+                        if (qty == null || qty <= 0) return;
+                        HapticFeedback.mediumImpact();
+                        setState(() => _isManualConfirming = true);
+                        try {
+                          await widget.onManualConfirm!(qty);
+                        } finally {
+                          if (mounted) {
+                            setState(() => _isManualConfirming = false);
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  disabledBackgroundColor: AppColors.border,
+                  padding: const EdgeInsets.symmetric(
+                      vertical: Spacing.md, horizontal: Spacing.lg),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 22),
+                label: Text(
+                  _isManualConfirming ? 'Saving...' : 'Confirm Feed',
                   style: AppTextStyles.body.copyWith(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
@@ -954,7 +1101,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
   }
 
   // ── Build supplement schedule chips ─────────────────────────────────────────
-  Widget _buildSupplementChips() {
+  Widget _buildSupplementChips({bool isDone = false}) {
     if (widget.scheduleSupplements.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -962,7 +1109,7 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
       children: [
         Divider(height: 16, color: Colors.grey.shade200),
         Text(
-          "Supplements",
+          isDone ? "SUPPLEMENTS USED" : "SUPPLEMENTS TO USE",
           style: AppTextStyles.caption.copyWith(
             color: AppColors.textSecondary,
             fontWeight: FontWeight.w800,
@@ -976,7 +1123,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
           children: widget.scheduleSupplements
               .map((s) => _SupplementChip(
                     schedule: s,
-                    onApply: widget.onMarkApplied,
+                    // Done cards: no tap-to-apply (already applied)
+                    onApply: isDone ? null : widget.onMarkApplied,
                   ))
               .toList(),
         ),
@@ -1423,6 +1571,8 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
 
   Widget _upcomingCard() {
     final hasConfirmButton = widget.onMarkDone != null;
+    final hasManualEntry = widget.isManualEntry && widget.onManualConfirm != null;
+    final isLockedManual = widget.isManualEntry && widget.onManualConfirm == null;
     
     return Container(
       margin: const EdgeInsets.only(bottom: Spacing.sm),
@@ -1476,67 +1626,56 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
             ),
             const SizedBox(height: Spacing.sm),
             
-            // Feed quantity
-            Row(
-              children: [
-                const Text(
-                  "Planned Feed:",
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _ink,
-                  ),
+            // Feed quantity / manual entry
+            if (hasManualEntry) ...[
+              // Mid-crop manual mode: farmer types actual amount before confirming
+              const SizedBox(height: Spacing.xs),
+              TextField(
+                controller: _manualAmountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Feed Amount (kg)',
+                  hintText: 'e.g. 5.0',
+                  suffixText: 'kg',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  widget.finalFeedKg <= 0
-                      ? "Do not feed"
-                      : "${widget.finalFeedKg.toStringAsFixed(1)} kg",
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _ink,
-                  ),
-                ),
-              ],
-            ),
-
-            // Active schedule supplements
-            if (widget.scheduleSupplements.isNotEmpty) ...[
+              ),
               const SizedBox(height: Spacing.md),
-              _buildSupplementChips(),
-            ],
-
-            // Confirm button for upcoming rounds that can be confirmed
-            if (hasConfirmButton) ...[
-              const SizedBox(height: Spacing.lg),
               SizedBox(
                 width: double.infinity,
                 height: 44,
                 child: ElevatedButton(
-                  onPressed: _isSubmitting
+                  onPressed: _isManualConfirming
                       ? null
                       : () async {
+                          final raw = _manualAmountController.text
+                              .trim()
+                              .replaceAll(',', '.');
+                          final qty = double.tryParse(raw);
+                          if (qty == null || qty <= 0) return;
                           HapticFeedback.mediumImpact();
-                          setState(() => _isSubmitting = true);
+                          setState(() => _isManualConfirming = true);
                           try {
-                            await widget.onMarkDone!();
+                            await widget.onManualConfirm!(qty);
                           } finally {
-                            if (mounted) setState(() => _isSubmitting = false);
+                            if (mounted) {
+                              setState(() => _isManualConfirming = false);
+                            }
                           }
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     disabledBackgroundColor: AppColors.border,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                        borderRadius: BorderRadius.circular(8)),
                     elevation: 0,
                   ),
                   child: Text(
-                    _isSubmitting
-                        ? "Confirming..."
-                        : "Confirm Feed",
+                    _isManualConfirming ? 'Confirming...' : 'Confirm Feed',
                     style: AppTextStyles.body.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -1546,18 +1685,102 @@ class _FeedTimelineCardState extends State<FeedTimelineCard> {
                   ),
                 ),
               ),
-            ] else ...[
-              // Status for rounds that cannot be confirmed yet
-              const SizedBox(height: Spacing.xs),
-              const Text(
-                "UPCOMING",
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: _slate400,
-                  letterSpacing: 0.5,
-                ),
+            ] else if (isLockedManual) ...[
+              const Row(
+                children: [
+                  Icon(Icons.lock_outline, size: 15, color: _slate400),
+                  SizedBox(width: 6),
+                  Text(
+                    'Confirm previous round to unlock',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: _slate400,
+                    ),
+                  ),
+                ],
               ),
+            ] else ...[
+              Row(
+                children: [
+                  const Text(
+                    "Planned Feed:",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _ink,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.finalFeedKg <= 0
+                        ? "Do not feed"
+                        : "${widget.finalFeedKg.toStringAsFixed(1)} kg",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                    ),
+                  ),
+                ],
+              ),
+
+              // Active schedule supplements
+              if (widget.scheduleSupplements.isNotEmpty) ...[
+                const SizedBox(height: Spacing.md),
+                _buildSupplementChips(),
+              ],
+
+              // Confirm button for upcoming rounds that can be confirmed
+              if (hasConfirmButton) ...[
+                const SizedBox(height: Spacing.lg),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            HapticFeedback.mediumImpact();
+                            setState(() => _isSubmitting = true);
+                            try {
+                              await widget.onMarkDone!();
+                            } finally {
+                              if (mounted) setState(() => _isSubmitting = false);
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      disabledBackgroundColor: AppColors.border,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      _isSubmitting ? "Confirming..." : "Confirm Feed",
+                      style: AppTextStyles.body.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // Status for rounds that cannot be confirmed yet
+                const SizedBox(height: Spacing.xs),
+                const Text(
+                  "UPCOMING",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _slate400,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ],
           ],
         ),
@@ -1947,6 +2170,10 @@ class _SupplementChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final productDisplay = schedule.productName ?? schedule.categoryName ?? 'Supplement';
+    final hasDose = schedule.quantity != null && schedule.quantity! > 0;
+    final doseLabel = hasDose
+        ? '${schedule.quantity!.toStringAsFixed(schedule.quantity! < 10 ? 1 : 0)} ${schedule.unit ?? ''}'.trim()
+        : null;
     final canApply = onApply != null;
 
     return GestureDetector(
@@ -1974,6 +2201,24 @@ class _SupplementChip extends StatelessWidget {
                 color: Color(0xFF10B981),
               ),
             ),
+            if (doseLabel != null) ...[
+              const Text(
+                ' — ',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF10B981),
+                ),
+              ),
+              Text(
+                doseLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF065F46),
+                ),
+              ),
+            ],
             if (canApply) ...[
               const SizedBox(width: 4),
               const Icon(Icons.check_circle_outline_rounded,

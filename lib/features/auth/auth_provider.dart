@@ -117,10 +117,15 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       );
       if (res.user != null) {
         await _syncUserRecord(res.user!);
-        // If Supabase auto-confirms, session will be present. 
+        // If Supabase auto-confirms, session will be present.
         // If confirmation is required, session will be null.
         final isLoggedIn = res.session != null;
         state = state.copyWith(isLoading: false, isAuthenticated: isLoggedIn, email: email);
+        unawaited(AnalyticsService.instance.logAccountCreated(signUpMethod: 'email'));
+        if (isLoggedIn) {
+          unawaited(AnalyticsService.instance.logAuthLoginSuccess());
+          unawaited(AnalyticsService.instance.setUserId(res.user!.id));
+        }
         return isLoggedIn;
       }
       return false;
@@ -237,6 +242,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     try {
       await _supabase.auth.signInWithOtp(phone: phone);
       state = state.copyWith(isLoading: false);
+      unawaited(AnalyticsService.instance.logOtpSent());
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: _friendlyAuthError(e, flow: _AuthFlow.otp));
     }
@@ -253,8 +259,16 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       if (res.user != null) {
         await _syncUserRecord(res.user!);
         state = state.copyWith(isLoading: false, isAuthenticated: true);
+        unawaited(AnalyticsService.instance.logOtpVerified());
         unawaited(AnalyticsService.instance.logAuthLoginSuccess());
         unawaited(AnalyticsService.instance.setUserId(res.user!.id));
+        // Fire account_created for new users (created within the last 60 s)
+        final createdAt = DateTime.tryParse(res.user!.createdAt);
+        final isNew = createdAt != null &&
+            DateTime.now().toUtc().difference(createdAt).inSeconds < 60;
+        if (isNew) {
+          unawaited(AnalyticsService.instance.logAccountCreated(signUpMethod: 'mobile'));
+        }
       } else {
         state = state.copyWith(isLoading: false, errorMessage: 'Verification failed. Please try again.');
       }

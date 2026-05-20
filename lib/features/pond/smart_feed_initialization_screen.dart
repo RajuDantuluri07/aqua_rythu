@@ -9,12 +9,16 @@ class SmartFeedInitializationScreen extends ConsumerStatefulWidget {
   final String pondId;
   final String farmId;
   final int doc;
+  // PRO: calls initializeSmartFeedPond + generates today's rounds.
+  // FREE: skips smart init entirely, only generates today's operational rounds.
+  final bool isPro;
 
   const SmartFeedInitializationScreen({
     super.key,
     required this.pondId,
     required this.farmId,
     required this.doc,
+    this.isPro = true,
   });
 
   @override
@@ -104,15 +108,17 @@ class _SmartFeedInitializationScreenState
       final roundsPerDay = int.parse(_roundsController.text);
 
       final pondService = PondService();
-      await pondService.initializeSmartFeedPond(
-        pondId: widget.pondId,
-        doc: widget.doc,
-        currentFeedKg: feedKg,
-        abw: abw,
-        survivalPct: survivalPct,
-        roundsPerDay: roundsPerDay,
-        lastSamplingDate: _lastSamplingDate,
-      );
+      if (widget.isPro) {
+        await pondService.initializeSmartFeedPond(
+          pondId: widget.pondId,
+          doc: widget.doc,
+          currentFeedKg: feedKg,
+          abw: abw,
+          survivalPct: survivalPct,
+          roundsPerDay: roundsPerDay,
+          lastSamplingDate: _lastSamplingDate,
+        );
+      }
       await pondService.generateTodayOperationalRounds(
         pondId: widget.pondId,
         doc: widget.doc,
@@ -128,7 +134,8 @@ class _SmartFeedInitializationScreenState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Smart feed activated successfully'),
+          content: Text(
+              widget.isPro ? 'Smart feed activated successfully' : 'Pond set up successfully'),
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -194,9 +201,9 @@ class _SmartFeedInitializationScreenState
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text(
-          'Initialize Pond Intelligence',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          widget.isPro ? 'Initialize Pond Intelligence' : 'Set Up Active Pond',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -235,9 +242,10 @@ class _SmartFeedInitializationScreenState
                               style: TextStyle(
                                   fontWeight: FontWeight.bold, color: primary),
                             ),
-                            const TextSpan(
-                              text:
-                                  '. Provide current data to activate smart feeding immediately.',
+                            TextSpan(
+                              text: widget.isPro
+                                  ? '. Provide current data to activate smart feeding immediately.'
+                                  : '. Enter your current feed amount to start tracking.',
                             ),
                           ],
                         ),
@@ -411,9 +419,9 @@ class _SmartFeedInitializationScreenState
                           child: CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text(
-                          'Activate Smart Feed',
-                          style: TextStyle(
+                      : Text(
+                          widget.isPro ? 'Activate Smart Feed' : 'Start Tracking Pond',
+                          style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                 ),

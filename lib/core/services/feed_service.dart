@@ -572,6 +572,11 @@ class FeedService implements FeedCompletionSink {
         round: round,
         qty: amount,
       ));
+      unawaited(AnalyticsService.instance.logFirstFeedLog(
+        pondId: pondId,
+        doc: doc,
+        qty: amount,
+      ));
     }
 
     // Inventory deduction is now handled atomically inside the

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/services/analytics_service.dart';
 
 const _kOnboardingKey = 'has_seen_onboarding';
 
@@ -63,7 +65,8 @@ final _slides = <_Slide>[
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final VoidCallback? onComplete;
+  const OnboardingScreen({super.key, this.onComplete});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -104,8 +107,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   void _finish() async {
     await markOnboardingSeen();
+    unawaited(AnalyticsService.instance.logOnboardingCompleted(slidesSeen: _page + 1));
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/login');
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      // Fallback: used only when OnboardingScreen is pushed standalone (not via AuthGate).
+      Navigator.of(context).pushReplacementNamed('/login');
+    }
   }
 
   @override

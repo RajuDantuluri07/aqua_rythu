@@ -73,7 +73,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   late AnimationController _pulseController;
   bool _showFeedScheduleTip = false;
   int _debugTapCount = 0;
-  bool _anchorFeedDialogShown = false;
+
   final _scheduleRepo = ScheduleRepository();
   // Current pond key for the .family provider — updated via _setSelectedPond().
   String _selectedPondId = '';
@@ -82,6 +82,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   bool _farmDataChecked = false;
   // Tracks water mix supplement IDs confirmed-applied this session.
   final Set<String> _appliedWaterScheduleIds = {};
+  // Guards recommendation_viewed — fires once per pond per screen session.
+  final Set<String> _recommendationViewedFor = {};
 
   @override
   void initState() {
@@ -403,18 +405,26 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     }
   }
 
-  Future<void> _markWaterApplied(SupplementSchedule schedule) async {
+  Future<void> _markWaterApplied(
+    SupplementSchedule schedule,
+    List<CalculatedItem> items,
+  ) async {
+    final farmId = ref.read(farmProvider).currentFarm?.id ?? '';
     try {
-      final log = SupplementScheduleLog(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        supplementScheduleId: schedule.id,
-        appliedDate: DateTime.now(),
-        feedRound: null,
-        status: 'applied',
-        remarks: null,
-        createdAt: DateTime.now(),
-      );
-      await _scheduleRepo.insertLog(log);
+      // Use logApplication so: appliedItems + inputUnit are persisted in DB,
+      // inventory is decremented, and supplementLogProvider state is updated
+      // immediately (optimistic update — no restart needed to hide the card).
+      await ref
+          .read(supplementLogProvider(_selectedPondId).notifier)
+          .logApplication(
+            supplementId: schedule.id,
+            supplementName:
+                schedule.productName ?? schedule.categoryName ?? 'Water Treatment',
+            items: items,
+            supplementType: SupplementType.waterMix,
+            farmId: farmId.isEmpty ? null : farmId,
+            inputUnit: 'acre',
+          );
       if (mounted) {
         setState(() => _appliedWaterScheduleIds.add(schedule.id));
         ScaffoldMessenger.of(context).showSnackBar(
@@ -442,17 +452,55 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
   }
 
   Widget _buildWaterMixRoundCard(SupplementSchedule schedule) {
-    final isApplied = _appliedWaterScheduleIds.contains(schedule.id);
+    // Merge in-session optimistic set with DB-persisted logs so the card stays
+    // hidden after an app restart if the supplement was already applied today.
+    final today = DateTime.now();
+    final dbLogs =
+        ref.read(supplementLogProvider(_selectedPondId)).valueOrNull ?? [];
+    final isAppliedInDb = dbLogs.any((l) =>
+        l.supplementId == schedule.id &&
+        l.timestamp.year == today.year &&
+        l.timestamp.month == today.month &&
+        l.timestamp.day == today.day);
+    final isApplied =
+        _appliedWaterScheduleIds.contains(schedule.id) || isAppliedInDb;
     final parsedTime = _parseTime24(schedule.scheduledTime);
     final timeDisplay = parsedTime != null
         ? DateFormat('hh:mm a').format(parsedTime)
         : 'Water Treatment';
+
+    // Build the item list from the products array (multi-product support).
+    // Fall back to the legacy scalar productName/quantity/unit for older rows.
+    final List<CalculatedItem> items;
+    if (schedule.products.isNotEmpty) {
+      items = schedule.products
+          .map((p) {
+            final name = (p['productName'] as String?)?.trim() ?? '';
+            final qty = (p['quantity'] as num?)?.toDouble() ?? 0.0;
+            final unit = (p['unit'] as String?) ?? '';
+            if (name.isEmpty) return null;
+            return CalculatedItem(name: name, quantity: qty, unit: unit);
+          })
+          .whereType<CalculatedItem>()
+          .toList();
+    } else {
+      final productName = schedule.productName ?? schedule.categoryName ?? 'Water Treatment';
+      items = (schedule.quantity != null && schedule.quantity! > 0)
+          ? [CalculatedItem(name: productName, quantity: schedule.quantity!, unit: schedule.unit ?? '')]
+          : const [];
+    }
+
+    // Card title: first product name, or generic label for multi-product mixes
+    final title = schedule.products.length > 1
+        ? 'Water Treatment'
+        : (schedule.productName ?? schedule.categoryName ?? 'Water Treatment');
+
     return _WaterRoundCard(
       time: timeDisplay,
-      title: schedule.productName ?? schedule.categoryName ?? 'Water Treatment',
-      items: const [],
+      title: title,
+      items: items,
       isApplied: isApplied,
-      onMarkDone: isApplied ? null : () => _markWaterApplied(schedule),
+      onMarkDone: isApplied ? null : () => _markWaterApplied(schedule, items),
     );
   }
 
@@ -631,7 +679,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       }
     }
 
+    final isPostBlind = pond?.seedType == SeedType.nurseryBig
+        ? doc > 10
+        : doc > 25;
+
     if (roundFeedAmounts.isEmpty) {
+      // Post-blind ponds (mid/active) must NEVER show the "Generate Feed Plan"
+      // CTA — they always have operational rounds or carry-forward amounts.
+      // Only the blind phase shows the schedule generation prompt.
+      if (isPostBlind) {
+        return [_buildPostBlindEmptyCard()];
+      }
       return [_buildNoFeedPlanCard(selectedPond)];
     }
 
@@ -641,11 +699,12 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       return idx >= 0 && idx < config.splits.length && config.splits[idx] > 0;
     }).toList();
 
-    // Filter out rounds with zero or negative feed (do not feed rounds).
-    // These should not be displayed to the farmer.
+    // Post-blind manual-mode rounds have planned_amount = 0 and must be shown
+    // so the farmer can enter actual amounts. Blind-phase zero rounds are still
+    // filtered out (they mean "do not feed this round").
     final visibleRounds = activeRounds.where((r) {
       final amount = roundFeedAmounts[r] ?? 0.0;
-      return amount > 0;
+      return amount > 0 || isPostBlind;
     }).toList();
 
     // Find the first incomplete round (the one that should be "current").
@@ -721,36 +780,93 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
               ? FeedRoundState.current
               : FeedRoundState.upcoming;
 
+      // Mid-crop manual-entry rounds have planned_amount = 0; farmer types
+      // the actual amount directly on the card before confirming.
+      final isManualEntry = isPostBlind && amount == 0.0 && !isDone;
+
       // Only allow marking done for the current (next incomplete) round
       Future<void> Function()? onMarkDone;
+      Future<void> Function(double qty)? onManualConfirm;
       if (isCurrent) {
-        onMarkDone = () async {
-          final scaffoldContext = context;
-          try {
-            await ref.read(pondDashboardProvider(_selectedPondId).notifier).markFeedDone(r);
-            // Show success message
-            if (scaffoldContext.mounted) {
-              ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-                SnackBar(
-                  content: Text('Round $r feed saved successfully'),
-                  backgroundColor: const Color(0xFF16A34A),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+        if (isManualEntry) {
+          onManualConfirm = (double qty) async {
+            final scaffoldContext = context;
+            try {
+              await ref
+                  .read(pondDashboardProvider(_selectedPondId).notifier)
+                  .markFeedDone(r, actualQty: qty);
+              unawaited(AnalyticsService.instance.logManualFeedRoundConfirmed(
+                pondId: _selectedPondId,
+                doc: doc,
+                round: r,
+                qty: qty,
+              ));
+              // If all rounds now confirmed, log mid-crop init completed
+              final updatedStatus = ref
+                  .read(pondDashboardProvider(_selectedPondId))
+                  .roundFeedStatus;
+              final totalRounds = visibleRounds.length;
+              final doneCount =
+                  updatedStatus.values.where((s) => s == 'completed').length;
+              if (doneCount >= totalRounds && totalRounds > 0) {
+                unawaited(AnalyticsService.instance.logMidCropInitCompleted(
+                  pondId: _selectedPondId,
+                  doc: doc,
+                  totalRounds: totalRounds,
+                ));
+              }
+              if (scaffoldContext.mounted) {
+                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Round $r — ${qty.toStringAsFixed(2)} kg saved'),
+                    backgroundColor: const Color(0xFF16A34A),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            } catch (e) {
+              if (scaffoldContext.mounted) {
+                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to save feed: $e'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             }
-          } catch (e) {
-            if (scaffoldContext.mounted) {
-              ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to save feed: $e'),
-                  backgroundColor: Colors.red,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+          };
+        } else {
+          onMarkDone = () async {
+            final scaffoldContext = context;
+            try {
+              await ref
+                  .read(pondDashboardProvider(_selectedPondId).notifier)
+                  .markFeedDone(r);
+              if (scaffoldContext.mounted) {
+                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Round $r feed saved successfully'),
+                    backgroundColor: const Color(0xFF16A34A),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            } catch (e) {
+              if (scaffoldContext.mounted) {
+                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to save feed: $e'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             }
-          }
-        };
+          };
+        }
       }
 
       // Tray logging for nursery seed type
@@ -792,12 +908,13 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
           scheduleSupplements: roundSchedules,
           onMarkApplied: (schedule) => _markApplied(schedule, roundLabel),
           onMarkDone: onMarkDone,
+          onManualConfirm: onManualConfirm,
           onLogTray: onLogTray,
           onEdit: null,
           isNext: isNext,
-          isSmartFeed: pond?.seedType == SeedType.nurseryBig
-              ? doc > 10
-              : doc > 30,
+          isManualEntry: isManualEntry,
+          isSmartFeed: (pond?.isSmartFeedEnabled ?? false) &&
+              (pond?.seedType == SeedType.nurseryBig ? doc > 10 : doc > 25),
         ),
       );
     }
@@ -808,8 +925,17 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
       waterIdx++;
     }
 
-    // Edge case: if all rounds filtered out (all zero feed), show message
+    // Edge case: if all rounds filtered out (all zero feed), show message.
+    // Post-blind (mid/active) ponds must NEVER show this banner — they always
+    // have real operational amounts. Return loading card instead to avoid
+    // a broken empty state.
     if (result.isEmpty && activeRounds.isNotEmpty) {
+      final isPostBlind = pond?.seedType == SeedType.nurseryBig
+          ? doc > 10
+          : doc > 25;
+      if (isPostBlind) {
+        return [_buildPostBlindEmptyCard()];
+      }
       return [
         Padding(
           padding: const EdgeInsets.all(16),
@@ -894,6 +1020,43 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 foregroundColor: Colors.white,
               ),
               child: const Text('Generate Feed Plan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Shown for post-blind ponds when no rounds are loaded yet (e.g. first
+  /// dashboard open before controller injection completes). Never shows the
+  /// "Generate Feed Plan" CTA — mid/active ponds always have operational rounds.
+  Widget _buildPostBlindEmptyCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.hourglass_top_rounded, size: 40, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            const Text(
+              'Loading today\'s feed rounds…',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Your operational rounds will appear shortly.',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -1023,72 +1186,6 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     });
   }
 
-  void _showAnchorFeedDialog(BuildContext ctx) {
-    final ctrl = TextEditingController();
-    showDialog(
-      context: ctx,
-      barrierDismissible: false,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Enter Current Feed Amount',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Your pond has crossed DOC 30. Enter how much feed (kg) you are currently giving per day so we can adjust based on tray response.',
-              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: ctrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Feed amount (kg per day)',
-                hintText: 'e.g. 4.0',
-                border: OutlineInputBorder(),
-                suffixText: 'kg',
-              ),
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(pondDashboardProvider(_selectedPondId).notifier)
-                  .clearNeedsAnchorFeedInput();
-              Navigator.pop(dialogCtx);
-            },
-            child: const Text('Skip'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final val = double.tryParse(ctrl.text.trim());
-              if (val != null && val > 0) {
-                ref.read(pondDashboardProvider(_selectedPondId).notifier).updateAnchorFeed(val);
-                ref
-                    .read(pondDashboardProvider(_selectedPondId).notifier)
-                    .clearNeedsAnchorFeedInput();
-                Navigator.pop(dialogCtx);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showAddFarmDialog() {
     final nameCtrl = TextEditingController();
     final locCtrl = TextEditingController();
@@ -1198,8 +1295,14 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
     final oneWeekAgo = ref.watch(oneWeekAgoProvider);
     final isPro = ref.watch(subscriptionProvider).isPro;
 
-    // Watch supplement schedules for today
-    final schedulesAsync = ref.watch(activeSupplementSchedulesProvider(selectedPond));
+    // Watch supplement schedules for today (includes farm-wide targeting)
+    final farmId = ref.watch(farmProvider).currentFarm?.id ?? '';
+    final schedulesAsync = ref.watch(activeSupplementSchedulesProvider(
+      (pondId: selectedPond, farmId: farmId),
+    ));
+    // Subscribe to supplement logs so water mix cards update reactively
+    // when applied (current session or after restart).
+    ref.watch(supplementLogProvider(selectedPond));
     final todaySchedules = schedulesAsync.asData?.value ?? [];
     final activeTodaySchedules = todaySchedules
         .where((s) => s.isActiveOnDate(DateTime.now()))
@@ -1207,6 +1310,18 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
 
     // Notify user when feed plan was silently regenerated (auto-recovery)
     ref.listen<PondDashboardState>(pondDashboardProvider(_selectedPondId), (previous, next) {
+      // Fire once per pond when a non-blind recommendation first becomes visible.
+      final stage = next.feedDebugInfo?.feedStage;
+      final finalFeed = next.currentFeed;
+      if (stage != null && stage != 'blind' && finalFeed > 0 &&
+          !_recommendationViewedFor.contains(_selectedPondId)) {
+        _recommendationViewedFor.add(_selectedPondId);
+        unawaited(AnalyticsService.instance.logRecommendationViewed(
+          pondId: _selectedPondId,
+          doc: next.doc,
+          recommendedKg: finalFeed,
+        ));
+      }
       if (next.feedAutoRecovered && !(previous?.feedAutoRecovered ?? false)) {
         ref.read(pondDashboardProvider(_selectedPondId).notifier).clearAutoRecoveredFlag();
         if (mounted) {
@@ -1232,27 +1347,8 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
         }
       }
 
-      // TASK 2: Prompt for anchor feed on first entry into smart phase (DOC <= 30 only).
-      // DOC > 30: No popup (smart mode already active)
-      // DOC <= 30: Popup shown only once via _anchorFeedDialogShown flag
-      final currentDoc = ref.read(docProvider(next.selectedPond));
-
-      // PRO paywall intentionally removed: DOC > 30 does NOT gate feed logging.
-      // Smart feed RECOMMENDATIONS are PRO-only (engine already handles this),
-      // but logging feed must always succeed for any DOC 1–150.
-      if (next.needsAnchorFeedInput &&
-          !(previous?.needsAnchorFeedInput ?? false) &&
-          currentDoc <= 30 &&
-          !_anchorFeedDialogShown) {
-        _anchorFeedDialogShown = true;
-        ref.read(pondDashboardProvider(_selectedPondId).notifier).clearNeedsAnchorFeedInput();
-        // Use post-frame callback to avoid showing dialog during build
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _showAnchorFeedDialog(context);
-          }
-        });
-      }
+      // Anchor feed popup: disabled for launch.
+      // Smart feed activation is a future explicit PRO action only.
 
       // Warn farmer when a tray log failed to save to the server.
       // The current session is unaffected, but if the app restarts before
@@ -2029,22 +2125,25 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _TankOpButton(
-                      label: AppLocalizations.of(context).t('feed_schedule'),
-                      icon: Icons.calendar_month_rounded,
-                      iconColor: AppColors.primary,
-                      onTap: () {
-                        if (_showFeedScheduleTip) {
-                          _pulseController.stop();
-                          setState(() => _showFeedScheduleTip = false);
-                        }
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    FeedScheduleScreen(pondId: selectedPond)));
-                      },
-                    ),
+                    if (!(currentPond.seedType == SeedType.nurseryBig
+                        ? currentDoc > 10
+                        : currentDoc > 25))
+                      _TankOpButton(
+                        label: AppLocalizations.of(context).t('feed_schedule'),
+                        icon: Icons.calendar_month_rounded,
+                        iconColor: AppColors.primary,
+                        onTap: () {
+                          if (_showFeedScheduleTip) {
+                            _pulseController.stop();
+                            setState(() => _showFeedScheduleTip = false);
+                          }
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      FeedScheduleScreen(pondId: selectedPond)));
+                        },
+                      ),
                     if (FeatureFlags.isSupplementsVisible)
                       _TankOpButton(
                         label: AppLocalizations.of(context).t('supplement_mix'),
@@ -2054,7 +2153,7 @@ class _PondDashboardScreenState extends ConsumerState<PondDashboardScreen>
                             context,
                             MaterialPageRoute(
                                 builder: (_) =>
-                                    SupplementMixScreen(pondId: selectedPond))),
+                                    SupplementMixScreen(pondId: selectedPond, farmId: currentFarm?.id))),
                       ),
                     _TankOpButton(
                       label: AppLocalizations.of(context).t('sampling'),

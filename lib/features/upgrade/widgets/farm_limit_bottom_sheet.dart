@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:aqua_rythu/core/services/analytics_service.dart';
 import 'package:aqua_rythu/core/services/limit_trigger_service.dart';
 import 'package:aqua_rythu/features/upgrade/upgrade_to_pro_screen.dart';
 
@@ -19,6 +21,7 @@ class FarmLimitBottomSheet extends StatelessWidget {
       currentUsage: 1,
       plan: 'free',
     );
+    unawaited(AnalyticsService.instance.logPaywallViewed(triggerSource: 'limit_hit'));
 
     if (context.mounted) {
       showModalBottomSheet(

@@ -24,7 +24,7 @@ class DashboardService {
 
     for (final pond in ponds) {
       final stockingDate =
-          DateTime.parse(pond['stocking_date'] as String).toUtc();
+          DateTime.parse(pond['stocking_date'] as String);
       final todayDoc = calculateDocFromStockingDateLegacy(stockingDate);
       final pondId = pond['id'] as String;
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../core/utils/logger.dart';
 import '../../../core/services/pond_service.dart';
 import '../../../core/services/feed_service.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../systems/planning/feed_plan_generator.dart';
 import '../../../systems/planning/feed_plan_constants.dart';
 import '../../../systems/feed/feed_models.dart';
@@ -150,8 +151,13 @@ class PondDashboardController {
       feedResult = await _computeFeedViaEngine(pondId, doc, pond);
       // Nursery blind phase ends at DOC 10; hatchery at DOC 30.
       final smartModeMinDoc = pond.seedType == SeedType.nurseryBig ? 10 : 30;
-      // Inject smart recommendation for pending rounds (only if smart mode)
-      if (doc > smartModeMinDoc) {
+      // FIX 5 — Dashboard reads backend only.
+      // Injection is allowed ONLY when initialization has already happened
+      // (isAnchorInitialized = true) but today's DB rows haven't been written
+      // yet — a brief transient window on the very first load after init.
+      // For uninitialized ponds (isAnchorInitialized = false) no injection
+      // occurs; the UI shows an empty/pending state instead of fabricated amounts.
+      if (doc > smartModeMinDoc && pond.isAnchorInitialized) {
         _injectSmartFeed(pondId, feedData, feedResult, doc);
       }
 
@@ -243,6 +249,16 @@ class PondDashboardController {
       _orchestratorCache[_cacheKey(pondId, doc)] = orchestratorResult;
       AppLogger.info(
           'Controller: Computed feed via MasterFeedEngine for pond=$pondId doc=$doc final=${orchestratorResult.finalFeed.toStringAsFixed(3)}kg');
+      // Only log for non-blind stages — blind phase uses formula, not intelligence.
+      if (orchestratorResult.feedStage != FeedStage.blind) {
+        unawaited(AnalyticsService.instance.logRecommendationGenerated(
+          pondId: pondId,
+          doc: doc,
+          recommendedKg: orchestratorResult.finalFeed,
+          confidence: orchestratorResult.debugInfo.feedStage,
+          stage: orchestratorResult.feedStage.name,
+        ));
+      }
       return orchestratorResult;
     } catch (e) {
       AppLogger.error(
@@ -378,8 +394,15 @@ class PondDashboardController {
           continue; // Skip invalid row
         }
 
-        final amount = (row['planned_amount'] as num?)?.toDouble() ?? 0.0;
         final status = row['status'] as String? ?? 'pending';
+        final planned = (row['planned_amount'] as num?)?.toDouble() ?? 0.0;
+        // Completed rounds: prefer actual_amount / confirmed_feed_kg over planned_amount.
+        // Manual-entry rounds have planned_amount = 0; actual_amount holds the farmer's input.
+        final actual = (row['actual_amount'] as num?)?.toDouble()
+            ?? (row['confirmed_feed_kg'] as num?)?.toDouble();
+        final amount = (status == 'completed' && actual != null && actual > 0)
+            ? actual
+            : planned;
         final id = row['id'] as String? ?? '';
 
         // Validate amount

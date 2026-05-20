@@ -32,7 +32,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     await _scheduleRepo.updateSchedule(
       s.copyWith(isPaused: true, updatedAt: DateTime.now()),
     );
-    ref.invalidate(supplementSchedulesProvider(widget.pondId));
+    ref.invalidate(supplementSchedulesProvider((pondId: widget.pondId, farmId: widget.farmId ?? '')));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Schedule paused'), behavior: SnackBarBehavior.floating),
@@ -44,11 +44,72 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     await _scheduleRepo.updateSchedule(
       s.copyWith(isPaused: false, updatedAt: DateTime.now()),
     );
-    ref.invalidate(supplementSchedulesProvider(widget.pondId));
+    ref.invalidate(supplementSchedulesProvider((pondId: widget.pondId, farmId: widget.farmId ?? '')));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Schedule resumed'), behavior: SnackBarBehavior.floating),
       );
+    }
+  }
+
+  Future<void> _markScheduleApplied(SupplementSchedule s) async {
+    try {
+      // Build applied items from products[] (multi-product) or scalar fields.
+      final items = s.products.isNotEmpty
+          ? s.products
+              .map((p) => CalculatedItem(
+                    name: p['productName'] as String? ?? '',
+                    quantity: (p['quantity'] as num?)?.toDouble() ?? 0.0,
+                    unit: p['unit'] as String? ?? '',
+                  ))
+              .toList()
+          : (s.productName != null
+              ? [
+                  CalculatedItem(
+                    name: s.productName!,
+                    quantity: s.quantity ?? 0.0,
+                    unit: s.unit ?? '',
+                  )
+                ]
+              : <CalculatedItem>[]);
+
+      final type = s.applicationType == 'feed_mix'
+          ? SupplementType.feedMix
+          : SupplementType.waterMix;
+
+      // logApplication inserts the DB row AND does an optimistic state prepend,
+      // so the history list and appliedTodayIds update immediately.
+      final warnings = await ref
+          .read(supplementLogProvider(widget.pondId).notifier)
+          .logApplication(
+            supplementId: s.id,
+            supplementName: s.productName ?? s.categoryName ?? 'Supplement',
+            items: items,
+            supplementType: type,
+            farmId: widget.farmId,
+            // inputUnit = 'acre' lets SupplementLog.fromDbLog infer waterMix type
+            // so the WATER filter in Application History works correctly.
+            inputUnit: 'acre',
+          );
+
+      if (!mounted) return;
+      final name = s.productName ?? s.categoryName ?? 'Supplement';
+      final msg = warnings.isEmpty
+          ? '$name marked as applied'
+          : '$name applied. ${warnings.first}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -78,7 +139,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     await _scheduleRepo.updateSchedule(
       s.copyWith(stopDate: DateTime.now(), updatedAt: DateTime.now()),
     );
-    ref.invalidate(supplementSchedulesProvider(widget.pondId));
+    ref.invalidate(supplementSchedulesProvider((pondId: widget.pondId, farmId: widget.farmId ?? '')));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Schedule stopped'), behavior: SnackBarBehavior.floating),
@@ -92,6 +153,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
       MaterialPageRoute(
         builder: (_) => AddSupplementScreen(
           pondId: widget.pondId,
+          farmId: widget.farmId,
           supplement: plan,
         ),
       ),
@@ -158,6 +220,18 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     final logsAsync = ref.watch(supplementLogProvider(widget.pondId));
     final logs = logsAsync.valueOrNull ?? [];
     final today = DateTime.now();
+
+    // IDs of schedules already applied today — used to filter Active Today.
+    final appliedTodayIds = logs
+        .where((l) {
+          final t = l.timestamp;
+          return t.year == today.year &&
+              t.month == today.month &&
+              t.day == today.day;
+        })
+        .map((l) => l.supplementId)
+        .toSet();
+
     final todayPlans = plans.where((plan) => plan.isActiveOnDate(today)).toList();
     final activePlans = todayPlans.where((plan) => !plan.isPaused).toList();
     final pausedPlans = todayPlans.where((plan) => plan.isPaused).toList();
@@ -165,7 +239,7 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
     final filteredHistory = _filterType == null
         ? sortedLogs
         : sortedLogs.where((log) => log.supplementType == _filterType).toList();
-    final schedulesAsync = ref.watch(supplementSchedulesProvider(widget.pondId));
+    final schedulesAsync = ref.watch(supplementSchedulesProvider((pondId: widget.pondId, farmId: widget.farmId ?? '')));
 
     return Scaffold(
       backgroundColor: AppColors.card,
@@ -212,22 +286,34 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
                   return _emptyState("No supplement schedules.");
                 }
 
+                // Active today = active status + fires today + not yet applied today.
                 final activeSchedules = schedules
-                    .where((s) => s.isActive && s.isActiveOnDate(today))
+                    .where((s) =>
+                        s.isActive &&
+                        !s.isPaused &&
+                        s.isActiveOnDate(today) &&
+                        !appliedTodayIds.contains(s.id))
                     .toList();
 
+                // Upcoming = active status + start date strictly in the future.
+                final todayDateOnly = DateTime(today.year, today.month, today.day);
                 final upcomingSchedules = schedules
-                    .where((s) => s.isActive && s.startDate.isAfter(today))
+                    .where((s) =>
+                        s.isActive &&
+                        DateTime(s.startDate.year, s.startDate.month, s.startDate.day)
+                            .isAfter(todayDateOnly))
                     .toList();
 
                 final pastSchedules = schedules
-                    .where((s) => s.endDate.isBefore(today))
+                    .where((s) =>
+                        s.endDate.isBefore(todayDateOnly) ||
+                        (s.stopDate != null && s.stopDate!.isBefore(todayDateOnly)))
                     .toList();
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Active Today
+                    // Active Today — pending schedules with Mark as Applied action
                     if (activeSchedules.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12, top: 8, left: 4),
@@ -240,9 +326,19 @@ class _SupplementMixScreenState extends ConsumerState<SupplementMixScreen> {
                           ),
                         ),
                       ),
-                      ...activeSchedules
-                          .map((schedule) =>
-                              _ScheduleCard(schedule: schedule, pondId: widget.pondId, onPause: _pauseSchedule, onResume: _resumeSchedule, onStop: _stopSchedule)),
+                      ...activeSchedules.map((schedule) => _ScheduleCard(
+                            schedule: schedule,
+                            pondId: widget.pondId,
+                            onPause: _pauseSchedule,
+                            onResume: _resumeSchedule,
+                            onStop: _stopSchedule,
+                            // Feed supplements are applied only via feed round cards.
+                            // Water supplements can be applied directly here.
+                            onMarkApplied: schedule.applicationType == 'water_mix'
+                                ? _markScheduleApplied
+                                : null,
+                            activeToday: true,
+                          )),
                     ] else ...[
                       _emptyState("No active schedules for today."),
                     ],
@@ -811,6 +907,8 @@ class _ScheduleCard extends StatelessWidget {
   final Future<void> Function(SupplementSchedule)? onPause;
   final Future<void> Function(SupplementSchedule)? onResume;
   final Future<void> Function(SupplementSchedule)? onStop;
+  final Future<void> Function(SupplementSchedule)? onEdit;
+  final Future<void> Function(SupplementSchedule)? onDelete;
 
   const _ScheduleCard({
     required this.schedule,
@@ -818,17 +916,32 @@ class _ScheduleCard extends StatelessWidget {
     this.onPause,
     this.onResume,
     this.onStop,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isFeed = schedule.applicationType == 'feed_mix';
+    final s = schedule;
+    final isFeed = s.applicationType == 'feed_mix';
     final accent = isFeed ? Colors.indigo : Colors.teal;
-    final isStopped = schedule.stopDate != null &&
-        !DateTime.now().isBefore(schedule.stopDate!);
+    final isStopped = s.stopDate != null && !DateTime.now().isBefore(s.stopDate!);
+
+    // Resolve product list: prefer products[] (multi-product), fall back to scalar.
+    final productList = s.products.isNotEmpty
+        ? s.products
+        : (s.productName != null
+            ? [
+                {
+                  'productName': s.productName,
+                  'quantity': s.quantity,
+                  'unit': s.unit,
+                }
+              ]
+            : <Map<String, dynamic>>[]);
 
     return Opacity(
-      opacity: (schedule.isPaused || isStopped) ? 0.6 : 1.0,
+      opacity: (s.isPaused || isStopped) ? 0.6 : 1.0,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -840,6 +953,7 @@ class _ScheduleCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Header row ───────────────────────────────────────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -848,21 +962,21 @@ class _ScheduleCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        schedule.productName ??
-                            schedule.categoryName ??
-                            'Supplement',
+                        productList.length > 1
+                            ? '${productList.length} Products'
+                            : (s.productName ?? s.categoryName ?? 'Supplement'),
                         style: const TextStyle(
                             fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
-                      // Date + recurrence label
                       Text(
                         isFeed
-                            ? '${DateFormat('dd MMM').format(schedule.startDate)} – ${DateFormat('dd MMM').format(schedule.endDate)}'
-                            : '${DateFormat('dd MMM yyyy').format(schedule.startDate)}  ·  ${schedule.recurrenceLabel()}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            ? '${DateFormat('dd MMM').format(s.startDate)} – ${DateFormat('dd MMM').format(s.endDate)}'
+                            : '${DateFormat('dd MMM yyyy').format(s.startDate)}  ·  ${s.recurrenceLabel()}',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey.shade600),
                       ),
-                      if (schedule.isPaused) ...[
+                      if (s.isPaused) ...[
                         const SizedBox(height: 4),
                         Text(
                           'PAUSED',
@@ -892,7 +1006,8 @@ class _ScheduleCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: accent.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
@@ -905,42 +1020,94 @@ class _ScheduleCard extends StatelessWidget {
                             color: accent),
                       ),
                     ),
-                    if (!isStopped)
-                      PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert,
-                            size: 18, color: Colors.grey.shade500),
-                        itemBuilder: (_) => [
-                          if (schedule.isPaused)
-                            const PopupMenuItem(
-                              value: 'resume',
-                              child: Text('Resume Schedule'),
-                            )
-                          else
-                            const PopupMenuItem(
-                              value: 'pause',
-                              child: Text('Pause Schedule'),
-                            ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert,
+                          size: 18, color: Colors.grey.shade500),
+                      itemBuilder: (_) => [
+                        // Pause / Resume toggle
+                        if (!isStopped)
+                          PopupMenuItem(
+                            value: s.isPaused ? 'resume' : 'pause',
+                            child: Text(
+                                s.isPaused ? 'Resume Schedule' : 'Pause Schedule'),
+                          ),
+                        // Stop
+                        if (!isStopped)
                           const PopupMenuItem(
                             value: 'stop',
                             child: Text('Stop Schedule',
-                                style: TextStyle(color: Colors.red)),
+                                style: TextStyle(color: Colors.orange)),
                           ),
-                        ],
-                        onSelected: (action) {
-                          if (action == 'pause') onPause?.call(schedule);
-                          if (action == 'resume') onResume?.call(schedule);
-                          if (action == 'stop') onStop?.call(schedule);
-                        },
-                      ),
+                        // Edit
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text('Edit Schedule'),
+                        ),
+                        // Delete
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete Schedule',
+                              style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                      onSelected: (action) {
+                        switch (action) {
+                          case 'pause':
+                            onPause?.call(s);
+                          case 'resume':
+                            onResume?.call(s);
+                          case 'stop':
+                            onStop?.call(s);
+                          case 'edit':
+                            onEdit?.call(s);
+                          case 'delete':
+                            onDelete?.call(s);
+                        }
+                      },
+                    ),
                   ],
                 ),
               ],
             ),
-            if (isFeed && schedule.selectedFeedRounds.isNotEmpty) ...[
+
+            // ── Multi-product list ────────────────────────────────────────
+            if (productList.length > 1) ...[
+              const SizedBox(height: 10),
+              ...productList.map((p) {
+                final name = p['productName'] as String? ?? '';
+                final qty = (p['quantity'] as num?)?.toDouble();
+                final unit = p['unit'] as String? ?? '';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      const Text('• ',
+                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      Expanded(
+                        child: Text(name,
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600)),
+                      ),
+                      if (qty != null && qty > 0)
+                        Text(
+                          '${qty.toStringAsFixed(qty < 10 ? 1 : 0)} $unit'.trim(),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade700),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+
+            // ── Feed round chips ──────────────────────────────────────────
+            if (isFeed && s.selectedFeedRounds.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
                 spacing: 6,
-                children: schedule.selectedFeedRounds
+                children: s.selectedFeedRounds
                     .map((round) => Chip(
                           label: Text(round,
                               style: const TextStyle(fontSize: 10)),
@@ -951,10 +1118,11 @@ class _ScheduleCard extends StatelessWidget {
                     .toList(),
               ),
             ],
-            if (schedule.notes != null && schedule.notes!.isNotEmpty) ...[
-              const SizedBox(height: 12),
+
+            if (s.notes != null && s.notes!.isNotEmpty) ...[
+              const SizedBox(height: 10),
               Text(
-                schedule.notes!,
+                s.notes!,
                 style: TextStyle(
                     fontSize: 11,
                     color: Colors.grey.shade600,

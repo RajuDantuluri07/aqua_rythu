@@ -296,10 +296,10 @@ class _InventoryDashboardScreenState
           if (entries.isNotEmpty) ...[
             const SizedBox(height: 10),
             // ── Column header row ────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 0, 14, 4),
               child: Row(
-                children: const [
+                children: [
                   Expanded(
                     flex: 5,
                     child: Text(
@@ -594,10 +594,10 @@ class _InventoryDashboardScreenState
                   ),
                   const Divider(height: 1, color: Color(0xFFEEEEEE)),
                   // ── Column headers ───────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 4),
                     child: Row(
-                      children: const [
+                      children: [
                         Expanded(
                           flex: 5,
                           child: Text('Product',

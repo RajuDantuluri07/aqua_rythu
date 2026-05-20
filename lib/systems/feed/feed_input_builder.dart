@@ -542,7 +542,7 @@ class FeedInputBuilder {
   // ────────────────────────────────────────────────────────────────────────────
 
   static int _computeDoc(String stockingDateStr) {
-    final stocking = DateTime.parse(stockingDateStr).toUtc();
+    final stocking = DateTime.parse(stockingDateStr);
     return calculateDocFromStockingDateLegacy(stocking);
   }
 }

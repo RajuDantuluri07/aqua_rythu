@@ -7,6 +7,7 @@ import '../../../core/models/supplement_schedule.dart';
 import '../../../core/providers/product_provider.dart';
 import '../../../core/repositories/schedule_repository.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../farm/farm_provider.dart';
 import '../supplement_provider.dart';
 import '../widgets/product_picker_sheet.dart';
 import 'supplement_item.dart';
@@ -64,6 +65,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
   // Inventory hook: optional quantity metadata (T3)
   final _quantityController = TextEditingController();
   String _qtyUnit = 'kg';
+
+  // Pond targeting (T4)
+  String _targetType = 'current_pond'; // 'current_pond' | 'selected_ponds' | 'all_ponds'
+  final Set<String> _selectedPondIds = {};
 
   bool _isSaving = false;
 
@@ -237,6 +242,18 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
       final isWater = _selectedType == SupplementType.waterMix;
 
+      // Encode every item so all products survive the round-trip.
+      // Legacy scalar fields (productId / productName / quantity / unit) keep
+      // the first item for backward compatibility with older display code.
+      final allProducts = _items
+          .map((item) => {
+                'productId': item.productId,
+                'productName': item.name,
+                'quantity': item.quantity,
+                'unit': item.unit,
+              })
+          .toList();
+
       final schedule = SupplementSchedule(
         id: existingId ?? '',
         pondId: widget.pondId,
@@ -268,6 +285,11 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
         unit: isWater && _quantityController.text.trim().isNotEmpty
             ? _qtyUnit
             : null,
+        products: allProducts,
+        targetType: _targetType,
+        targetPondIds: _targetType == 'selected_ponds'
+            ? _selectedPondIds.toList()
+            : const [],
       );
 
       if (isUpdate) {
@@ -278,7 +300,7 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
 
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ref.invalidate(supplementSchedulesProvider(widget.pondId));
+      ref.invalidate(supplementSchedulesProvider((pondId: widget.pondId, farmId: widget.farmId ?? '')));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(isUpdate
@@ -550,6 +572,10 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
               ),
             ],
 
+            // ── Pond targeting ─────────────────────────────────────────────
+            AppSpacing.hBase,
+            _buildTargetingSection(),
+
             // ── Feed rounds (feed mix only) ────────────────────────────────
             if (_selectedType == SupplementType.feedMix) ...[
               AppSpacing.hBase,
@@ -695,6 +721,119 @@ class _AddSupplementScreenState extends ConsumerState<AddSupplementScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildTargetingSection() {
+    final farmPonds = ref.read(farmProvider).currentFarm?.ponds ?? [];
+    // Filter out the current pond — it's always included for current_pond/selected_ponds
+    final otherPonds = farmPonds.where((p) => p.id != widget.pondId).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Apply To', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        // Radio options
+        _targetRadio('current_pond', 'This Pond Only'),
+        if (farmPonds.length > 1) ...[
+          _targetRadio('selected_ponds', 'Selected Ponds'),
+          _targetRadio('all_ponds', 'All Ponds on Farm'),
+        ],
+        // Pond multi-select — shown only when 'selected_ponds' is active
+        if (_targetType == 'selected_ponds' && otherPonds.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select additional ponds:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: otherPonds.map((pond) {
+                    final isChecked = _selectedPondIds.contains(pond.id);
+                    return FilterChip(
+                      label: Text(pond.name),
+                      selected: isChecked,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedPondIds.add(pond.id);
+                          } else {
+                            _selectedPondIds.remove(pond.id);
+                          }
+                        });
+                      },
+                      selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
+                      checkmarkColor: const Color(0xFF0D9488),
+                      labelStyle: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isChecked
+                            ? const Color(0xFF0D9488)
+                            : Colors.grey.shade700,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _targetRadio(String value, String label) {
+    return GestureDetector(
+      onTap: () => setState(() {
+        _targetType = value;
+        if (value != 'selected_ponds') _selectedPondIds.clear();
+      }),
+      child: Row(
+        children: [
+          Radio<String>(
+            value: value,
+            groupValue: _targetType,
+            activeColor: const Color(0xFF0D9488),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _targetType = v;
+                  if (v != 'selected_ponds') _selectedPondIds.clear();
+                });
+              }
+            },
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: _targetType == value
+                  ? const Color(0xFF0D9488)
+                  : Colors.grey.shade700,
+              fontWeight: _targetType == value
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

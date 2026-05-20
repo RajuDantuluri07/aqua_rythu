@@ -35,6 +35,10 @@ class Pond {
   // Anchor feed (DOC > 30): farmer-set baseline, adjusted by tray response
   final double? anchorFeed;
   final bool isAnchorInitialized;
+  // Explicit initialization status — true only after full smart init completes.
+  // Distinct from isAnchorInitialized which is also set by the simple dialog.
+  final bool smartFeedInitialized;
+  final DateTime? smartFeedInitializedAt;
   final double? fcr;
 
   // Seed type: determines which DOC-based feed table to use
@@ -80,6 +84,8 @@ class Pond {
     this.isCustomFeedPlan = false,
     this.anchorFeed,
     this.isAnchorInitialized = false,
+    this.smartFeedInitialized = false,
+    this.smartFeedInitializedAt,
     this.fcr,
     SeedType? seedType,
     this.stockCount,
@@ -125,6 +131,8 @@ class Pond {
     bool? isCustomFeedPlan,
     double? anchorFeed,
     bool? isAnchorInitialized,
+    bool? smartFeedInitialized,
+    DateTime? smartFeedInitializedAt,
     double? fcr,
     SeedType? seedType,
     int? stockCount,
@@ -160,6 +168,8 @@ class Pond {
       isCustomFeedPlan: isCustomFeedPlan ?? this.isCustomFeedPlan,
       anchorFeed: anchorFeed ?? this.anchorFeed,
       isAnchorInitialized: isAnchorInitialized ?? this.isAnchorInitialized,
+      smartFeedInitialized: smartFeedInitialized ?? this.smartFeedInitialized,
+      smartFeedInitializedAt: smartFeedInitializedAt ?? this.smartFeedInitializedAt,
       fcr: fcr ?? this.fcr,
       seedType: seedType ?? this.seedType,
       stockCount: stockCount ?? this.stockCount,
@@ -302,7 +312,7 @@ class FarmNotifier extends StateNotifier<FarmState> {
                     throw StateError(
                         'Pond ${p['id']}: invalid stocking_date "$raw"');
                   }
-                  return parsed.toUtc();
+                  return parsed;
                 }(),
                 seedCount: p['seed_count'] ?? 100000,
                 plSize: p['pl_size'] ?? 10,
@@ -324,6 +334,10 @@ class FarmNotifier extends StateNotifier<FarmState> {
                     ? (p['anchor_feed'] as num).toDouble()
                     : null,
                 isAnchorInitialized: p['is_anchor_initialized'] ?? false,
+                smartFeedInitialized: p['smart_feed_initialized'] ?? false,
+                smartFeedInitializedAt: p['smart_feed_initialized_at'] != null
+                    ? DateTime.tryParse(p['smart_feed_initialized_at'] as String)
+                    : null,
                 seedType: SeedTypeX.fromDb(p['stocking_type'] as String?),
                 stockCount: p['stock_count'] as int?,
                 hasSampling: p['has_sampling'] as bool? ?? false,

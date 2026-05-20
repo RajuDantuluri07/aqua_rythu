@@ -55,16 +55,26 @@ final productsByCategoryProvider =
   return _repo.fetchProductsByCategory(categoryName);
 });
 
-/// Supplement schedules for a specific pond
-final supplementSchedulesProvider =
-    FutureProvider.family<List<SupplementSchedule>, String>((ref, pondId) {
-  return _scheduleRepo.fetchSchedulesByPond(pondId);
+/// Supplement schedules for a pond, with optional farm-wide targeting support.
+/// Key: (pondId: '...', farmId: '...')  — use empty farmId when unknown.
+final supplementSchedulesProvider = FutureProvider.family<
+    List<SupplementSchedule>,
+    ({String pondId, String farmId})>((ref, key) {
+  return _scheduleRepo.fetchSchedulesByPond(
+    key.pondId,
+    farmId: key.farmId.isEmpty ? null : key.farmId,
+  );
 });
 
-/// Active supplement schedules for a specific pond
-final activeSupplementSchedulesProvider =
-    FutureProvider.family<List<SupplementSchedule>, String>((ref, pondId) {
-  return _scheduleRepo.fetchActiveSchedulesByPond(pondId);
+/// Active supplement schedules for a pond, with optional farm-wide targeting.
+/// Key: (pondId: '...', farmId: '...')  — use empty farmId when unknown.
+final activeSupplementSchedulesProvider = FutureProvider.family<
+    List<SupplementSchedule>,
+    ({String pondId, String farmId})>((ref, key) {
+  return _scheduleRepo.fetchActiveSchedulesByPond(
+    key.pondId,
+    farmId: key.farmId.isEmpty ? null : key.farmId,
+  );
 });
 
 /// All active feed brands from feed_master_products table

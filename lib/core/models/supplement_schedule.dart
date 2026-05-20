@@ -34,6 +34,20 @@ class SupplementSchedule {
   final double? quantity;
   final String? unit; // 'g' | 'kg' | 'ml' | 'L'
 
+  // ── Multi-product support ──────────────────────────────────────────────────
+  /// All products in this scheduling action.
+  /// Each entry: {productId?, productName, quantity?, unit?}
+  /// Non-empty for schedules created with multiple items in one action.
+  /// Legacy schedules with a single product have this as [] and fall back
+  /// to the scalar productName/quantity/unit fields.
+  final List<Map<String, dynamic>> products;
+
+  // ── Pond targeting (T4) ────────────────────────────────────────────────────
+  /// 'current_pond' | 'selected_ponds' | 'all_ponds'
+  final String targetType;
+  /// Non-empty only when targetType == 'selected_ponds'.
+  final List<String> targetPondIds;
+
   const SupplementSchedule({
     required this.id,
     required this.pondId,
@@ -57,11 +71,29 @@ class SupplementSchedule {
     this.stopDate,
     this.quantity,
     this.unit,
+    this.products = const [],
+    this.targetType = 'current_pond',
+    this.targetPondIds = const [],
   });
 
   // ── Getters ────────────────────────────────────────────────────────────────
 
   bool get isActive => status == 'active';
+
+  /// Returns true when this schedule should be displayed for [targetPondId].
+  /// 'all_ponds'      → always visible (scoped to same farm via RLS)
+  /// 'selected_ponds' → visible only if targetPondIds contains this pond
+  /// 'current_pond'   → visible only if pondId matches
+  bool appliesToPond(String targetPondId) {
+    switch (targetType) {
+      case 'all_ponds':
+        return true;
+      case 'selected_ponds':
+        return targetPondIds.contains(targetPondId);
+      default:
+        return pondId == targetPondId;
+    }
+  }
 
   bool get isRecurring =>
       applicationType == 'water_mix' &&
@@ -192,6 +224,9 @@ class SupplementSchedule {
     DateTime? stopDate,
     double? quantity,
     String? unit,
+    List<Map<String, dynamic>>? products,
+    String? targetType,
+    List<String>? targetPondIds,
   }) {
     return SupplementSchedule(
       id: id ?? this.id,
@@ -216,6 +251,9 @@ class SupplementSchedule {
       stopDate: stopDate ?? this.stopDate,
       quantity: quantity ?? this.quantity,
       unit: unit ?? this.unit,
+      products: products ?? this.products,
+      targetType: targetType ?? this.targetType,
+      targetPondIds: targetPondIds ?? this.targetPondIds,
     );
   }
 
@@ -248,6 +286,15 @@ class SupplementSchedule {
           : null,
       quantity: (json['quantity'] as num?)?.toDouble(),
       unit: json['unit'] as String?,
+      products: (json['products'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [],
+      targetType: json['target_type'] as String? ?? 'current_pond',
+      targetPondIds: (json['target_pond_ids'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -274,6 +321,9 @@ class SupplementSchedule {
         'stop_date': stopDate?.toIso8601String().split('T')[0],
         'quantity': quantity,
         'unit': unit,
+        'products': products,
+        'target_type': targetType,
+        'target_pond_ids': targetPondIds,
       };
 
   @override

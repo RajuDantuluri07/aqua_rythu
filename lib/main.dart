@@ -24,6 +24,8 @@ import 'core/language/language_provider.dart';
 import 'core/language/app_localizations.dart';
 import 'core/services/feed_sync_queue.dart';
 import 'core/services/feed_service.dart';
+import 'core/services/analytics_service.dart';
+import 'core/analytics/analytics_buffer.dart';
 import 'core/providers/connectivity_provider.dart';
 import 'features/farm/farm_provider.dart';
 import 'features/water/water_provider.dart';
@@ -74,6 +76,10 @@ void main() async {
     final prefs = await SharedPreferences.getInstance();
     initializeFarmSettings(prefs);
     initializeUserProvider(prefs);
+    AnalyticsService.instance.init(prefs);
+    // Drain any events that were queued while offline during the previous session.
+    AnalyticsBuffer.drain(prefs, Supabase.instance.client)
+        .catchError((e) => debugPrint('Analytics buffer drain failed: $e'));
   } catch (e) {
     debugPrint('SharedPreferences initialization failed: $e');
   }
@@ -144,11 +150,21 @@ class _AuthGateState extends ConsumerState<AuthGate>
     WidgetsBinding.instance.addObserver(this);
     _checkOnboarding();
     _checkFeedSyncWarning();
+    _logAppOpen();
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedOut) {
         ref.read(authProvider.notifier).logout();
       }
     });
+  }
+
+  Future<void> _logAppOpen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isFirst = !(prefs.getBool('_ae_once_first_open') ?? false);
+      if (isFirst) await prefs.setBool('_ae_once_first_open', true);
+      unawaited(AnalyticsService.instance.logAppOpen(isFirstOpen: isFirst));
+    } catch (_) {}
   }
 
   Future<void> _checkFeedSyncWarning() async {
@@ -231,6 +247,11 @@ class _AuthGateState extends ConsumerState<AuthGate>
       }).catchError((e) {
         debugPrint('FeedSyncQueue resume replay failed: $e');
       });
+      // Drain any analytics events queued while the device was offline.
+      SharedPreferences.getInstance().then((prefs) {
+        AnalyticsBuffer.drain(prefs, Supabase.instance.client)
+            .catchError((_) {});
+      }).catchError((_) {});
 
       // Refresh water/growth/tray/harvest data for all active ponds.
       final pondIds = ref
@@ -284,7 +305,11 @@ class _AuthGateState extends ConsumerState<AuthGate>
 
     // First-time users see the onboarding carousel before login.
     if (!_hasSeenOnboarding) {
-      return const OnboardingScreen();
+      return OnboardingScreen(
+        onComplete: () {
+          if (mounted) setState(() => _hasSeenOnboarding = true);
+        },
+      );
     }
 
     return const LoginScreen();
